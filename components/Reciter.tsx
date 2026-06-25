@@ -1,114 +1,112 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SurahView from "./SurahView";
-import type { RecitationFeedback } from "@/lib/analyze";
+import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
+import { analyzeRecitation, type RecitationFeedback } from "@/lib/analyze";
 import type { WordStatus } from "@/lib/align";
 
-type Phase = "idle" | "recording" | "processing" | "done" | "error";
-
-function pickMimeType(): string {
-  if (typeof MediaRecorder === "undefined") return "audio/webm";
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
-  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "audio/webm";
-}
+type Phase = "idle" | "recording" | "done" | "error" | "unsupported";
 
 export default function Reciter() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<RecitationFeedback | null>(null);
+  const [liveText, setLiveText] = useState("");
   const [seconds, setSeconds] = useState(0);
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const recognizerRef = useRef<Recognizer | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const liveRef = useRef("");
+
+  useEffect(() => {
+    if (!isSpeechSupported()) setPhase("unsupported");
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      recognizerRef.current?.cancel();
+    };
+  }, []);
 
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
   };
 
-  const cleanupStream = () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-  };
-
-  const startRecording = useCallback(async () => {
+  const start = () => {
     setError(null);
     setFeedback(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const mimeType = pickMimeType();
-      const recorder = new MediaRecorder(stream, { mimeType });
-      chunksRef.current = [];
+    setLiveText("");
+    liveRef.current = "";
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        cleanupStream();
-        void uploadRecording(blob, mimeType);
-      };
-
-      recorder.start();
-      recorderRef.current = recorder;
-      setPhase("recording");
-      setSeconds(0);
-      timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
-    } catch {
-      setError("Microphone access was denied. Please allow the mic and try again.");
-      setPhase("error");
-    }
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    stopTimer();
-    setPhase("processing");
-    recorderRef.current?.stop();
-  }, []);
-
-  const uploadRecording = useCallback(async (blob: Blob, mimeType: string) => {
-    try {
-      const form = new FormData();
-      form.append("audio", blob, "recitation.webm");
-      const res = await fetch("/api/transcribe", { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Something went wrong while analysing your recitation.");
+    const recognizer = new Recognizer({
+      onTranscript: (text) => {
+        liveRef.current = text;
+        setLiveText(text);
+      },
+      onError: (message) => {
+        stopTimer();
+        setError(message);
         setPhase("error");
-        return;
-      }
-      setFeedback(data as RecitationFeedback);
-      setPhase("done");
-    } catch {
-      setError("Network error. Please check your connection and try again.");
-      setPhase("error");
-    }
-  }, []);
+      },
+      onDone: (finalText) => {
+        stopTimer();
+        const transcript = finalText || liveRef.current;
+        if (!transcript.trim()) {
+          setError("We couldn't hear any recitation. Please try again in a quieter place.");
+          setPhase("error");
+          return;
+        }
+        setFeedback(analyzeRecitation(transcript, [], "on-device speech"));
+        setPhase("done");
+      },
+    });
+
+    recognizerRef.current = recognizer;
+    recognizer.start("ar-SA");
+    setPhase("recording");
+    setSeconds(0);
+    timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+  };
+
+  const stop = () => {
+    setPhase("done"); // optimistic; onDone will fill feedback
+    recognizerRef.current?.stop();
+  };
 
   const reset = () => {
     setFeedback(null);
     setError(null);
+    setLiveText("");
     setPhase("idle");
   };
 
-  // Build refIndex -> status / madd maps for the SurahView overlay.
-  const statuses: Record<number, WordStatus> | undefined = feedback
-    ? Object.fromEntries(feedback.alignment.words.map((w) => [w.refIndex, w.status]))
-    : undefined;
-  const maddVerdicts = feedback
-    ? Object.fromEntries(feedback.timing.checks.map((c) => [c.refIndex, c.verdict]))
-    : undefined;
+  const statuses: Record<number, WordStatus> | undefined = useMemo(
+    () =>
+      feedback
+        ? Object.fromEntries(feedback.alignment.words.map((w) => [w.refIndex, w.status]))
+        : undefined,
+    [feedback],
+  );
+
+  if (phase === "unsupported") {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        Your browser doesn&apos;t support on-device speech recognition yet. Please open Dugsi in{" "}
+        <strong>Google Chrome</strong> (or Safari on iPhone) to use the recitation feedback. You can
+        still read the surah and tajweed guide below.
+        <div className="mt-4 rounded-2xl border border-gold/20 bg-white/70 p-6">
+          <SurahView showTajweed />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-center gap-3">
-        {phase !== "recording" && phase !== "processing" && (
+        {phase !== "recording" && (
           <button
-            onClick={startRecording}
+            onClick={start}
             className="rounded-full bg-emerald px-8 py-4 text-lg font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-95"
           >
             {phase === "done" || phase === "error" ? "Recite again" : "Start reciting"}
@@ -117,7 +115,7 @@ export default function Reciter() {
 
         {phase === "recording" && (
           <button
-            onClick={stopRecording}
+            onClick={stop}
             className="flex items-center gap-3 rounded-full bg-red-600 px-8 py-4 text-lg font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-95"
           >
             <span className="rec-dot h-3 w-3 rounded-full bg-white" />
@@ -125,17 +123,19 @@ export default function Reciter() {
           </button>
         )}
 
-        {phase === "processing" && (
-          <div className="flex items-center gap-3 text-ink/70">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-            Listening to your recitation…
-          </div>
-        )}
-
         {phase === "idle" && (
           <p className="text-sm text-ink/60">
-            Tap, recite Surah Al-Fatiha aloud, then tap stop. We&apos;ll check every word.
+            Tap, recite Surah Al-Fatiha aloud, then tap stop. Everything runs free on your device.
           </p>
+        )}
+
+        {phase === "recording" && (
+          <div className="w-full rounded-lg border border-emerald/30 bg-white/70 p-3 text-center">
+            <p className="ayah text-2xl text-ink/80" dir="rtl">
+              {liveText || "…"}
+            </p>
+            <p className="mt-1 text-xs text-ink/50">Listening — recite at your own pace.</p>
+          </div>
         )}
       </div>
 
@@ -148,20 +148,13 @@ export default function Reciter() {
       {feedback && phase === "done" && <ResultsPanel feedback={feedback} onReset={reset} />}
 
       <div className="rounded-2xl border border-gold/20 bg-white/70 p-6 shadow-sm sm:p-8">
-        <SurahView statuses={statuses} maddVerdicts={maddVerdicts} showTajweed={!feedback} />
+        <SurahView statuses={statuses} showTajweed={!feedback} />
       </div>
     </div>
   );
 }
 
-function ResultsPanel({
-  feedback,
-  onReset,
-}: {
-  feedback: RecitationFeedback;
-  onReset: () => void;
-}) {
-  const rushed = feedback.timing.checks.filter((c) => c.verdict === "rushed");
+function ResultsPanel({ feedback, onReset }: { feedback: RecitationFeedback; onReset: () => void }) {
   return (
     <div className="rounded-2xl border border-emerald/30 bg-white/80 p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -186,23 +179,15 @@ function ResultsPanel({
         <Stat label="Skipped" value={countStatus(feedback, "missing")} tone="warn" />
       </div>
 
-      {rushed.length > 0 && (
-        <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-          <strong>Tajweed tip:</strong> {rushed.length} elongation
-          {rushed.length > 1 ? "s" : ""} looked rushed. Hold the madd letters longer —
-          especially the 6-count madd in <span className="font-arabic">ٱلضَّآلِّينَ</span>.
-          <span className="block text-xs text-amber-700/80">
-            (Timing estimate from word-level timestamps — treat as a hint.)
-          </span>
-        </div>
-      )}
-
       <details className="mt-4 text-sm">
         <summary className="cursor-pointer text-ink/60">What we heard (transcript)</summary>
         <p className="ayah mt-2 text-xl" dir="rtl">
           {feedback.transcript}
         </p>
-        <p className="mt-1 text-xs text-ink/40">Engine: {feedback.engine}</p>
+        <p className="mt-1 text-xs text-ink/40">
+          Recognised free, on your device. Speech recognition can misread classical Arabic — if a
+          word is marked wrong but you said it right, it may be the recogniser, not you.
+        </p>
       </details>
     </div>
   );

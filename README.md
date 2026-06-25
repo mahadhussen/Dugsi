@@ -9,26 +9,32 @@ full Quran; Al-Fatiha is the first surah to prove the loop end to end.
 
 ---
 
+**Free for everyone. No API key, no server, no cost.** Speech recognition runs
+**on the user's own device** in the browser (Web Speech API), and all the
+word-checking is plain JavaScript that runs client-side — so the app is a static
+site anyone can host for free, and a reciter's voice never leaves their phone.
+
 ## What it does today
 
-1. **Recitation accuracy (verified).** You record yourself reciting. The audio is
-   transcribed (OpenAI Whisper, Arabic), then each spoken word is aligned against
-   the verified Uthmani text of Al-Fatiha using diacritic-insensitive fuzzy
-   matching. Every word is marked **correct / close / needs-work / skipped**.
+1. **Recitation accuracy.** You recite into the mic; the browser recognises your
+   Arabic on-device, then each spoken word is aligned against the verified
+   Uthmani text of Al-Fatiha using diacritic-insensitive fuzzy matching. Every
+   word is marked **correct / close / needs-work / skipped**.
 2. **Tajweed guide.** The surah is rendered with colour-coded tajweed rules
    (madd, sun/moon letters, leen, lām of Allah, tafkhīm, …) so you can learn the
    rules as you read.
-3. **Madd-timing check (experimental).** Using Whisper's word-level timestamps,
-   the app estimates whether your elongations (madd) were held long enough and
-   flags rushed ones — e.g. the 6-count madd in *aḍ-ḍāāāllīn*.
 
 ### Honest limits
 
-- Tajweed **timing** is a heuristic from timestamps, not a phonetic measurement.
-  It catches obviously rushed madds; it does not judge makharij (articulation
-  points), ghunnah quality, or subtle vowel length. It's a hint, not a ruling.
-- Whisper is a general Arabic model, not Quran-specialised, so transcription can
-  occasionally misread. A future version can swap in a Quran-tuned model.
+- The browser speech recogniser is a general Arabic model, not Quran-specialised,
+  so it can misread classical Arabic. A word marked wrong may be the recogniser,
+  not the reciter.
+- On-device recognition gives no word-level timing, so acoustic tajweed checks
+  (madd length, makharij, ghunnah, qalqalah) are **not** measured yet — the
+  colour guide teaches them, but the app doesn't grade them. A future
+  "high-accuracy" mode (on-device Whisper) can add real timing analysis.
+- Needs a browser with the Web Speech API — **Chrome** (desktop/Android) or
+  **Safari** (iOS). Firefox isn't supported yet.
 - **Always learn tajweed with a qualified teacher.** This is a practice aid.
 
 ---
@@ -38,24 +44,25 @@ full Quran; Al-Fatiha is the first surah to prove the loop end to end.
 ```
 app/
   page.tsx                 Home: recorder + surah + tajweed legend
-  api/transcribe/route.ts  Receives audio → transcribe → analyze → JSON feedback
 components/
-  Reciter.tsx              Mic recording + results UI (client)
+  Reciter.tsx              On-device recognition + results UI (client)
   SurahView.tsx            Ayah rendering with tajweed colours / result overlay
   Legend.tsx               Tajweed colour key
 lib/
   quran/fatiha.ts          Verified text + per-word tajweed metadata
   arabic.ts                Normalisation, tokenisation, similarity
   align.ts                 Needleman–Wunsch word alignment (heard vs expected)
-  analyze.ts               Orchestrates alignment + timing + scoring
+  analyze.ts               Orchestrates alignment + scoring (runs client-side)
+  speech/recognizer.ts     Web Speech API wrapper (free, on-device)
   tajweed/rules.ts         Rule colours + descriptions
-  tajweed/timing.ts        Experimental madd-timing from word timestamps
-  transcribe/              Pluggable STT engine (Whisper default, swappable)
+  tajweed/timing.ts        Madd-timing engine (used by the future Whisper mode)
+  transcribe/              Pluggable STT engine seam (Whisper, for a future
+                           opt-in "high accuracy" mode — not used by default)
 ```
 
-The speech engine is behind a `Transcriber` interface (`lib/transcribe`), so a
-different backend can be dropped in without touching the alignment or tajweed
-logic.
+Recognition + analysis both run in the browser, so the deployed app needs no
+backend and no secrets. The `lib/transcribe` seam keeps the door open to add an
+optional on-device Whisper engine later for higher accuracy and timing.
 
 ---
 
@@ -63,13 +70,11 @@ logic.
 
 ```bash
 npm install
-cp .env.local.example .env.local   # add your OPENAI_API_KEY
-npm run dev                        # http://localhost:3000
+npm run dev      # http://localhost:3000  (no API key needed)
 ```
 
-Then open the app, tap **Start reciting**, recite Surah Al-Fatiha, and tap stop.
-
-> A microphone and an `OPENAI_API_KEY` are required for live recitation feedback.
+Then open the app in **Chrome**, tap **Start reciting**, recite Surah
+Al-Fatiha, and tap stop. A microphone is the only requirement.
 
 ### Tests
 

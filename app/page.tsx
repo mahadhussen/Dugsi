@@ -26,8 +26,9 @@ export default function Home() {
 
       <footer className="border-t border-gold/20 pt-6 text-center text-xs text-ink/50">
         <p>
-          Recitation accuracy is verified from speech recognition; tajweed timing is an
-          experimental estimate. Always learn tajweed with a qualified teacher.
+          100% free and private — your recitation is recognised on your own device, nothing is sent
+          to a server. The tajweed colours are a learning guide. Always learn tajweed with a
+          qualified teacher.
         </p>
       </footer>
     </main>
