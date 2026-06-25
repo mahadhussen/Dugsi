@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-arabic: "Amiri", "Scheherazade New", serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(201, 162, 75, 0.12), transparent),
+    #fbf7ee;
+  color: #0f1b2d;
+  min-height: 100vh;
+}
+
+/* Arabic ayah typography */
+.ayah {
+  direction: rtl;
+  font-family: var(--font-arabic);
+  line-height: 2.1;
+}
+
+.word {
+  transition: color 0.2s ease, background-color 0.2s ease;
+  border-radius: 0.35rem;
+  padding: 0 0.15rem;
+}
+
+.word-correct {
+  background-color: rgba(16, 185, 129, 0.16);
+}
+.word-close {
+  background-color: rgba(234, 179, 8, 0.18);
+}
+.word-wrong {
+  background-color: rgba(239, 68, 68, 0.16);
+}
+.word-missing {
+  background-color: rgba(148, 163, 184, 0.22);
+  text-decoration: underline dotted rgba(100, 116, 139, 0.7);
+}
+
+@keyframes pulse-rec {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.rec-dot {
+  animation: pulse-rec 1s infinite;
+}
