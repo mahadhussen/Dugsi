@@ -5,43 +5,11 @@
 // Tajweed rule tags follow the common Mushaf colour conventions. They focus on
 // the clearly-applicable, prominent rules in Al-Fatiha and can be extended.
 
-export type RuleId =
-  | "sun_letter" // lam shamsiyya — the "al-" lam is silent, next letter doubled
-  | "moon_letter" // lam qamariyya — the "al-" lam is pronounced
-  | "madd_natural" // madd asli — long vowel held ~2 counts
-  | "madd_lazim" // madd lazim — held ~6 counts (the signature "ḍāāāllīn")
-  | "leen" // layyin — soft waw/ya after fatha (yawm, 'alayhim)
-  | "lam_jalalah" // the lam in the name "Allah" (tarqeeq after kasra here)
-  | "tafkheem" // heavy/emphatic letters (ṣ, ḍ, ṭ ...) recited full-mouthed
-  | "ghunnah" // nasalisation on doubled noon/meem (~2 counts)
-  | "shaddah" // doubled consonant (held / stressed)
-  | "izhar"; // clear pronunciation of noon sakin before a throat letter
+import type { Ayah, RuleId, Surah, Word } from "./types";
 
-export interface Word {
-  /** Uthmani spelling with full diacritics, for display. */
-  uthmani: string;
-  /** Simple Latin transliteration to help learners. */
-  translit: string;
-  /** Prominent tajweed rules that apply to this word. */
-  rules: RuleId[];
-  /** Elongation class, used by the timing engine to check held vowels. */
-  madd?: "natural" | "lazim";
-}
-
-export interface Ayah {
-  number: number;
-  words: Word[];
-  translit: string;
-  translation: string;
-}
-
-export interface Surah {
-  number: number;
-  name: string;
-  nameArabic: string;
-  bismillah: boolean;
-  ayat: Ayah[];
-}
+// Re-export the shared types so existing imports from this module keep working.
+export type { Ayah, RuleId, Surah, Word };
+export { flattenWords } from "./types";
 
 export const fatiha: Surah = {
   number: 1,
@@ -130,12 +98,3 @@ export const fatiha: Surah = {
     },
   ],
 };
-
-/** All words of the surah flattened, in recitation order, with ayah index. */
-export function flattenWords(surah: Surah): { word: Word; ayah: number; indexInAyah: number }[] {
-  const out: { word: Word; ayah: number; indexInAyah: number }[] = [];
-  for (const ayah of surah.ayat) {
-    ayah.words.forEach((word, i) => out.push({ word, ayah: ayah.number, indexInAyah: i }));
-  }
-  return out;
-}

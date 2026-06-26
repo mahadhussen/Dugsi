@@ -37,7 +37,7 @@ test("a wrong word is flagged and accuracy drops", () => {
 });
 
 test("analyzeRecitation produces a high score for a perfect transcript", () => {
-  const feedback = analyzeRecitation(perfectTranscript, [], "test");
+  const feedback = analyzeRecitation(fatiha.ayat, perfectTranscript, [], "test");
   assert.ok(feedback.score >= 95, `expected >=95, got ${feedback.score}`);
   assert.match(feedback.summary, /correctly/);
 });

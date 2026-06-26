@@ -1,4 +1,4 @@
-import Reciter from "@/components/Reciter";
+import QuranTrainer from "@/components/QuranTrainer";
 import Legend from "@/components/Legend";
 import { Wordmark } from "@/components/Logo";
 import { fatiha } from "@/lib/quran/fatiha";
@@ -33,10 +33,10 @@ export default function Home() {
             {fatiha.nameArabic}
           </p>
           <h1 className="mt-2 text-xl font-semibold text-white sm:text-2xl">
-            Recite Surah Al-Fatiha. Get instant feedback.
+            Recite the Quran. Get instant feedback.
           </h1>
           <p className="mx-auto mt-2 max-w-md text-sm text-white/70">
-            Read aloud and Dugsi checks every word and tajweed rule with you — gently, word by word.
+            Read aloud and Dugsi checks every word with you — gently, word by word.
           </p>
 
           <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -49,7 +49,7 @@ export default function Home() {
 
       {/* Recite + surah */}
       <section className="mt-8">
-        <Reciter />
+        <QuranTrainer />
       </section>
 
       <section className="mt-10">

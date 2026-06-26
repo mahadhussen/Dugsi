@@ -5,7 +5,7 @@ import { RULES } from "@/lib/tajweed/rules";
 export default function Legend() {
   const used = new Set<RuleId>();
   for (const { word } of flattenWords(fatiha)) {
-    word.rules.forEach((r) => used.add(r));
+    (word.rules ?? []).forEach((r) => used.add(r));
   }
   const items = Array.from(used).map((id) => RULES[id]);
 

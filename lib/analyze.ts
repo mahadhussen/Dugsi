@@ -1,4 +1,4 @@
-import { fatiha, flattenWords } from "@/lib/quran/fatiha";
+import { flattenAyat, type Ayah } from "@/lib/quran/types";
 import { alignRecitation, type AlignmentResult } from "@/lib/align";
 import { tokenize } from "@/lib/arabic";
 import { evaluateMadd, type TimingReport, type TimedWord } from "@/lib/tajweed/timing";
@@ -14,14 +14,15 @@ export interface RecitationFeedback {
 
 /**
  * Turn a raw transcription (text + optional word timings) into structured
- * recitation feedback against Surah Al-Fatiha.
+ * recitation feedback against a set of expected ayat (one practice section).
  */
 export function analyzeRecitation(
+  ayat: Ayah[],
   transcript: string,
   timedWords: TimedWord[],
   engine: string,
 ): RecitationFeedback {
-  const flat = flattenWords(fatiha);
+  const flat = flattenAyat(ayat);
   const expectedTokens = flat.map((f) => f.word.uthmani);
   const heardTokens = tokenize(transcript);
 

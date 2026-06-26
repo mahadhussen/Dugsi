@@ -6,6 +6,7 @@ import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
 import { warmUpWhisper, transcribeWithWhisper, isWhisperSupported } from "@/lib/speech/whisperLocal";
 import { analyzeRecitation, type RecitationFeedback } from "@/lib/analyze";
 import type { WordStatus } from "@/lib/align";
+import type { Ayah } from "@/lib/quran/types";
 
 type Phase = "idle" | "recording" | "processing" | "done" | "error" | "unsupported";
 type Engine = "fast" | "accurate";
@@ -26,7 +27,7 @@ function pickMimeType(): string {
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "audio/webm";
 }
 
-export default function Reciter() {
+export default function Reciter({ ayat }: { ayat: Ayah[] }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [engine, setEngine] = useState<Engine>("fast");
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +58,17 @@ export default function Reciter() {
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  // When the practice target (surah/section) changes, clear any prior result.
+  useEffect(() => {
+    recognizerRef.current?.cancel();
+    if (timerRef.current) clearInterval(timerRef.current);
+    setFeedback(null);
+    setError(null);
+    setLiveText("");
+    liveRef.current = "";
+    setPhase((p) => (p === "unsupported" ? p : "idle"));
+  }, [ayat]);
 
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -106,7 +118,7 @@ export default function Reciter() {
           setPhase("error");
           return;
         }
-        setFeedback(analyzeRecitation(transcript, [], "on-device speech"));
+        setFeedback(analyzeRecitation(ayat, transcript, [], "on-device speech"));
         setPhase("done");
       },
     });
@@ -160,7 +172,7 @@ export default function Reciter() {
         setPhase("error");
         return;
       }
-      setFeedback(analyzeRecitation(result.text, result.words, "on-device Whisper"));
+      setFeedback(analyzeRecitation(ayat, result.text, result.words, "on-device Whisper"));
       setPhase("done");
     } catch {
       setError(
@@ -221,7 +233,7 @@ export default function Reciter() {
           read the surah and tajweed guide below.
         </div>
         <SurahCard>
-          <SurahView showTajweed />
+          <SurahView ayat={ayat} showTajweed />
         </SurahCard>
       </div>
     );
@@ -279,7 +291,7 @@ export default function Reciter() {
           <p className="text-center text-sm text-ink/60">
             {phase === "done" || phase === "error"
               ? "Tap to recite again"
-              : "Tap the mic, recite Surah Al-Fatiha aloud, then tap to stop."}
+              : "Tap the mic, recite the verses aloud, then tap to stop."}
           </p>
         )}
 
@@ -302,7 +314,7 @@ export default function Reciter() {
       {feedback && phase === "done" && <ResultsPanel feedback={feedback} onReset={reset} />}
 
       <SurahCard>
-        <SurahView statuses={statuses} maddVerdicts={maddVerdicts} showTajweed={!feedback} />
+        <SurahView ayat={ayat} statuses={statuses} maddVerdicts={maddVerdicts} showTajweed={!feedback} />
       </SurahCard>
     </div>
   );

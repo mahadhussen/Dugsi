@@ -4,8 +4,9 @@ Recite the Quran aloud and get **instant, word-by-word feedback** on your
 accuracy and tajweed. A free, open alternative to paid recitation apps — built
 to be honest about what it can and can't yet verify.
 
-**MVP scope:** Surah Al-Fatiha (Surah 1). The architecture generalises to the
-full Quran; Al-Fatiha is the first surah to prove the loop end to end.
+**Surahs:** Al-Fatiha (1, with full per-word tajweed) and Al-Baqarah (2, 286
+verses, practised in short sections). Pick a surah and, for long ones, a
+verse range to recite. More surahs slot in via the same verified-data pipeline.
 
 ---
 
