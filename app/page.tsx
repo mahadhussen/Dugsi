@@ -41,8 +41,8 @@ export default function Home() {
 
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Badge>100% free</Badge>
-            <Badge>Private · on your device</Badge>
-            <Badge>No sign-up</Badge>
+            <Badge>No sign-up · no ads</Badge>
+            <Badge>Nothing stored or tracked</Badge>
           </div>
         </div>
       </header>
@@ -58,9 +58,11 @@ export default function Home() {
 
       <footer className="mt-10 border-t border-gold/20 pt-6 text-center text-xs text-ink/50">
         <p className="mx-auto max-w-md">
-          Free and private — your recitation is recognised on your own device, nothing is sent to a
-          server. The tajweed colours are a learning guide. Always learn tajweed with a qualified
-          teacher.
+          Free, no account, and nothing is stored or tracked. <strong>High accuracy</strong> runs
+          fully on your device — audio never leaves your phone. <strong>Fast</strong> mode uses your
+          browser&apos;s own speech recognition, which in some browsers (e.g. Chrome) transcribes
+          audio in the cloud. The tajweed colours are a learning guide — always learn tajweed with a
+          qualified teacher.
         </p>
       </footer>
     </main>

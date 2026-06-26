@@ -225,11 +225,36 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
     const verse = readProgress(progressKey);
     if (verse <= 1) return;
     const id = requestAnimationFrame(() => {
-      surahRef.current
-        ?.querySelector(`[data-verse="${verse}"]`)
-        ?.scrollIntoView({ block: "start" });
+      surahRef.current?.querySelector(`[data-verse="${verse}"]`)?.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -16); // a little breathing room above the verse
     });
     return () => cancelAnimationFrame(id);
+  }, [progressKey, ayat]);
+
+  // Also remember progress while simply scrolling/reading — track the verse
+  // nearest the top of the viewport. Cheap: the browser does the work.
+  useEffect(() => {
+    if (!progressKey) return;
+    const root = surahRef.current;
+    if (!root) return;
+    const blocks = root.querySelectorAll<HTMLElement>("[data-verse]");
+    if (blocks.length === 0) return;
+
+    const visible = new Set<number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const v = Number((e.target as HTMLElement).dataset.verse);
+          if (e.isIntersecting) visible.add(v);
+          else visible.delete(v);
+        }
+        if (visible.size > 0) writeProgress(progressKey, Math.min(...visible));
+      },
+      // a thin band near the top — the verse there is "where you're reading"
+      { rootMargin: "-12% 0px -78% 0px" },
+    );
+    blocks.forEach((b) => observer.observe(b));
+    return () => observer.disconnect();
   }, [progressKey, ayat]);
 
   const stop = () => {
@@ -411,14 +436,14 @@ function EngineToggle({
       </div>
       <p className="text-center text-xs text-ink/50">
         {engine === "fast"
-          ? "Instant · follows you live, word by word."
+          ? "Instant · live following. Uses your browser's speech recognition."
           : modelStatus === "loading"
             ? `Preparing on-device Whisper… ${modelPercent}%`
             : modelStatus === "ready"
-              ? "On-device Whisper ready · understands recitation + checks madd timing."
+              ? "Fully on-device · audio never leaves your phone."
               : modelStatus === "error"
                 ? "Couldn't load the model — needs internet the first time."
-                : "Smarter · downloads a small model once, then works offline."}
+                : "Smarter & fully private · downloads a small model once, then works offline."}
       </p>
     </div>
   );

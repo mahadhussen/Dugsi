@@ -8,24 +8,32 @@ export interface LiveResult {
   pointer: number;
 }
 
+const MATCH = 0.8; // >= counts as a correct word
+const CLOSE = 0.55; // >= still advances (a near miss), shown amber
+const WINDOW = 6; // how far ahead to look for the next word
+const RECOVER_AFTER = 2; // consecutive misses before we step the pointer forward
+
 /**
- * Real-time recitation tracking. Unlike the full alignment (used for the final
- * score), this is a cheap forward-scanning matcher meant to run on every interim
- * speech result: it keeps a pointer into the expected words and lights each word
- * green/red as the reciter passes it. Cost is O(heard · window), independent of
- * surah length, so it stays smooth even on Al-Baqarah.
+ * Real-time recitation tracking. Runs on every interim speech result to light
+ * each word green/red as the reciter passes it. Cost is O(heard · window),
+ * independent of surah length.
  *
- * `expected` must already be normalised; `heard` are normalised spoken tokens.
+ * Robustness: it advances on near matches (not just exact), and if the
+ * recogniser drops words and the reciter gets ahead, a miss streak steps the
+ * pointer forward so it catches up instead of getting stuck. `expected` must be
+ * normalised; `heard` are normalised spoken tokens.
  */
-export function trackLive(expected: string[], heard: string[], window = 5): LiveResult {
+export function trackLive(expected: string[], heard: string[]): LiveResult {
   const statuses: Record<number, WordStatus> = {};
   let pointer = 0;
+  let miss = 0;
 
   for (const h of heard) {
     if (!h) continue;
+
     let bestIndex = -1;
     let bestSim = 0;
-    const end = Math.min(expected.length, pointer + window + 1);
+    const end = Math.min(expected.length, pointer + WINDOW + 1);
     for (let i = pointer; i < end; i++) {
       const sim = similarity(h, expected[i]);
       if (sim > bestSim) {
@@ -34,16 +42,25 @@ export function trackLive(expected: string[], heard: string[], window = 5): Live
       }
     }
 
-    if (bestIndex >= 0 && bestSim >= 0.6) {
+    if (bestIndex >= 0 && bestSim >= CLOSE) {
       // Words jumped over were not heard — mark them skipped.
       for (let k = pointer; k < bestIndex; k++) {
         if (statuses[k] === undefined) statuses[k] = "missing";
       }
-      statuses[bestIndex] = bestSim >= 0.84 ? "correct" : "close";
+      statuses[bestIndex] = bestSim >= MATCH ? "correct" : "close";
       pointer = bestIndex + 1;
-    } else if (pointer < expected.length && statuses[pointer] === undefined) {
-      // Heard something that doesn't fit here — flag the current word.
-      statuses[pointer] = "wrong";
+      miss = 0;
+    } else {
+      // Heard something that doesn't fit here — flag the current word, and after
+      // a couple of misses step forward so a dropped word can't stall tracking.
+      if (pointer < expected.length && statuses[pointer] === undefined) {
+        statuses[pointer] = "wrong";
+      }
+      miss++;
+      if (miss >= RECOVER_AFTER) {
+        pointer = Math.min(expected.length, pointer + 1);
+        miss = 0;
+      }
     }
   }
 

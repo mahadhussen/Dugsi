@@ -28,3 +28,15 @@ test("live tracking flags a wrong word without losing its place", () => {
   assert.equal(statuses[1], "wrong");
   assert.equal(pointer, 1); // stays so the reciter can correct
 });
+
+test("live tracking recovers after repeated misses instead of stalling", () => {
+  const { pointer } = trackLive(expected, ["بسم", "كتاب", "قلم"].map(normalizeWord));
+  assert.ok(pointer >= 2, `expected the pointer to step forward, got ${pointer}`);
+});
+
+test("live tracking accepts a near match as 'close' and advances", () => {
+  // "الل" is "الله" missing its final letter — above the close threshold.
+  const { statuses, pointer } = trackLive(expected, ["بسم", "الل"].map(normalizeWord));
+  assert.ok(statuses[1] === "close" || statuses[1] === "correct");
+  assert.equal(pointer, 2);
+});

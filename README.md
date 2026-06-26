@@ -10,10 +10,13 @@ verse range to recite. More surahs slot in via the same verified-data pipeline.
 
 ---
 
-**Free for everyone. No API key, no server, no cost.** Speech recognition runs
-**on the user's own device** in the browser (Web Speech API), and all the
-word-checking is plain JavaScript that runs client-side — so the app is a static
-site anyone can host for free, and a reciter's voice never leaves their phone.
+**Free for everyone. No API key, no server, no cost, no tracking.** All the
+word-checking is plain JavaScript that runs client-side, so the app is a static
+site anyone can host for free. Recognition runs in the browser two ways:
+**High accuracy** (on-device Whisper) keeps audio entirely on the device;
+**Fast** uses the browser's built-in Web Speech API, which in some browsers
+(e.g. Chrome) transcribes audio in the cloud. We store nothing but a local
+reading-progress marker.
 
 ## What it does today
 
