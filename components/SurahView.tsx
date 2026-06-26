@@ -11,6 +11,8 @@ interface Props {
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
   /** Show tajweed colours (off while showing recitation results for clarity). */
   showTajweed?: boolean;
+  /** The next expected word while reciting live — gets a cursor + auto-scroll. */
+  activeIndex?: number;
 }
 
 const statusClass: Record<WordStatus, string> = {
@@ -24,7 +26,13 @@ function toArabicNumeral(n: number): string {
   return String(n).replace(/[0-9]/g, (d) => "٠١٢٣٤٥٦٧٨٩"[Number(d)]);
 }
 
-export default function SurahView({ ayat, statuses, maddVerdicts, showTajweed = true }: Props) {
+export default function SurahView({
+  ayat,
+  statuses,
+  maddVerdicts,
+  showTajweed = true,
+  activeIndex,
+}: Props) {
   let refIndex = -1;
   const hasFeedback = !!statuses;
 
@@ -42,9 +50,15 @@ export default function SurahView({ ayat, statuses, maddVerdicts, showTajweed = 
               const colorClass =
                 !hasFeedback && showTajweed ? primaryRuleColor(word.rules ?? []) : null;
               const statusBg = status ? statusClass[status] : "";
+              const active = activeIndex === idx ? "word-active" : "";
 
               return (
-                <span key={i} className={`word ${colorClass ?? ""} ${statusBg}`} title={word.translit}>
+                <span
+                  key={i}
+                  data-ref={idx}
+                  className={`word ${colorClass ?? ""} ${statusBg} ${active}`}
+                  title={word.translit}
+                >
                   {word.uthmani}
                   {madd === "rushed" && (
                     <sup className="ml-0.5 text-xs text-red-600" title="Elongation may be rushed">

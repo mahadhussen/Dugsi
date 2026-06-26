@@ -6,7 +6,9 @@ import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
 import { warmUpWhisper, transcribeWithWhisper, isWhisperSupported } from "@/lib/speech/whisperLocal";
 import { analyzeRecitation, type RecitationFeedback } from "@/lib/analyze";
 import type { WordStatus } from "@/lib/align";
-import type { Ayah } from "@/lib/quran/types";
+import { type Ayah, flattenAyat } from "@/lib/quran/types";
+import { tokenize, normalizeWord } from "@/lib/arabic";
+import { trackLive } from "@/lib/live";
 
 type Phase = "idle" | "recording" | "processing" | "done" | "error" | "unsupported";
 type Engine = "fast" | "accurate";
@@ -37,6 +39,15 @@ export default function Reciter({ ayat }: { ayat: Ayah[] }) {
   const [progress, setProgress] = useState<string | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
   const [modelPercent, setModelPercent] = useState(0);
+  const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
+  const [livePointer, setLivePointer] = useState(0);
+
+  // Normalised expected words for the current target — used for live tracking.
+  const expectedNorm = useMemo(
+    () => flattenAyat(ayat).map((f) => normalizeWord(f.word.uthmani)),
+    [ayat],
+  );
+  const surahRef = useRef<HTMLDivElement>(null);
 
   const fastOk = useRef(true);
   const recognizerRef = useRef<Recognizer | null>(null);
@@ -67,6 +78,8 @@ export default function Reciter({ ayat }: { ayat: Ayah[] }) {
     setError(null);
     setLiveText("");
     liveRef.current = "";
+    setLiveStatuses({});
+    setLivePointer(0);
     setPhase((p) => (p === "unsupported" ? p : "idle"));
   }, [ayat]);
 
@@ -104,6 +117,9 @@ export default function Reciter({ ayat }: { ayat: Ayah[] }) {
       onTranscript: (text) => {
         liveRef.current = text;
         setLiveText(text);
+        const { statuses, pointer } = trackLive(expectedNorm, tokenize(text));
+        setLiveStatuses(statuses);
+        setLivePointer(pointer);
       },
       onError: (message) => {
         stopTimer();
@@ -187,9 +203,18 @@ export default function Reciter({ ayat }: { ayat: Ayah[] }) {
   const start = () => {
     setError(null);
     setFeedback(null);
+    setLiveStatuses({});
+    setLivePointer(0);
     if (engine === "fast") startFast();
     else void startAccurate();
   };
+
+  // Keep the word the reciter is on centred on screen while following live.
+  useEffect(() => {
+    if (phase !== "recording" || engine !== "fast") return;
+    const el = surahRef.current?.querySelector(`[data-ref="${livePointer}"]`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [livePointer, phase, engine]);
 
   const stop = () => {
     stopTimer();
@@ -223,6 +248,9 @@ export default function Reciter({ ayat }: { ayat: Ayah[] }) {
         : undefined,
     [feedback],
   );
+
+  // Live word-by-word following is available with the streaming Fast engine.
+  const liveMode = phase === "recording" && engine === "fast";
 
   if (phase === "unsupported") {
     return (
@@ -313,9 +341,17 @@ export default function Reciter({ ayat }: { ayat: Ayah[] }) {
 
       {feedback && phase === "done" && <ResultsPanel feedback={feedback} onReset={reset} />}
 
-      <SurahCard>
-        <SurahView ayat={ayat} statuses={statuses} maddVerdicts={maddVerdicts} showTajweed={!feedback} />
-      </SurahCard>
+      <div ref={surahRef}>
+        <SurahCard>
+          <SurahView
+            ayat={ayat}
+            statuses={liveMode ? liveStatuses : statuses}
+            maddVerdicts={maddVerdicts}
+            activeIndex={liveMode ? livePointer : undefined}
+            showTajweed={!liveMode && !feedback}
+          />
+        </SurahCard>
+      </div>
     </div>
   );
 }
@@ -359,7 +395,7 @@ function EngineToggle({
       </div>
       <p className="text-center text-xs text-ink/50">
         {engine === "fast"
-          ? "Instant · uses your browser's recogniser."
+          ? "Instant · follows you live, word by word."
           : modelStatus === "loading"
             ? `Preparing on-device Whisper… ${modelPercent}%`
             : modelStatus === "ready"
