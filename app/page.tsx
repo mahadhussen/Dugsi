@@ -1,34 +1,66 @@
 import Reciter from "@/components/Reciter";
 import Legend from "@/components/Legend";
+import { Wordmark } from "@/components/Logo";
 import { fatiha } from "@/lib/quran/fatiha";
+
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-gold-soft ring-1 ring-white/15">
+      {children}
+    </span>
+  );
+}
 
 export default function Home() {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
-      <header className="mb-8 text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-gold">Dugsi</p>
-        <h1 className="mt-1 text-3xl font-bold text-ink sm:text-4xl">
-          Quran Recitation &amp; Tajweed Trainer
-        </h1>
-        <p className="mt-2 text-ink/70">
-          Recite <span className="font-arabic text-xl">{fatiha.nameArabic}</span> (Surah
-          Al-Fatiha) aloud and get instant word-by-word and tajweed feedback.
-        </p>
+    <main className="mx-auto max-w-3xl px-4 pb-16">
+      {/* Hero */}
+      <header className="relative -mx-4 overflow-hidden rounded-b-[2rem] bg-emerald-dark px-6 pb-10 pt-8 text-center shadow-soft sm:px-10">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.12]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 20% 20%, #e3c987 0 2px, transparent 3px), radial-gradient(circle at 80% 60%, #e3c987 0 2px, transparent 3px)",
+            backgroundSize: "48px 48px",
+          }}
+        />
+        <div className="relative">
+          <div className="flex justify-center">
+            <Wordmark />
+          </div>
+
+          <p className="ayah mx-auto mt-6 text-3xl text-gold-soft sm:text-4xl" dir="rtl">
+            {fatiha.nameArabic}
+          </p>
+          <h1 className="mt-2 text-xl font-semibold text-white sm:text-2xl">
+            Recite Surah Al-Fatiha. Get instant feedback.
+          </h1>
+          <p className="mx-auto mt-2 max-w-md text-sm text-white/70">
+            Read aloud and Dugsi checks every word and tajweed rule with you — gently, word by word.
+          </p>
+
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Badge>100% free</Badge>
+            <Badge>Private · on your device</Badge>
+            <Badge>No sign-up</Badge>
+          </div>
+        </div>
       </header>
 
-      <section className="mb-8">
+      {/* Recite + surah */}
+      <section className="mt-8">
         <Reciter />
       </section>
 
-      <section className="mb-10">
+      <section className="mt-10">
         <Legend />
       </section>
 
-      <footer className="border-t border-gold/20 pt-6 text-center text-xs text-ink/50">
-        <p>
-          100% free and private — your recitation is recognised on your own device, nothing is sent
-          to a server. The tajweed colours are a learning guide. Always learn tajweed with a
-          qualified teacher.
+      <footer className="mt-10 border-t border-gold/20 pt-6 text-center text-xs text-ink/50">
+        <p className="mx-auto max-w-md">
+          Free and private — your recitation is recognised on your own device, nothing is sent to a
+          server. The tajweed colours are a learning guide. Always learn tajweed with a qualified
+          teacher.
         </p>
       </footer>
     </main>

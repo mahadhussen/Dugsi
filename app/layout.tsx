@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Amiri } from "next/font/google";
 import "./globals.css";
 
@@ -10,9 +10,17 @@ const amiri = Amiri({
 });
 
 export const metadata: Metadata = {
-  title: "Dugsi — Quran Recitation & Tajweed Trainer",
+  title: "Dugsi — Recite & Learn the Quran",
   description:
-    "Recite Surah Al-Fatiha and get instant word-by-word accuracy and tajweed feedback.",
+    "Recite Surah Al-Fatiha and get instant, free, word-by-word accuracy and tajweed feedback — right on your device.",
+  applicationName: "Dugsi",
+  appleWebApp: { capable: true, title: "Dugsi", statusBarStyle: "black-translucent" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#08332f",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

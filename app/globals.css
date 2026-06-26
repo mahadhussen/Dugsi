@@ -11,40 +11,70 @@ html {
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 50% -10%, rgba(201, 162, 75, 0.12), transparent),
-    #fbf7ee;
-  color: #0f1b2d;
+  color: #10241f;
   min-height: 100vh;
+  background-color: #faf6ec;
+  /* warm parchment with a faint geometric wash */
+  background-image:
+    radial-gradient(900px 500px at 50% -8%, rgba(15, 118, 110, 0.1), transparent 70%),
+    radial-gradient(700px 400px at 100% 0%, rgba(201, 162, 75, 0.12), transparent 70%);
+  background-attachment: fixed;
 }
 
-/* Arabic ayah typography */
+/* ---- Arabic ayah typography ---- */
 .ayah {
   direction: rtl;
   font-family: var(--font-arabic);
-  line-height: 2.1;
+  line-height: 2.2;
 }
 
 .word {
-  transition: color 0.2s ease, background-color 0.2s ease;
-  border-radius: 0.35rem;
-  padding: 0 0.15rem;
+  transition: color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+  border-radius: 0.4rem;
+  padding: 0.05rem 0.2rem;
+}
+.word:hover {
+  background-color: rgba(15, 118, 110, 0.06);
 }
 
 .word-correct {
-  background-color: rgba(16, 185, 129, 0.16);
+  background-color: rgba(16, 185, 129, 0.18);
+  box-shadow: inset 0 -2px 0 rgba(5, 150, 105, 0.5);
 }
 .word-close {
-  background-color: rgba(234, 179, 8, 0.18);
+  background-color: rgba(234, 179, 8, 0.2);
+  box-shadow: inset 0 -2px 0 rgba(202, 138, 4, 0.5);
 }
 .word-wrong {
   background-color: rgba(239, 68, 68, 0.16);
+  box-shadow: inset 0 -2px 0 rgba(220, 38, 38, 0.5);
 }
 .word-missing {
   background-color: rgba(148, 163, 184, 0.22);
   text-decoration: underline dotted rgba(100, 116, 139, 0.7);
 }
 
+/* ---- ornamental ayah medallion ---- */
+.ayah-medallion {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  font-family: var(--font-arabic);
+  font-size: 0.95rem;
+  color: #a9842f;
+  background:
+    radial-gradient(circle at center, #fff 55%, transparent 56%),
+    conic-gradient(from 0deg, #e3c987, #c9a24b, #e3c987, #c9a24b, #e3c987);
+  border-radius: 9999px;
+  box-shadow: 0 1px 4px rgba(169, 132, 47, 0.4);
+}
+
+/* ---- recording pulse ring ---- */
+.rec-dot {
+  animation: pulse-rec 1s infinite;
+}
 @keyframes pulse-rec {
   0%,
   100% {
@@ -54,6 +84,18 @@ body {
     opacity: 0.35;
   }
 }
-.rec-dot {
-  animation: pulse-rec 1s infinite;
+
+/* subtle entrance for result/feedback cards */
+.animate-in {
+  animation: floatin 0.4s ease-out both;
+}
+@keyframes floatin {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
