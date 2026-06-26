@@ -39,7 +39,7 @@ export default function SurahView({
   return (
     <div className="divide-y divide-gold/15">
       {ayat.map((ayah) => (
-        <div key={ayah.number} className="py-5 first:pt-0 last:pb-0">
+        <div key={ayah.number} data-verse={ayah.number} className="ayah-block py-5 first:pt-0 last:pb-0">
           <p className="ayah text-3xl sm:text-[2.1rem]">
             {ayah.words.map((word, i) => {
               refIndex++;

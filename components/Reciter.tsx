@@ -29,7 +29,7 @@ function pickMimeType(): string {
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "audio/webm";
 }
 
-export default function Reciter({ ayat }: { ayat: Ayah[] }) {
+export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressKey?: string }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [engine, setEngine] = useState<Engine>("fast");
   const [error, setError] = useState<string | null>(null);
@@ -42,11 +42,10 @@ export default function Reciter({ ayat }: { ayat: Ayah[] }) {
   const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
   const [livePointer, setLivePointer] = useState(0);
 
-  // Normalised expected words for the current target — used for live tracking.
-  const expectedNorm = useMemo(
-    () => flattenAyat(ayat).map((f) => normalizeWord(f.word.uthmani)),
-    [ayat],
-  );
+  // Flattened words (for verse↔word mapping) and their normalised forms (for
+  // live tracking).
+  const flatWords = useMemo(() => flattenAyat(ayat), [ayat]);
+  const expectedNorm = useMemo(() => flatWords.map((f) => normalizeWord(f.word.uthmani)), [flatWords]);
   const surahRef = useRef<HTMLDivElement>(null);
 
   const fastOk = useRef(true);
@@ -120,6 +119,10 @@ export default function Reciter({ ayat }: { ayat: Ayah[] }) {
         const { statuses, pointer } = trackLive(expectedNorm, tokenize(text));
         setLiveStatuses(statuses);
         setLivePointer(pointer);
+        if (progressKey) {
+          const verse = flatWords[Math.min(flatWords.length - 1, pointer)]?.ayah;
+          if (verse) writeProgress(progressKey, verse);
+        }
       },
       onError: (message) => {
         stopTimer();
@@ -215,6 +218,19 @@ export default function Reciter({ ayat }: { ayat: Ayah[] }) {
     const el = surahRef.current?.querySelector(`[data-ref="${livePointer}"]`);
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [livePointer, phase, engine]);
+
+  // On opening a long surah, jump to the furthest verse reached last time.
+  useEffect(() => {
+    if (!progressKey) return;
+    const verse = readProgress(progressKey);
+    if (verse <= 1) return;
+    const id = requestAnimationFrame(() => {
+      surahRef.current
+        ?.querySelector(`[data-verse="${verse}"]`)
+        ?.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [progressKey, ayat]);
 
   const stop = () => {
     stopTimer();
@@ -517,4 +533,21 @@ function formatTime(s: number): string {
   const mm = Math.floor(s / 60);
   const ss = s % 60;
   return `${mm}:${ss.toString().padStart(2, "0")}`;
+}
+
+// Persisted reading progress (furthest verse reached) per surah.
+function readProgress(key: string): number {
+  try {
+    return Number(localStorage.getItem(key)) || 0;
+  } catch {
+    return 0;
+  }
+}
+function writeProgress(key: string, verse: number): void {
+  try {
+    const current = Number(localStorage.getItem(key)) || 0;
+    if (verse > current) localStorage.setItem(key, String(verse));
+  } catch {
+    /* storage unavailable — progress just won't persist */
+  }
 }
