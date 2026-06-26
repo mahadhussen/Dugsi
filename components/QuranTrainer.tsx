@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Reciter from "./Reciter";
 import { SURAHS, surahMeta, loadSurah, type Surah } from "@/lib/quran";
 
@@ -8,11 +8,9 @@ export default function QuranTrainer() {
   const [surahId, setSurahId] = useState(1);
   const [surah, setSurah] = useState<Surah | null>(null);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
 
   const meta = surahMeta(surahId)!;
-  const pageSize = meta.pageSize;
-  const totalPages = pageSize ? Math.ceil(meta.ayahCount / pageSize) : 1;
+  const isLong = meta.ayahCount > 10;
 
   useEffect(() => {
     let cancelled = false;
@@ -30,21 +28,13 @@ export default function QuranTrainer() {
     };
   }, [surahId]);
 
-  const sectionAyat = useMemo(() => {
-    if (!surah) return [];
-    if (!pageSize) return surah.ayat;
-    return surah.ayat.slice(page * pageSize, page * pageSize + pageSize);
-  }, [surah, page, pageSize]);
-
   const selectSurah = (id: number) => {
     if (id === surahId) return;
     setSurahId(id);
-    setPage(0);
     setSurah(null);
+    // Jump back to the top when switching surah.
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  const from = page * (pageSize ?? meta.ayahCount) + 1;
-  const to = Math.min(meta.ayahCount, from + (pageSize ?? meta.ayahCount) - 1);
 
   return (
     <div className="space-y-6">
@@ -73,49 +63,9 @@ export default function QuranTrainer() {
         ))}
       </div>
 
-      {/* Section navigation (long surahs only) */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium disabled:opacity-40 hover:bg-ink/5"
-            aria-label="Previous verses"
-          >
-            ‹ Prev
-          </button>
-          <label className="text-sm text-ink/70">
-            <span className="sr-only">Jump to verses</span>
-            <select
-              value={page}
-              onChange={(e) => setPage(Number(e.target.value))}
-              className="rounded-lg border border-gold/30 bg-white/80 px-2 py-1.5 text-sm"
-            >
-              {Array.from({ length: totalPages }, (_, i) => {
-                const a = i * (pageSize ?? 0) + 1;
-                const b = Math.min(meta.ayahCount, a + (pageSize ?? 0) - 1);
-                return (
-                  <option key={i} value={i}>
-                    Verses {a}–{b}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-            disabled={page >= totalPages - 1}
-            className="rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium disabled:opacity-40 hover:bg-ink/5"
-            aria-label="Next verses"
-          >
-            Next ›
-          </button>
-        </div>
-      )}
-
       <p className="text-center text-sm text-ink/60">
-        Practising <span className="font-semibold text-ink">{meta.transliteration}</span>
-        {totalPages > 1 ? `, verses ${from}–${to} of ${meta.ayahCount}` : ""}.
+        Practising <span className="font-semibold text-ink">{meta.transliteration}</span>.
+        {isLong ? " Scroll to read — recite any part and only that part is scored." : ""}
       </p>
 
       {loading || !surah ? (
@@ -123,7 +73,7 @@ export default function QuranTrainer() {
           <span className="h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
         </div>
       ) : (
-        <Reciter ayat={sectionAyat} />
+        <Reciter ayat={surah.ayat} />
       )}
     </div>
   );
