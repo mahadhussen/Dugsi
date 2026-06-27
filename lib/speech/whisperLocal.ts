@@ -12,7 +12,11 @@ import type { TimedWord } from "@/lib/tajweed/timing";
 
 // Pinned versions keep behaviour reproducible.
 const TRANSFORMERS_CDN = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3";
-const MODEL_ID = "Xenova/whisper-base";
+// "tiny" + 8-bit quantisation keeps the model small (~40 MB) and light enough to
+// run inside a phone browser without exhausting memory (whisper-base was OOM-ing
+// on mobile). Live marking comes from the browser recogniser; Whisper refines.
+const MODEL_ID = "Xenova/whisper-tiny";
+const MODEL_DTYPE = "q8";
 
 export interface WhisperProgress {
   stage: "loading-model" | "transcribing";
@@ -43,6 +47,7 @@ async function getPipeline(onProgress?: (p: WhisperProgress) => void): Promise<a
       // Always fetch from the HF hub; we don't ship local weights.
       env.allowLocalModels = false;
       return pipeline("automatic-speech-recognition", MODEL_ID, {
+        dtype: MODEL_DTYPE,
         progress_callback: (data: { status?: string; progress?: number }) => {
           if (data?.status === "progress" && typeof data.progress === "number") {
             onProgress?.({ stage: "loading-model", percent: Math.round(data.progress) });

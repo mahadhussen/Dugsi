@@ -58,10 +58,10 @@ export default function Home() {
 
       <footer className="mt-10 border-t border-gold/20 pt-6 text-center text-xs text-ink/50">
         <p className="mx-auto max-w-md">
-          Free, no account, and nothing is stored or tracked. <strong>High accuracy</strong> runs
-          fully on your device — audio never leaves your phone. <strong>Fast</strong> mode uses your
-          browser&apos;s own speech recognition, which in some browsers (e.g. Chrome) transcribes
-          audio in the cloud. The tajweed colours are a learning guide — always learn tajweed with a
+          Free, no account, and nothing is stored or tracked. The live word-by-word marking uses
+          your browser&apos;s speech recognition (in some browsers, e.g. Chrome, that transcribes
+          audio in the cloud). <strong>High accuracy</strong> adds a precise check that runs fully on
+          your device. The tajweed colours are a learning guide — always learn tajweed with a
           qualified teacher.
         </p>
       </footer>

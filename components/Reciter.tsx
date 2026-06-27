@@ -109,10 +109,13 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
     timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
   };
 
-  const startFast = () => {
+  // The live (Web Speech) recogniser drives the real-time green/red highlighting.
+  // In Fast mode it also produces the final result; in High-accuracy mode it only
+  // powers the live marking while Whisper computes the precise final score.
+  const makeLiveRecognizer = (useForFinal: boolean): Recognizer => {
     setLiveText("");
     liveRef.current = "";
-    const recognizer = new Recognizer({
+    return new Recognizer({
       onTranscript: (text) => {
         liveRef.current = text;
         setLiveText(text);
@@ -125,11 +128,13 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
         }
       },
       onError: (message) => {
+        if (!useForFinal) return; // a live hiccup in accurate mode is non-fatal
         stopTimer();
         setError(message);
         setPhase("error");
       },
       onDone: (finalText) => {
+        if (!useForFinal) return; // Whisper produces the result in accurate mode
         stopTimer();
         const transcript = finalText || liveRef.current;
         if (!transcript.trim()) {
@@ -141,6 +146,10 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
         setPhase("done");
       },
     });
+  };
+
+  const startFast = () => {
+    const recognizer = makeLiveRecognizer(true);
     recognizerRef.current = recognizer;
     recognizer.start("ar-SA");
     setPhase("recording");
@@ -167,6 +176,17 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
       recorderRef.current = recorder;
       setPhase("recording");
       startTimer();
+
+      // Best-effort live marking via the browser recogniser, in parallel.
+      if (isSpeechSupported()) {
+        try {
+          const live = makeLiveRecognizer(false);
+          recognizerRef.current = live;
+          live.start("ar-SA");
+        } catch {
+          /* concurrent live not available — Whisper still gives the result */
+        }
+      }
     } catch {
       setError("Microphone access was denied. Please allow the mic and try again.");
       setPhase("error");
@@ -214,10 +234,10 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
 
   // Keep the word the reciter is on centred on screen while following live.
   useEffect(() => {
-    if (phase !== "recording" || engine !== "fast") return;
+    if (phase !== "recording") return;
     const el = surahRef.current?.querySelector(`[data-ref="${livePointer}"]`);
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [livePointer, phase, engine]);
+  }, [livePointer, phase]);
 
   // On opening a long surah, jump to the furthest verse reached last time.
   useEffect(() => {
@@ -264,6 +284,7 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
       recognizerRef.current?.stop();
     } else {
       setPhase("processing");
+      recognizerRef.current?.cancel(); // stop the live recogniser; Whisper scores
       recorderRef.current?.stop();
     }
   };
@@ -290,8 +311,11 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
     [feedback],
   );
 
-  // Live word-by-word following is available with the streaming Fast engine.
-  const liveMode = phase === "recording" && engine === "fast";
+  // Live word-by-word following now runs in both engines (Fast directly, High
+  // accuracy via a concurrent browser recogniser). Keep the live marks visible
+  // through the short "processing" step in accurate mode until the final lands.
+  const liveMode = phase === "recording";
+  const showingLive = (phase === "recording" || phase === "processing") && !feedback;
 
   if (phase === "unsupported") {
     return (
@@ -364,7 +388,7 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
           </p>
         )}
 
-        {phase === "recording" && engine === "fast" && (
+        {phase === "recording" && (
           <div className="w-full animate-in rounded-2xl border border-emerald/25 bg-white/80 p-4 text-center shadow-soft">
             <p className="ayah text-2xl text-ink/80" dir="rtl">
               {liveText || "…"}
@@ -386,10 +410,10 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
         <SurahCard>
           <SurahView
             ayat={ayat}
-            statuses={liveMode ? liveStatuses : statuses}
+            statuses={showingLive ? liveStatuses : statuses}
             maddVerdicts={maddVerdicts}
             activeIndex={liveMode ? livePointer : undefined}
-            showTajweed={!liveMode && !feedback}
+            showTajweed={!showingLive && !feedback}
           />
         </SurahCard>
       </div>
@@ -438,12 +462,12 @@ function EngineToggle({
         {engine === "fast"
           ? "Instant · live following. Uses your browser's speech recognition."
           : modelStatus === "loading"
-            ? `Preparing on-device Whisper… ${modelPercent}%`
+            ? `Preparing on-device check… ${modelPercent}%`
             : modelStatus === "ready"
-              ? "Fully on-device · audio never leaves your phone."
+              ? "Live marking + a precise on-device check at the end."
               : modelStatus === "error"
                 ? "Couldn't load the model — needs internet the first time."
-                : "Smarter & fully private · downloads a small model once, then works offline."}
+                : "Live marking, plus a precise on-device check. Small one-time download."}
       </p>
     </div>
   );
