@@ -10,6 +10,10 @@ next-env.d.ts
 .env.local
 .env*.local
 
+# generated at build time (scripts/stamp-version.mjs)
+/lib/version.ts
+/public/version.json
+
 # misc
 .DS_Store
 npm-debug.log*

@@ -4,7 +4,9 @@
   "private": true,
   "description": "Dugsi — Quran recitation & tajweed trainer (MVP: Surah Al-Fatiha)",
   "scripts": {
+    "predev": "node scripts/stamp-version.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/stamp-version.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

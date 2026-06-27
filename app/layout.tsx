@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Amiri } from "next/font/google";
 import "./globals.css";
+import UpdateChecker from "@/components/UpdateChecker";
 
 const amiri = Amiri({
   subsets: ["arabic"],
@@ -26,7 +27,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={amiri.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <UpdateChecker />
+      </body>
     </html>
   );
 }
