@@ -52,6 +52,11 @@ test("memorisedCount counts surahs whose best score reaches the threshold", () =
   assert.equal(s.memorisedCount, 2); // surah 1 (==90) and 3 (99); surah 2 (88) not yet
 });
 
+test("todayCount counts only sessions from today", () => {
+  const s = computeStats(sorted([row(1, 80, 0), row(2, 70, 0), row(3, 60, 1)]), NOW);
+  assert.equal(s.todayCount, 2);
+});
+
 test("empty history yields zeroed stats", () => {
   const s = computeStats([], NOW);
   assert.equal(s.totalSessions, 0);

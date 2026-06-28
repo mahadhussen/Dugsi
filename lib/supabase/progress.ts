@@ -115,6 +115,8 @@ export interface Stats {
   totalSessions: number;
   /** Consecutive days (including today) with at least one session. */
   streak: number;
+  /** Sessions recorded today (for the daily goal). */
+  todayCount: number;
   averageScore: number;
   /** Surahs with a best score ≥ 90 — effectively memorised. */
   memorisedCount: number;
@@ -187,6 +189,16 @@ export function computeStats(data: SessionRow[], now: Date): Stats {
     (a, b) => new Date(b.lastPracticed).getTime() - new Date(a.lastPracticed).getTime(),
   );
   const memorisedCount = bySurah.filter((s) => s.bestScore >= MEMORISED_THRESHOLD).length;
+  const todayStr = now.toDateString();
+  const todayCount = data.filter((r) => new Date(r.created_at).toDateString() === todayStr).length;
 
-  return { totalSessions: total, streak, averageScore, memorisedCount, recent: data.slice(0, 8), bySurah };
+  return {
+    totalSessions: total,
+    streak,
+    todayCount,
+    averageScore,
+    memorisedCount,
+    recent: data.slice(0, 8),
+    bySurah,
+  };
 }

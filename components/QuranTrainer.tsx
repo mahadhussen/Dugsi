@@ -57,6 +57,17 @@ export default function QuranTrainer() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // The progress panel's "Practice" buttons jump straight to a surah.
+  useEffect(() => {
+    const go = (e: Event) => {
+      const id = (e as CustomEvent<number>).detail;
+      if (typeof id === "number") selectSurah(id);
+    };
+    window.addEventListener("dugsi:goto-surah", go as EventListener);
+    return () => window.removeEventListener("dugsi:goto-surah", go as EventListener);
+    // selectSurah closes over surahId; re-bind when it changes.
+  }, [surahId]);
+
   const startOver = () => {
     if (trackProgress) resetFurthest(userId, surahId);
     setResumeVerse(0);
