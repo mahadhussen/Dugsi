@@ -1,7 +1,32 @@
 import { flattenAyat, type Ayah } from "@/lib/quran/types";
 import { alignRecitation, type AlignmentResult } from "@/lib/align";
-import { tokenize } from "@/lib/arabic";
+import { tokenize, normalizeWord, similarity } from "@/lib/arabic";
 import { evaluateMadd, type TimingReport, type TimedWord } from "@/lib/tajweed/timing";
+
+// Above this many expected words, align only a window around where the reciter
+// actually recited. The full O(n·m) alignment over a whole long surah (e.g. all
+// 6118 words of Al-Baqarah) would allocate a huge matrix and crash phones.
+const WINDOW_THRESHOLD = 600;
+
+/**
+ * Find where a short recitation begins inside a long expected sequence by
+ * sliding the first few heard words across it (cheap single pass).
+ */
+function bestAnchor(expectedNorm: string[], heard: string[]): number {
+  const probes = heard.slice(0, 5);
+  if (probes.length === 0) return 0;
+  let bestStart = 0;
+  let bestScore = -Infinity;
+  for (let s = 0; s + probes.length <= expectedNorm.length; s++) {
+    let score = 0;
+    for (let j = 0; j < probes.length; j++) score += similarity(probes[j], expectedNorm[s + j]);
+    if (score > bestScore) {
+      bestScore = score;
+      bestStart = s;
+    }
+  }
+  return bestStart;
+}
 
 export interface RecitationFeedback {
   transcript: string;
@@ -26,7 +51,28 @@ export function analyzeRecitation(
   const expectedTokens = flat.map((f) => f.word.uthmani);
   const heardTokens = tokenize(transcript);
 
-  const fullAlignment = alignRecitation(expectedTokens, heardTokens);
+  // For long surahs, bound the alignment to a window around the recited passage
+  // so the DP matrix stays small (avoids OOM crashes on mobile).
+  let windowStart = 0;
+  let windowTokens = expectedTokens;
+  if (expectedTokens.length > WINDOW_THRESHOLD && heardTokens.length > 0) {
+    const expectedNorm = expectedTokens.map(normalizeWord);
+    const anchor = bestAnchor(expectedNorm, heardTokens);
+    const pad = 30;
+    windowStart = Math.max(0, anchor - pad);
+    const windowEnd = Math.min(expectedTokens.length, anchor + heardTokens.length + pad);
+    windowTokens = expectedTokens.slice(windowStart, windowEnd);
+  }
+
+  const windowAlignment = alignRecitation(windowTokens, heardTokens);
+  // Map window-local indices back to global word indices.
+  const fullAlignment: AlignmentResult =
+    windowStart === 0
+      ? windowAlignment
+      : {
+          ...windowAlignment,
+          words: windowAlignment.words.map((w) => ({ ...w, refIndex: w.refIndex + windowStart })),
+        };
 
   // The reciter may recite only part of a long, scrollable surah. Scope the
   // result to the span they actually attempted (first..last matched word) so the
