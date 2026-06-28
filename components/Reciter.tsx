@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SurahView from "./SurahView";
 import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
-import { transcribeWithWhisper, isWhisperSupported } from "@/lib/speech/whisperLocal";
+import { transcribeWithWhisper, isWhisperSupported, webgpuAvailable } from "@/lib/speech/whisperLocal";
 import { analyzeRecitation, type RecitationFeedback } from "@/lib/analyze";
 import type { WordStatus } from "@/lib/align";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
@@ -269,10 +269,11 @@ export default function Reciter({
     }
   };
 
-  // Whether to actually run on-device Whisper: only when High accuracy is chosen
-  // AND we're not on iOS (where the WASM model is the likely crash). On iOS,
-  // High accuracy still works — it just uses the browser recogniser as the final.
-  const whisperMode = engine === "accurate" && !isIOS();
+  // Whether to actually run on-device Whisper. On iOS we only do it when WebGPU
+  // is available (newer iPhones, iOS 18+) and run on WebGPU — that's efficient
+  // and avoids the WASM out-of-memory crash. Older iPhones keep the browser
+  // recogniser as the final result.
+  const whisperMode = engine === "accurate" && (!isIOS() || webgpuAvailable());
 
   const start = () => {
     setError(null);

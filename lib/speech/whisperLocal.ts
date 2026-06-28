@@ -37,6 +37,12 @@ async function loadTransformers(): Promise<any> {
   return importer(TRANSFORMERS_CDN);
 }
 
+/** WebGPU is available on newer devices (incl. iOS 18+ Safari) and runs the
+ *  model far more efficiently than WASM — the safe path to enable on iPhone. */
+export function webgpuAvailable(): boolean {
+  return typeof navigator !== "undefined" && "gpu" in navigator;
+}
+
 let pipelinePromise: Promise<any> | null = null;
 
 async function getPipeline(onProgress?: (p: WhisperProgress) => void): Promise<any> {
@@ -46,8 +52,10 @@ async function getPipeline(onProgress?: (p: WhisperProgress) => void): Promise<a
       const { pipeline, env } = mod;
       // Always fetch from the HF hub; we don't ship local weights.
       env.allowLocalModels = false;
+      const gpu = webgpuAvailable();
       return pipeline("automatic-speech-recognition", MODEL_ID, {
-        dtype: MODEL_DTYPE,
+        device: gpu ? "webgpu" : "wasm",
+        dtype: gpu ? "fp16" : MODEL_DTYPE,
         progress_callback: (data: { status?: string; progress?: number }) => {
           if (data?.status === "progress" && typeof data.progress === "number") {
             onProgress?.({ stage: "loading-model", percent: Math.round(data.progress) });
