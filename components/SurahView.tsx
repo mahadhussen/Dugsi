@@ -217,9 +217,13 @@ export default function SurahView({
   }, []);
 
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const verseEls = useRef<(HTMLDivElement | null)[]>([]);
   const lastActiveVerse = useRef(-1);
+  const virtualized = ayat.length > 20;
 
-  // Follow the reciter: scroll to the verse holding the active word as it moves.
+  // Follow the reciter, book-style: keep the verse being recited centred (a touch
+  // above centre, so the next verse peeks in and you can read on without ever
+  // scrolling yourself).
   useEffect(() => {
     if (activeIndex === undefined) {
       lastActiveVerse.current = -1;
@@ -230,11 +234,21 @@ export default function SurahView({
       if (wordOffsets[i] <= activeIndex) v = i;
       else break;
     }
-    if (v !== lastActiveVerse.current) {
-      lastActiveVerse.current = v;
+    if (v === lastActiveVerse.current) return;
+    lastActiveVerse.current = v;
+
+    if (virtualized) {
       virtuosoRef.current?.scrollToIndex({ index: v, align: "center", behavior: "smooth" });
+    } else {
+      const el = verseEls.current[v];
+      if (el && typeof window !== "undefined") {
+        const rect = el.getBoundingClientRect();
+        const mid = window.scrollY + rect.top + rect.height / 2;
+        // 0.42 (vs 0.5 = exact centre) lifts it slightly so the next verse shows.
+        window.scrollTo({ top: mid - window.innerHeight * 0.42, behavior: "smooth" });
+      }
     }
-  }, [activeIndex, wordOffsets]);
+  }, [activeIndex, wordOffsets, virtualized]);
 
   const renderVerse = (i: number) => (
     <VerseBlock
@@ -253,8 +267,18 @@ export default function SurahView({
   );
 
   // Short surahs (e.g. Al-Fatiha): render plainly — no need to virtualise.
-  if (ayat.length <= 20) {
-    return <div>{ayat.map((a, i) => <div key={a.number}>{renderVerse(i)}</div>)}</div>;
+  if (!virtualized) {
+    return (
+      <div>
+        {ayat.map((a, i) => (
+          <div key={a.number} ref={(el) => {
+            verseEls.current[i] = el;
+          }}>
+            {renderVerse(i)}
+          </div>
+        ))}
+      </div>
+    );
   }
 
   return (

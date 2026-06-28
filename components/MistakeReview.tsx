@@ -37,23 +37,56 @@ export default function MistakeReview({
   surahNumber: number;
   recordingUrl?: string;
 }) {
+  const [playingAll, setPlayingAll] = useState(false);
   useEffect(() => () => stopCurrent(), []);
   if (mistakes.length === 0) return null;
 
+  const playWhole = () => {
+    if (!recordingUrl) return;
+    if (playingAll) {
+      stopCurrent();
+      setPlayingAll(false);
+      return;
+    }
+    stopCurrent();
+    const a = new Audio(recordingUrl);
+    a.onended = () => setPlayingAll(false);
+    a.onpause = () => setPlayingAll(false);
+    current = a;
+    setPlayingAll(true);
+    void a.play().catch(() => setPlayingAll(false));
+  };
+
   return (
     <div className="mt-5 rounded-xl border border-ink/10 bg-white/70 p-4">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink/45">
-        Review your mistakes ({mistakes.length})
-      </p>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink/45">
+          Review your mistakes ({mistakes.length})
+        </p>
+        {recordingUrl && (
+          <button
+            onClick={playWhole}
+            className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition ${
+              playingAll ? "bg-ink text-white ring-ink" : "text-ink/70 ring-ink/15"
+            }`}
+          >
+            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden>
+              {playingAll ? <rect x="6" y="5" width="12" height="14" rx="1" /> : <path d="M8 5v14l11-7z" />}
+            </svg>
+            Hear yourself
+          </button>
+        )}
+      </div>
       <ul className="space-y-2.5">
         {mistakes.map((m) => (
           <MistakeRow key={m.refIndex} m={m} surahNumber={surahNumber} recordingUrl={recordingUrl} />
         ))}
       </ul>
       <p className="mt-3 text-xs text-ink/40">
-        Tap <strong>You</strong> to hear yourself and <strong>Correct</strong> for the qari — listen
-        to the difference, then recite it again.
-        {!recordingUrl && " Hearing yourself needs High accuracy mode."}
+        Tap <strong>You</strong> to hear just that word, <strong>Correct</strong> for the qari, or{" "}
+        <strong>Hear yourself</strong> for the whole recitation — listen to the difference, then
+        recite it again.
+        {!recordingUrl && " Audio playback wasn't captured this time."}
       </p>
     </div>
   );
@@ -81,11 +114,14 @@ function MistakeRow({
     stopCurrent();
     const a = localRef.current ?? new Audio(recordingUrl);
     localRef.current = a;
-    a.currentTime = m.time.start;
+    // Pad the window a little — Whisper's word timestamps drift, so a slightly
+    // wider slice reliably contains the whole word.
+    const PAD = 0.15;
+    const from = Math.max(0, m.time.start - PAD);
+    const to = m.time.end + PAD;
+    a.currentTime = from;
     a.ontimeupdate = () => {
-      if (m.time && a.currentTime >= m.time.end) {
-        a.pause();
-      }
+      if (a.currentTime >= to) a.pause();
     };
     a.onpause = () => setPlaying(null);
     current = a;

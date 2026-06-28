@@ -205,6 +205,40 @@ export default function Reciter({
     recognizer.start("ar-SA");
     setPhase("recording");
     startTimer();
+    // Best-effort: also capture the audio so the reciter can replay themselves
+    // afterwards (the browser recogniser gives text but no recording).
+    void captureAudio();
+  };
+
+  // Record the mic to a blob in parallel (used for "hear yourself"). Failure is
+  // non-fatal — the recitation/recognition still works without it.
+  const captureAudio = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mimeType = pickMimeType();
+      const recorder = new MediaRecorder(stream, { mimeType });
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        if (blob.size > 0) {
+          const url = URL.createObjectURL(blob);
+          setRecording((prev) => {
+            if (prev) URL.revokeObjectURL(prev.url);
+            return { url, words: [] }; // no word timings in Fast mode
+          });
+        }
+      };
+      recorder.start();
+      recorderRef.current = recorder;
+    } catch {
+      /* no playback this time — recitation still works */
+    }
   };
 
   const startAccurate = async () => {
@@ -339,6 +373,7 @@ export default function Reciter({
     if (!whisperMode) {
       setPhase("done");
       recognizerRef.current?.stop();
+      recorderRef.current?.stop(); // finalise the "hear yourself" recording
     } else {
       recognizerRef.current?.cancel(); // stop the live recogniser
       // Show the instant browser-recogniser result right away, so finishing
