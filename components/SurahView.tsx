@@ -1,19 +1,22 @@
-import { memo } from "react";
+"use client";
+
+import { memo, useEffect, useMemo, useRef } from "react";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { Ayah } from "@/lib/quran/types";
 import { primaryRuleColor } from "@/lib/tajweed/rules";
 import type { WordStatus } from "@/lib/align";
 
 interface Props {
-  /** The ayat to render (one practice section / whole surah). */
   ayat: Ayah[];
-  /** refIndex -> recitation status, when feedback is available. */
   statuses?: Record<number, WordStatus>;
-  /** refIndex -> madd timing verdict, when available. */
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
-  /** Show tajweed colours (off while showing recitation results for clarity). */
   showTajweed?: boolean;
-  /** The next expected word while reciting live — gets a cursor. */
+  /** The next expected word while reciting live — gets a cursor + auto-follow. */
   activeIndex?: number;
+  /** 1-based verse to start at (resume). */
+  initialTopVerse?: number;
+  /** Reports the 1-based verse nearest the top as the reader scrolls. */
+  onTopVerseChange?: (verse: number) => void;
 }
 
 const statusClass: Record<WordStatus, string> = {
@@ -29,7 +32,7 @@ function toArabicNumeral(n: number): string {
 
 interface VerseProps {
   ayah: Ayah;
-  /** Global index of this verse's first word. */
+  index: number;
   baseRefIndex: number;
   statuses?: Record<number, WordStatus>;
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
@@ -37,12 +40,9 @@ interface VerseProps {
   activeIndex?: number;
 }
 
-// Each verse only re-renders when its own words' status, its madd marks, the
-// active cursor entering/leaving it, or the tajweed toggle change. Without this,
-// every live speech update would re-render all ~6118 words of Al-Baqarah and
-// crash mobile browsers.
 const VerseBlock = memo(function VerseBlock({
   ayah,
+  index,
   baseRefIndex,
   statuses,
   maddVerdicts,
@@ -52,10 +52,8 @@ const VerseBlock = memo(function VerseBlock({
   const hasFeedback = !!statuses;
   const len = ayah.words.length;
 
-  // Only split a verse into per-word spans when it actually needs them — the verse
-  // being recited (has the cursor), any verse with a status/madd mark, or a
-  // tajweed-coloured verse. Otherwise render it as one text node. This keeps the
-  // DOM tiny while reading a long surah (the iOS Safari out-of-memory case).
+  // Render per-word spans only when a verse needs them (recited / has marks /
+  // tajweed-coloured); otherwise a single text node — far lighter.
   let needWords =
     activeIndex !== undefined && activeIndex >= baseRefIndex && activeIndex < baseRefIndex + len;
   if (!needWords) {
@@ -73,7 +71,7 @@ const VerseBlock = memo(function VerseBlock({
   }
 
   return (
-    <div data-verse={ayah.number} className="ayah-block py-5 first:pt-0 last:pb-0">
+    <div className={`ayah-block py-5 ${index > 0 ? "border-t border-gold/15" : ""}`}>
       <p className="ayah text-3xl sm:text-[2.1rem]">
         {needWords ? (
           ayah.words.map((word, i) => {
@@ -85,12 +83,7 @@ const VerseBlock = memo(function VerseBlock({
             const statusBg = status ? statusClass[status] : "";
             const active = activeIndex === idx ? "word-active" : "";
             return (
-              <span
-                key={i}
-                data-ref={idx}
-                className={`word ${colorClass ?? ""} ${statusBg} ${active}`}
-                title={word.translit}
-              >
+              <span key={i} className={`word ${colorClass ?? ""} ${statusBg} ${active}`} title={word.translit}>
                 {word.uthmani}
                 {madd === "rushed" && (
                   <sup className="ml-0.5 text-xs text-red-600" title="Elongation may be rushed">
@@ -121,11 +114,11 @@ const VerseBlock = memo(function VerseBlock({
 
 function versesEqual(prev: VerseProps, next: VerseProps): boolean {
   if (prev.showTajweed !== next.showTajweed) return false;
-  if (prev.ayah !== next.ayah || prev.baseRefIndex !== next.baseRefIndex) return false;
+  if (prev.ayah !== next.ayah || prev.baseRefIndex !== next.baseRefIndex || prev.index !== next.index)
+    return false;
 
   const base = next.baseRefIndex;
   const len = next.ayah.words.length;
-
   const prevActiveHere =
     prev.activeIndex !== undefined && prev.activeIndex >= base && prev.activeIndex < base + len;
   const nextActiveHere =
@@ -137,31 +130,79 @@ function versesEqual(prev: VerseProps, next: VerseProps): boolean {
     if (prev.statuses?.[idx] !== next.statuses?.[idx]) return false;
     if (prev.maddVerdicts?.[idx] !== next.maddVerdicts?.[idx]) return false;
   }
-  return true; // unchanged — skip re-render
+  return true;
 }
 
-export default function SurahView({ ayat, statuses, maddVerdicts, showTajweed = true, activeIndex }: Props) {
-  // Global word offset for the first word of each verse.
-  const offsets: number[] = [];
-  let acc = 0;
-  for (const a of ayat) {
-    offsets.push(acc);
-    acc += a.words.length;
+export default function SurahView({
+  ayat,
+  statuses,
+  maddVerdicts,
+  showTajweed = true,
+  activeIndex,
+  initialTopVerse,
+  onTopVerseChange,
+}: Props) {
+  const wordOffsets = useMemo(() => {
+    const o: number[] = [];
+    let acc = 0;
+    for (const a of ayat) {
+      o.push(acc);
+      acc += a.words.length;
+    }
+    return o;
+  }, [ayat]);
+
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const lastActiveVerse = useRef(-1);
+
+  // Follow the reciter: scroll to the verse holding the active word as it moves.
+  useEffect(() => {
+    if (activeIndex === undefined) {
+      lastActiveVerse.current = -1;
+      return;
+    }
+    let v = 0;
+    for (let i = 0; i < wordOffsets.length; i++) {
+      if (wordOffsets[i] <= activeIndex) v = i;
+      else break;
+    }
+    if (v !== lastActiveVerse.current) {
+      lastActiveVerse.current = v;
+      virtuosoRef.current?.scrollToIndex({ index: v, align: "center", behavior: "smooth" });
+    }
+  }, [activeIndex, wordOffsets]);
+
+  const renderVerse = (i: number) => (
+    <VerseBlock
+      ayah={ayat[i]}
+      index={i}
+      baseRefIndex={wordOffsets[i]}
+      statuses={statuses}
+      maddVerdicts={maddVerdicts}
+      showTajweed={showTajweed}
+      activeIndex={activeIndex}
+    />
+  );
+
+  // Short surahs (e.g. Al-Fatiha): render plainly — no need to virtualise.
+  if (ayat.length <= 20) {
+    return <div>{ayat.map((a, i) => <div key={a.number}>{renderVerse(i)}</div>)}</div>;
   }
 
   return (
-    <div className="divide-y divide-gold/15">
-      {ayat.map((ayah, i) => (
-        <VerseBlock
-          key={ayah.number}
-          ayah={ayah}
-          baseRefIndex={offsets[i]}
-          statuses={statuses}
-          maddVerdicts={maddVerdicts}
-          showTajweed={showTajweed}
-          activeIndex={activeIndex}
-        />
-      ))}
-    </div>
+    <Virtuoso
+      ref={virtuosoRef}
+      useWindowScroll
+      totalCount={ayat.length}
+      overscan={800}
+      increaseViewportBy={400}
+      initialTopMostItemIndex={
+        initialTopVerse && initialTopVerse > 1
+          ? { index: initialTopVerse - 1, align: "start" }
+          : 0
+      }
+      rangeChanged={(r) => onTopVerseChange?.(ayat[r.startIndex]?.number ?? 1)}
+      itemContent={(i) => renderVerse(i)}
+    />
   );
 }

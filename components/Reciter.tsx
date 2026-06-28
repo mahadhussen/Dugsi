@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SurahView from "./SurahView";
 import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
 import { warmUpWhisper, transcribeWithWhisper, isWhisperSupported } from "@/lib/speech/whisperLocal";
@@ -46,7 +46,6 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
   // live tracking).
   const flatWords = useMemo(() => flattenAyat(ayat), [ayat]);
   const expectedNorm = useMemo(() => flatWords.map((f) => normalizeWord(f.word.uthmani)), [flatWords]);
-  const surahRef = useRef<HTMLDivElement>(null);
 
   const fastOk = useRef(true);
   const recognizerRef = useRef<Recognizer | null>(null);
@@ -237,50 +236,18 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
     else void startAccurate();
   };
 
-  // Keep the word the reciter is on centred on screen while following live.
-  useEffect(() => {
-    if (phase !== "recording") return;
-    const el = surahRef.current?.querySelector(`[data-ref="${livePointer}"]`);
-    el?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [livePointer, phase]);
-
-  // On opening a long surah, jump to the furthest verse reached last time.
-  useEffect(() => {
-    if (!progressKey) return;
-    const verse = readProgress(progressKey);
-    if (verse <= 1) return;
-    const id = requestAnimationFrame(() => {
-      surahRef.current?.querySelector(`[data-verse="${verse}"]`)?.scrollIntoView({ block: "start" });
-      window.scrollBy(0, -16); // a little breathing room above the verse
-    });
-    return () => cancelAnimationFrame(id);
-  }, [progressKey, ayat]);
-
-  // Also remember progress while simply scrolling/reading — track the verse
-  // nearest the top of the viewport. Cheap: the browser does the work.
-  useEffect(() => {
-    if (!progressKey) return;
-    const root = surahRef.current;
-    if (!root) return;
-    const blocks = root.querySelectorAll<HTMLElement>("[data-verse]");
-    if (blocks.length === 0) return;
-
-    const visible = new Set<number>();
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          const v = Number((e.target as HTMLElement).dataset.verse);
-          if (e.isIntersecting) visible.add(v);
-          else visible.delete(v);
-        }
-        if (visible.size > 0) writeProgress(progressKey, Math.min(...visible));
-      },
-      // a thin band near the top — the verse there is "where you're reading"
-      { rootMargin: "-12% 0px -78% 0px" },
-    );
-    blocks.forEach((b) => observer.observe(b));
-    return () => observer.disconnect();
-  }, [progressKey, ayat]);
+  // Resume point (read once when the surah loads) and a stable progress writer.
+  // Scrolling/active-follow are handled by the virtualised list itself.
+  const initialTopVerse = useMemo(
+    () => (progressKey ? readProgress(progressKey) : 0),
+    [progressKey, ayat],
+  );
+  const handleTopVerseChange = useCallback(
+    (verse: number) => {
+      if (progressKey) writeProgress(progressKey, verse);
+    },
+    [progressKey],
+  );
 
   const stop = () => {
     stopTimer();
@@ -332,9 +299,22 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
         maddVerdicts={maddVerdicts}
         activeIndex={liveMode ? livePointer : undefined}
         showTajweed={!showingLive && !feedback}
+        initialTopVerse={initialTopVerse}
+        onTopVerseChange={handleTopVerseChange}
       />
     ),
-    [ayat, showingLive, liveStatuses, statuses, maddVerdicts, liveMode, livePointer, feedback],
+    [
+      ayat,
+      showingLive,
+      liveStatuses,
+      statuses,
+      maddVerdicts,
+      liveMode,
+      livePointer,
+      feedback,
+      initialTopVerse,
+      handleTopVerseChange,
+    ],
   );
 
   if (phase === "unsupported") {
@@ -426,9 +406,7 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
 
       {feedback && phase === "done" && <ResultsPanel feedback={feedback} onReset={reset} />}
 
-      <div ref={surahRef}>
-        <SurahCard>{surahEl}</SurahCard>
-      </div>
+      <SurahCard>{surahEl}</SurahCard>
     </div>
   );
 }
