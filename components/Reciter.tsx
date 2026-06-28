@@ -11,6 +11,9 @@ import { tokenize, normalizeWord } from "@/lib/arabic";
 import { trackLive } from "@/lib/live";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
+import { mapRefTimes } from "@/lib/review";
+import type { TimedWord } from "@/lib/tajweed/timing";
+import MistakeReview, { type Mistake } from "./MistakeReview";
 
 type Phase = "idle" | "recording" | "processing" | "done" | "error" | "unsupported";
 type Engine = "fast" | "accurate";
@@ -62,11 +65,20 @@ export default function Reciter({
   const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
   const [livePointer, setLivePointer] = useState(0);
   const [hifz, setHifz] = useState(0); // 0 = off, 1 easy, 2 medium, 3 hide all
+  // The user's own recording + word timestamps, to replay mistakes (High accuracy).
+  const [recording, setRecording] = useState<{ url: string; words: TimedWord[] } | null>(null);
 
   // Flattened words (for verse↔word mapping) and their normalised forms (for
   // live tracking).
   const flatWords = useMemo(() => flattenAyat(ayat), [ayat]);
   const expectedNorm = useMemo(() => flatWords.map((f) => normalizeWord(f.word.uthmani)), [flatWords]);
+
+  const clearRecording = useCallback(() => {
+    setRecording((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  }, []);
 
   const fastOk = useRef(true);
   const recognizerRef = useRef<Recognizer | null>(null);
@@ -101,8 +113,9 @@ export default function Reciter({
     liveRef.current = "";
     setLiveStatuses({});
     setLivePointer(0);
+    clearRecording();
     setPhase((p) => (p === "unsupported" ? p : "idle"));
-  }, [ayat]);
+  }, [ayat, clearRecording]);
 
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -250,6 +263,13 @@ export default function Reciter({
         }
       });
       setModelStatus("ready");
+      if (result.words?.length) {
+        const url = URL.createObjectURL(blob);
+        setRecording((prev) => {
+          if (prev) URL.revokeObjectURL(prev.url);
+          return { url, words: result.words };
+        });
+      }
       if (result.text.trim()) {
         setFeedback(analyzeRecitation(ayat, result.text, result.words, "on-device Whisper"));
         setPhase("done");
@@ -286,6 +306,7 @@ export default function Reciter({
     setFeedback(null);
     setLiveStatuses({});
     setLivePointer(0);
+    clearRecording();
     liveResultShownRef.current = false;
     loggedRef.current = false;
     if (whisperMode) void startAccurate();
@@ -339,6 +360,7 @@ export default function Reciter({
     setFeedback(null);
     setError(null);
     setLiveText("");
+    clearRecording();
     setPhase("idle");
   };
 
@@ -356,6 +378,31 @@ export default function Reciter({
         : undefined,
     [feedback],
   );
+
+  // Per-mistake review: wrong/skipped words, with where the reciter said each one
+  // in their recording (so they can replay themselves vs the qari).
+  const mistakes = useMemo<Mistake[]>(() => {
+    if (!feedback) return [];
+    const times = mapRefTimes(
+      feedback.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
+      recording?.words ?? [],
+    );
+    return feedback.alignment.words
+      .filter((w) => w.status === "wrong" || w.status === "missing")
+      .slice(0, 30)
+      .map((w) => {
+        const fw = flatWords[w.refIndex];
+        return {
+          refIndex: w.refIndex,
+          uthmani: fw?.word.uthmani ?? w.expected,
+          translit: fw?.word.translit,
+          heard: w.heard,
+          verse: fw?.ayah ?? 1,
+          skipped: w.status === "missing",
+          time: times[w.refIndex],
+        };
+      });
+  }, [feedback, recording, flatWords]);
 
   // Record one session per finished recitation (signed-in only). The first
   // finalised result wins; a later Whisper refinement won't double-log.
@@ -500,7 +547,15 @@ export default function Reciter({
         </div>
       )}
 
-      {feedback && phase === "done" && <ResultsPanel feedback={feedback} onReset={reset} />}
+      {feedback && phase === "done" && (
+        <ResultsPanel
+          feedback={feedback}
+          onReset={reset}
+          mistakes={mistakes}
+          surahNumber={surahNumber}
+          recordingUrl={recording?.url}
+        />
+      )}
 
       <SurahCard>{surahEl}</SurahCard>
     </div>
@@ -606,7 +661,19 @@ function SurahCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ResultsPanel({ feedback, onReset }: { feedback: RecitationFeedback; onReset: () => void }) {
+function ResultsPanel({
+  feedback,
+  onReset,
+  mistakes,
+  surahNumber,
+  recordingUrl,
+}: {
+  feedback: RecitationFeedback;
+  onReset: () => void;
+  mistakes: Mistake[];
+  surahNumber: number;
+  recordingUrl?: string;
+}) {
   const rushed = feedback.timing.checks.filter((c) => c.verdict === "rushed");
   return (
     <div className="animate-in rounded-2xl border border-emerald/25 bg-white/85 p-6 shadow-soft">
@@ -642,6 +709,8 @@ function ResultsPanel({ feedback, onReset }: { feedback: RecitationFeedback; onR
           </span>
         </div>
       )}
+
+      <MistakeReview mistakes={mistakes} surahNumber={surahNumber} recordingUrl={recordingUrl} />
 
       <details className="mt-4 text-sm">
         <summary className="cursor-pointer text-ink/55 transition hover:text-ink/80">
