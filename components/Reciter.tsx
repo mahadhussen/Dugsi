@@ -57,6 +57,7 @@ export default function Reciter({
   const [modelPercent, setModelPercent] = useState(0);
   const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
   const [livePointer, setLivePointer] = useState(0);
+  const [hifz, setHifz] = useState(0); // 0 = off, 1 easy, 2 medium, 3 hide all
 
   // Flattened words (for verse↔word mapping) and their normalised forms (for
   // live tracking).
@@ -359,6 +360,7 @@ export default function Reciter({
         maddVerdicts={maddVerdicts}
         activeIndex={liveMode ? livePointer : undefined}
         showTajweed={!showingLive && !feedback}
+        maskLevel={hifz}
         initialTopVerse={initialTopVerse}
         onTopVerseChange={handleTopVerseChange}
       />
@@ -373,6 +375,7 @@ export default function Reciter({
       liveMode,
       livePointer,
       feedback,
+      hifz,
       initialTopVerse,
       handleTopVerseChange,
     ],
@@ -406,6 +409,8 @@ export default function Reciter({
         modelPercent={modelPercent}
         usesBrowserOnly={engine === "accurate" && !whisperMode}
       />
+
+      <HifzToggle level={hifz} onSelect={setHifz} />
 
       {/* Recorder */}
       <div className="flex flex-col items-center gap-4">
@@ -525,6 +530,41 @@ function EngineToggle({
                   ? "Couldn't load the model — needs internet the first time."
                   : "Live marking, plus a precise on-device check. Small one-time download."}
       </p>
+    </div>
+  );
+}
+
+function HifzToggle({ level, onSelect }: { level: number; onSelect: (l: number) => void }) {
+  const options: { value: number; label: string }[] = [
+    { value: 0, label: "Off" },
+    { value: 1, label: "Easy" },
+    { value: 2, label: "Medium" },
+    { value: 3, label: "Hard" },
+  ];
+  return (
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="inline-flex items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-ink/45">Memorise</span>
+        <div className="inline-flex rounded-full border border-gold/30 bg-white/70 p-1 text-sm shadow-soft">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              onClick={() => onSelect(o.value)}
+              className={`rounded-full px-3.5 py-1.5 font-medium transition ${
+                level === o.value ? "bg-gold text-white shadow" : "text-ink/70 hover:text-ink"
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {level > 0 && (
+        <p className="max-w-md text-center text-xs text-ink/50">
+          Hidden words reveal as you recite them correctly — or tap a word to peek. Hit the mic and
+          recite from memory.
+        </p>
+      )}
     </div>
   );
 }
