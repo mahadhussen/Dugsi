@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Reciter from "./Reciter";
-import { SURAHS, surahMeta, loadSurah, type Surah } from "@/lib/quran";
+import SurahPicker from "./SurahPicker";
+import { surahMeta, loadSurah, type Surah } from "@/lib/quran";
 
 export default function QuranTrainer() {
   const [surahId, setSurahId] = useState(1);
@@ -66,34 +67,13 @@ export default function QuranTrainer() {
 
   return (
     <div className="space-y-6">
-      {/* Surah picker */}
-      <div className="flex flex-wrap justify-center gap-2">
-        {SURAHS.map((s) => (
-          <button
-            key={s.id}
-            onClick={() => selectSurah(s.id)}
-            className={`rounded-xl border px-4 py-2 text-left transition ${
-              s.id === surahId
-                ? "border-emerald bg-emerald text-white shadow-soft"
-                : "border-gold/30 bg-white/70 text-ink hover:border-emerald/40"
-            }`}
-          >
-            <div className="flex items-baseline gap-2">
-              <span className="font-semibold">{s.transliteration}</span>
-              <span className="ayah text-lg" dir="rtl">
-                {s.nameArabic}
-              </span>
-            </div>
-            <div className={`text-xs ${s.id === surahId ? "text-white/70" : "text-ink/50"}`}>
-              {s.ayahCount} {s.ayahCount === 1 ? "verse" : "verses"}
-            </div>
-          </button>
-        ))}
-      </div>
+      {/* Surah picker (all 114) */}
+      <SurahPicker current={surahId} onSelect={selectSurah} />
 
       <p className="text-center text-sm text-ink/60">
-        Practising <span className="font-semibold text-ink">{meta.transliteration}</span>.
-        {isLong ? " Scroll to read — recite any part and only that part is scored." : ""}
+        {isLong
+          ? "Scroll to read · recite any part (only that part is scored) · tap ▶ to hear a qari."
+          : "Recite aloud, or tap ▶ to hear a qari."}
       </p>
 
       {resumeVerse > 1 && (
@@ -110,7 +90,7 @@ export default function QuranTrainer() {
           <span className="h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
         </div>
       ) : (
-        <Reciter ayat={surah.ayat} progressKey={progressKey} />
+        <Reciter ayat={surah.ayat} surahNumber={surahId} progressKey={progressKey} />
       )}
     </div>
   );

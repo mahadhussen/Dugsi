@@ -5,9 +5,12 @@ import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { Ayah } from "@/lib/quran/types";
 import { primaryRuleColor } from "@/lib/tajweed/rules";
 import type { WordStatus } from "@/lib/align";
+import PlayButton from "./PlayButton";
 
 interface Props {
   ayat: Ayah[];
+  /** Surah number, for the per-verse reciter audio. */
+  surahNumber: number;
   statuses?: Record<number, WordStatus>;
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
   showTajweed?: boolean;
@@ -33,6 +36,7 @@ function toArabicNumeral(n: number): string {
 interface VerseProps {
   ayah: Ayah;
   index: number;
+  surahNumber: number;
   baseRefIndex: number;
   statuses?: Record<number, WordStatus>;
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
@@ -43,6 +47,7 @@ interface VerseProps {
 const VerseBlock = memo(function VerseBlock({
   ayah,
   index,
+  surahNumber,
   baseRefIndex,
   statuses,
   maddVerdicts,
@@ -97,6 +102,7 @@ const VerseBlock = memo(function VerseBlock({
           <span>{ayah.words.map((w) => w.uthmani).join(" ")} </span>
         )}
         <span className="ayah-medallion mx-1 align-middle">{toArabicNumeral(ayah.number)}</span>
+        <PlayButton surah={surahNumber} ayah={ayah.number} />
       </p>
       {ayah.translit && (
         <p className="mt-2 text-sm italic text-emerald/80" dir="ltr">
@@ -135,6 +141,7 @@ function versesEqual(prev: VerseProps, next: VerseProps): boolean {
 
 export default function SurahView({
   ayat,
+  surahNumber,
   statuses,
   maddVerdicts,
   showTajweed = true,
@@ -176,6 +183,7 @@ export default function SurahView({
     <VerseBlock
       ayah={ayat[i]}
       index={i}
+      surahNumber={surahNumber}
       baseRefIndex={wordOffsets[i]}
       statuses={statuses}
       maddVerdicts={maddVerdicts}

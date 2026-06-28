@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import data from "../lib/quran/data/baqarah.json";
+import data from "../lib/quran/data/2.json";
 import { analyzeRecitation } from "../lib/analyze";
 import type { Ayah } from "../lib/quran/types";
 

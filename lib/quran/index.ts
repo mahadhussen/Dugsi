@@ -1,5 +1,6 @@
 import type { Surah, Ayah } from "./types";
 import { fatiha } from "./fatiha";
+import META from "./surahs-meta.json";
 
 export type { Surah, Ayah, Word, RuleId } from "./types";
 export { flattenWords, flattenAyat } from "./types";
@@ -10,31 +11,15 @@ export interface SurahMeta {
   nameArabic: string;
   transliteration: string;
   ayahCount: number;
+  type: string;
   /** Whether per-word tajweed colouring is available for this surah. */
   hasTajweed: boolean;
-  /** How many ayat to practise per section (undefined = whole surah at once). */
-  pageSize?: number;
 }
 
-export const SURAHS: SurahMeta[] = [
-  {
-    id: 1,
-    name: "Al-Fatiha",
-    nameArabic: "ٱلْفَاتِحَة",
-    transliteration: "Al-Fātiḥah",
-    ayahCount: 7,
-    hasTajweed: true,
-  },
-  {
-    id: 2,
-    name: "Al-Baqarah",
-    nameArabic: "البقرة",
-    transliteration: "Al-Baqarah",
-    ayahCount: 286,
-    hasTajweed: false,
-    pageSize: 5,
-  },
-];
+export const SURAHS: SurahMeta[] = (META as Omit<SurahMeta, "hasTajweed">[]).map((m) => ({
+  ...m,
+  hasTajweed: m.id === 1, // only Al-Fatiha is hand-tagged for now
+}));
 
 export function surahMeta(id: number): SurahMeta | undefined {
   return SURAHS.find((s) => s.id === id);
@@ -70,13 +55,10 @@ function buildSurah(raw: RawSurah): Surah {
 
 /**
  * Load a surah's full data. Al-Fatiha is bundled (it carries tajweed metadata);
- * larger surahs are loaded on demand so they don't bloat the initial download.
+ * every other surah is loaded on demand so the initial download stays tiny.
  */
 export async function loadSurah(id: number): Promise<Surah> {
   if (id === 1) return fatiha;
-  if (id === 2) {
-    const mod = await import("./data/baqarah.json");
-    return buildSurah(mod.default as unknown as RawSurah);
-  }
-  throw new Error(`Unknown surah: ${id}`);
+  const mod = await import(`./data/${id}.json`);
+  return buildSurah(mod.default as unknown as RawSurah);
 }

@@ -29,7 +29,15 @@ function pickMimeType(): string {
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "audio/webm";
 }
 
-export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressKey?: string }) {
+export default function Reciter({
+  ayat,
+  surahNumber,
+  progressKey,
+}: {
+  ayat: Ayah[];
+  surahNumber: number;
+  progressKey?: string;
+}) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [engine, setEngine] = useState<Engine>("fast");
   const [error, setError] = useState<string | null>(null);
@@ -316,6 +324,7 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
     () => (
       <SurahView
         ayat={ayat}
+        surahNumber={surahNumber}
         statuses={showingLive ? liveStatuses : statuses}
         maddVerdicts={maddVerdicts}
         activeIndex={liveMode ? livePointer : undefined}
@@ -326,6 +335,7 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
     ),
     [
       ayat,
+      surahNumber,
       showingLive,
       liveStatuses,
       statuses,
@@ -347,7 +357,7 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
           read the surah and tajweed guide below.
         </div>
         <SurahCard>
-          <SurahView ayat={ayat} showTajweed />
+          <SurahView ayat={ayat} surahNumber={surahNumber} showTajweed />
         </SurahCard>
       </div>
     );

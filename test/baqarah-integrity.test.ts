@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import data from "../lib/quran/data/baqarah.json";
+import data from "../lib/quran/data/2.json";
 import { tokenize } from "../lib/arabic";
 
 // Al-Baqarah is sourced from a verified dataset (quran-json, Uthmani script),
