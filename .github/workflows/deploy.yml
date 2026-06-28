@@ -38,6 +38,12 @@ jobs:
         run: npm run build
         env:
           GITHUB_PAGES: "true"
+          # Supabase accounts/sync. Public values (the anon key is meant to ship
+          # in the client; data is protected by Row-Level Security). Set these as
+          # repository secrets — if absent, the app builds fine and runs without
+          # accounts (progress stays in this device's localStorage).
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

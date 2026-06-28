@@ -1,5 +1,7 @@
 import QuranTrainer from "@/components/QuranTrainer";
 import Legend from "@/components/Legend";
+import AccountButton from "@/components/AccountButton";
+import ProgressPanel from "@/components/ProgressPanel";
 import { Wordmark } from "@/components/Logo";
 import { fatiha } from "@/lib/quran/fatiha";
 import { BUILD_VERSION } from "@/lib/version";
@@ -17,6 +19,7 @@ export default function Home() {
     <main className="mx-auto max-w-3xl px-4 pb-16">
       {/* Hero */}
       <header className="relative -mx-4 overflow-hidden rounded-b-[2rem] bg-emerald-dark px-6 pb-10 pt-8 text-center shadow-soft sm:px-10">
+        <AccountButton />
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.12]"
           style={{
@@ -42,11 +45,16 @@ export default function Home() {
 
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Badge>100% free</Badge>
-            <Badge>No sign-up · no ads</Badge>
-            <Badge>Nothing stored or tracked</Badge>
+            <Badge>No ads, ever</Badge>
+            <Badge>Optional account to sync</Badge>
           </div>
         </div>
       </header>
+
+      {/* Your progress (signed-in) */}
+      <section className="mt-8 empty:mt-0">
+        <ProgressPanel />
+      </section>
 
       {/* Recite + surah */}
       <section className="mt-8">
@@ -59,11 +67,13 @@ export default function Home() {
 
       <footer className="mt-10 border-t border-gold/20 pt-6 text-center text-xs text-ink/50">
         <p className="mx-auto max-w-md">
-          Free, no account, and nothing is stored or tracked. The live word-by-word marking uses
-          your browser&apos;s speech recognition (in some browsers, e.g. Chrome, that transcribes
-          audio in the cloud). <strong>High accuracy</strong> adds a precise check that runs fully on
-          your device. The tajweed colours are a learning guide — always learn tajweed with a
-          qualified teacher.
+          Free and no ads. You can use Dugsi without an account; if you make one, only your reading
+          progress and recitation scores are saved (privately, to your account) so they sync across
+          devices — your audio is never uploaded. The live word-by-word marking uses your
+          browser&apos;s speech recognition (in some browsers, e.g. Chrome, that transcribes audio in
+          the cloud). <strong>High accuracy</strong> adds a precise check that runs fully on your
+          device. The tajweed colours are a learning guide — always learn tajweed with a qualified
+          teacher.
         </p>
         <p className="mt-3 text-[11px] text-ink/40">Version {BUILD_VERSION}</p>
       </footer>

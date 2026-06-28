@@ -9,6 +9,8 @@ import type { WordStatus } from "@/lib/align";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
 import { tokenize, normalizeWord } from "@/lib/arabic";
 import { trackLive } from "@/lib/live";
+import { useAuth } from "@/lib/supabase/AuthProvider";
+import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
 
 type Phase = "idle" | "recording" | "processing" | "done" | "error" | "unsupported";
 type Engine = "fast" | "accurate";
@@ -40,12 +42,14 @@ function isIOS(): boolean {
 export default function Reciter({
   ayat,
   surahNumber,
-  progressKey,
+  trackProgress = false,
 }: {
   ayat: Ayah[];
   surahNumber: number;
-  progressKey?: string;
+  trackProgress?: boolean;
 }) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [phase, setPhase] = useState<Phase>("idle");
   const [engine, setEngine] = useState<Engine>("fast");
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +76,7 @@ export default function Reciter({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const liveRef = useRef("");
   const liveResultShownRef = useRef(false);
+  const loggedRef = useRef(false); // one session record per recitation
 
   useEffect(() => {
     const fast = isSpeechSupported();
@@ -155,9 +160,9 @@ export default function Reciter({
           return out;
         });
         setLivePointer((prev) => (pointer > prev ? pointer : prev));
-        if (progressKey) {
+        if (trackProgress) {
           const verse = flatWords[Math.min(flatWords.length - 1, pointer)]?.ayah;
-          if (verse) writeProgress(progressKey, verse);
+          if (verse) saveFurthest(userId, surahNumber, verse);
         }
       },
       onError: (message) => {
@@ -282,21 +287,30 @@ export default function Reciter({
     setLiveStatuses({});
     setLivePointer(0);
     liveResultShownRef.current = false;
+    loggedRef.current = false;
     if (whisperMode) void startAccurate();
     else startFast();
   };
 
-  // Resume point (read once when the surah loads) and a stable progress writer.
+  // Resume point (from the account or this device) and a stable progress writer.
   // Scrolling/active-follow are handled by the virtualised list itself.
-  const initialTopVerse = useMemo(
-    () => (progressKey ? readProgress(progressKey) : 0),
-    [progressKey, ayat],
-  );
+  const [initialTopVerse, setInitialTopVerse] = useState(0);
+  useEffect(() => {
+    if (!trackProgress) {
+      setInitialTopVerse(0);
+      return;
+    }
+    let cancelled = false;
+    loadFurthest(userId, surahNumber).then((v) => !cancelled && setInitialTopVerse(v));
+    return () => {
+      cancelled = true;
+    };
+  }, [trackProgress, surahNumber, userId]);
   const handleTopVerseChange = useCallback(
     (verse: number) => {
-      if (progressKey) writeProgress(progressKey, verse);
+      if (trackProgress) saveFurthest(userId, surahNumber, verse);
     },
-    [progressKey],
+    [trackProgress, userId, surahNumber],
   );
 
   const stop = () => {
@@ -342,6 +356,21 @@ export default function Reciter({
         : undefined,
     [feedback],
   );
+
+  // Record one session per finished recitation (signed-in only). The first
+  // finalised result wins; a later Whisper refinement won't double-log.
+  useEffect(() => {
+    if (phase === "done" && feedback && userId && !loggedRef.current) {
+      loggedRef.current = true;
+      logSession(userId, {
+        surah: surahNumber,
+        score: feedback.score,
+        correct: countStatus(feedback, "correct"),
+        wrong: countStatus(feedback, "wrong"),
+        missing: countStatus(feedback, "missing"),
+      });
+    }
+  }, [phase, feedback, userId, surahNumber]);
 
   // Live word-by-word following now runs in both engines (Fast directly, High
   // accuracy via a concurrent browser recogniser). Keep the live marks visible
@@ -678,21 +707,4 @@ function formatTime(s: number): string {
   const mm = Math.floor(s / 60);
   const ss = s % 60;
   return `${mm}:${ss.toString().padStart(2, "0")}`;
-}
-
-// Persisted reading progress (furthest verse reached) per surah.
-function readProgress(key: string): number {
-  try {
-    return Number(localStorage.getItem(key)) || 0;
-  } catch {
-    return 0;
-  }
-}
-function writeProgress(key: string, verse: number): void {
-  try {
-    const current = Number(localStorage.getItem(key)) || 0;
-    if (verse > current) localStorage.setItem(key, String(verse));
-  } catch {
-    /* storage unavailable — progress just won't persist */
-  }
 }

@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 import Reciter from "./Reciter";
 import SurahPicker from "./SurahPicker";
 import { surahMeta, loadSurah, type Surah } from "@/lib/quran";
+import { useAuth } from "@/lib/supabase/AuthProvider";
+import { loadFurthest, resetFurthest } from "@/lib/supabase/progress";
 
 export default function QuranTrainer() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [surahId, setSurahId] = useState(1);
   const [surah, setSurah] = useState<Surah | null>(null);
   const [loading, setLoading] = useState(true);
@@ -14,7 +18,7 @@ export default function QuranTrainer() {
 
   const meta = surahMeta(surahId)!;
   const isLong = meta.ayahCount > 10;
-  const progressKey = isLong ? `dugsi:progress:${surahId}` : undefined;
+  const trackProgress = isLong;
 
   useEffect(() => {
     let cancelled = false;
@@ -32,18 +36,18 @@ export default function QuranTrainer() {
     };
   }, [surahId]);
 
-  // Show where the reader left off (read once the surah is loaded).
+  // Show where the reader left off (from their account, or this device).
   useEffect(() => {
-    if (!progressKey || !surah) {
+    if (!trackProgress || !surah) {
       setResumeVerse(0);
       return;
     }
-    try {
-      setResumeVerse(Number(localStorage.getItem(progressKey)) || 0);
-    } catch {
-      setResumeVerse(0);
-    }
-  }, [progressKey, surah]);
+    let cancelled = false;
+    loadFurthest(userId, surahId).then((v) => !cancelled && setResumeVerse(v));
+    return () => {
+      cancelled = true;
+    };
+  }, [trackProgress, surah, surahId, userId]);
 
   const selectSurah = (id: number) => {
     if (id === surahId) return;
@@ -54,13 +58,7 @@ export default function QuranTrainer() {
   };
 
   const startOver = () => {
-    if (progressKey) {
-      try {
-        localStorage.removeItem(progressKey);
-      } catch {
-        /* ignore */
-      }
-    }
+    if (trackProgress) resetFurthest(userId, surahId);
     setResumeVerse(0);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -90,7 +88,7 @@ export default function QuranTrainer() {
           <span className="h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
         </div>
       ) : (
-        <Reciter ayat={surah.ayat} surahNumber={surahId} progressKey={progressKey} />
+        <Reciter ayat={surah.ayat} surahNumber={surahId} trackProgress={trackProgress} />
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Amiri } from "next/font/google";
 import "./globals.css";
 import UpdateChecker from "@/components/UpdateChecker";
+import { AuthProvider } from "@/lib/supabase/AuthProvider";
 
 const amiri = Amiri({
   subsets: ["arabic"],
@@ -28,8 +29,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={amiri.variable}>
       <body>
-        {children}
-        <UpdateChecker />
+        <AuthProvider>
+          {children}
+          <UpdateChecker />
+        </AuthProvider>
       </body>
     </html>
   );
