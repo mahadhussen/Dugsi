@@ -54,6 +54,7 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const liveRef = useRef("");
+  const liveResultShownRef = useRef(false);
 
   useEffect(() => {
     const fast = isSpeechSupported();
@@ -113,9 +114,10 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
       onTranscript: (text) => {
         liveRef.current = text;
         setLiveText(text);
-        // Throttle the (re-render-causing) highlight update to ~10/s.
+        // Light throttle to coalesce bursts (rendering is virtualised + memoised,
+        // so we can update often and keep up with fast reading).
         const now = Date.now();
-        if (now - lastTrack < 100) return;
+        if (now - lastTrack < 40) return;
         lastTrack = now;
         const { statuses, pointer } = trackLive(expectedNorm, tokenize(text));
         setLiveStatuses(statuses);
@@ -192,10 +194,16 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
   };
 
   const processAccurate = async (blob: Blob) => {
-    setPhase("processing");
-    setProgress(modelStatus === "ready" ? "Transcribing your recitation…" : "Preparing engine…");
+    // If we already showed an instant result from the browser recogniser, Whisper
+    // just refines it in the background and must never remove it.
+    const hadLive = liveResultShownRef.current;
+    if (!hadLive) {
+      setPhase("processing");
+      setProgress("Transcribing your recitation…");
+    }
     try {
       const result = await transcribeWithWhisper(blob, (p) => {
+        if (hadLive) return; // refine silently
         if (p.stage === "loading-model" && typeof p.percent === "number") {
           setModelPercent(p.percent);
           setProgress(`Downloading the recitation model… ${p.percent}%`);
@@ -204,18 +212,26 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
         }
       });
       setModelStatus("ready");
-      if (!result.text.trim()) {
+      if (result.text.trim()) {
+        setFeedback(analyzeRecitation(ayat, result.text, result.words, "on-device Whisper"));
+        setPhase("done");
+      } else if (!hadLive) {
         setError("We couldn't hear any recitation. Please try again in a quieter place.");
         setPhase("error");
-        return;
       }
-      setFeedback(analyzeRecitation(ayat, result.text, result.words, "on-device Whisper"));
-      setPhase("done");
     } catch {
-      setError(
-        "The high-accuracy engine couldn't load (it needs an internet connection the first time). Try again, or switch to Fast mode.",
-      );
-      setPhase("error");
+      // Whisper failed (e.g. couldn't load / not enough memory). Keep the live
+      // result if we have one; otherwise fall back to it, or show an error.
+      if (!hadLive) {
+        const live = liveRef.current.trim();
+        if (live) {
+          setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
+          setPhase("done");
+        } else {
+          setError("Couldn't analyse the recitation. Please try again, or use Fast mode.");
+          setPhase("error");
+        }
+      }
     } finally {
       setProgress(null);
     }
@@ -226,6 +242,7 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
     setFeedback(null);
     setLiveStatuses({});
     setLivePointer(0);
+    liveResultShownRef.current = false;
     if (engine === "fast") startFast();
     else void startAccurate();
   };
@@ -249,9 +266,19 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
       setPhase("done");
       recognizerRef.current?.stop();
     } else {
-      setPhase("processing");
-      recognizerRef.current?.cancel(); // stop the live recogniser; Whisper scores
-      recorderRef.current?.stop();
+      recognizerRef.current?.cancel(); // stop the live recogniser
+      // Show the instant browser-recogniser result right away, so finishing
+      // always shows something even if Whisper is slow or fails on this phone.
+      const live = liveRef.current.trim();
+      if (live) {
+        liveResultShownRef.current = true;
+        setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
+        setPhase("done");
+      } else {
+        liveResultShownRef.current = false;
+        setPhase("processing");
+      }
+      recorderRef.current?.stop(); // → processAccurate refines (or sets) the result
     }
   };
 

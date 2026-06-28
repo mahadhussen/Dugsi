@@ -34,6 +34,15 @@ test("live tracking recovers after repeated misses instead of stalling", () => {
   assert.ok(pointer >= 2, `expected the pointer to step forward, got ${pointer}`);
 });
 
+test("live tracking lets you re-read an earlier word without marking it wrong", () => {
+  // read three words, then go back and re-read the second one
+  const { statuses } = trackLive(
+    expected,
+    ["بسم", "الله", "الرحمن", "الله"].map(normalizeWord),
+  );
+  assert.equal(statuses[1], "correct"); // the re-read word stays correct, not wrong
+});
+
 test("live tracking accepts a near match as 'close' and advances", () => {
   // "الل" is "الله" missing its final letter — above the close threshold.
   const { statuses, pointer } = trackLive(expected, ["بسم", "الل"].map(normalizeWord));

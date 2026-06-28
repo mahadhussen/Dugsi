@@ -10,7 +10,8 @@ export interface LiveResult {
 
 const MATCH = 0.8; // >= counts as a correct word
 const CLOSE = 0.55; // >= still advances (a near miss), shown amber
-const WINDOW = 6; // how far ahead to look for the next word
+const FWD = 6; // how far ahead to look for the next word
+const BACK = 12; // how far back to look — lets the reciter re-read a verse
 const RECOVER_AFTER = 2; // consecutive misses before we step the pointer forward
 
 /**
@@ -33,8 +34,10 @@ export function trackLive(expected: string[], heard: string[]): LiveResult {
 
     let bestIndex = -1;
     let bestSim = 0;
-    const end = Math.min(expected.length, pointer + WINDOW + 1);
-    for (let i = pointer; i < end; i++) {
+    // Look both a little behind (re-reading a verse) and ahead (next words).
+    const start = Math.max(0, pointer - BACK);
+    const end = Math.min(expected.length, pointer + FWD + 1);
+    for (let i = start; i < end; i++) {
       const sim = similarity(h, expected[i]);
       if (sim > bestSim) {
         bestSim = sim;
@@ -43,12 +46,12 @@ export function trackLive(expected: string[], heard: string[]): LiveResult {
     }
 
     if (bestIndex >= 0 && bestSim >= CLOSE) {
-      // Words jumped over were not heard — mark them skipped.
+      // Words jumped over (moving forward) were not heard — mark them skipped.
       for (let k = pointer; k < bestIndex; k++) {
         if (statuses[k] === undefined) statuses[k] = "missing";
       }
       statuses[bestIndex] = bestSim >= MATCH ? "correct" : "close";
-      pointer = bestIndex + 1;
+      pointer = bestIndex + 1; // may move back if the reciter re-read earlier
       miss = 0;
     } else {
       // Heard something that doesn't fit here — flag the current word, and after
