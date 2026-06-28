@@ -133,11 +133,27 @@ export default function Reciter({
         // Light throttle to coalesce bursts (rendering is virtualised + memoised,
         // so we can update often and keep up with fast reading).
         const now = Date.now();
-        if (now - lastTrack < 40) return;
+        if (now - lastTrack < 60) return;
         lastTrack = now;
         const { statuses, pointer } = trackLive(expectedNorm, tokenize(text));
-        setLiveStatuses(statuses);
-        setLivePointer(pointer);
+
+        // Merge forward-only and sticky: once a word is green it stays green, and
+        // the cursor never moves backward. This makes the marking consistent and
+        // smooth instead of flickering as the recogniser revises interim results.
+        setLiveStatuses((prev) => {
+          let out = prev;
+          for (const key in statuses) {
+            const idx = Number(key);
+            const next = statuses[idx];
+            const cur = prev[idx];
+            if (cur === undefined || (cur === "close" && next === "correct")) {
+              if (out === prev) out = { ...prev };
+              out[idx] = next;
+            }
+          }
+          return out;
+        });
+        setLivePointer((prev) => (pointer > prev ? pointer : prev));
         if (progressKey) {
           const verse = flatWords[Math.min(flatWords.length - 1, pointer)]?.ayah;
           if (verse) writeProgress(progressKey, verse);
