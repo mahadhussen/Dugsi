@@ -115,10 +115,15 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
   const makeLiveRecognizer = (useForFinal: boolean): Recognizer => {
     setLiveText("");
     liveRef.current = "";
+    let lastTrack = 0;
     return new Recognizer({
       onTranscript: (text) => {
         liveRef.current = text;
         setLiveText(text);
+        // Throttle the (re-render-causing) highlight update to ~10/s.
+        const now = Date.now();
+        if (now - lastTrack < 100) return;
+        lastTrack = now;
         const { statuses, pointer } = trackLive(expectedNorm, tokenize(text));
         setLiveStatuses(statuses);
         setLivePointer(pointer);
@@ -317,6 +322,21 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
   const liveMode = phase === "recording";
   const showingLive = (phase === "recording" || phase === "processing") && !feedback;
 
+  // Memoise the surah so the (frequent) live-transcript text updates don't
+  // re-invoke it — it only rebuilds when statuses / cursor / target actually change.
+  const surahEl = useMemo(
+    () => (
+      <SurahView
+        ayat={ayat}
+        statuses={showingLive ? liveStatuses : statuses}
+        maddVerdicts={maddVerdicts}
+        activeIndex={liveMode ? livePointer : undefined}
+        showTajweed={!showingLive && !feedback}
+      />
+    ),
+    [ayat, showingLive, liveStatuses, statuses, maddVerdicts, liveMode, livePointer, feedback],
+  );
+
   if (phase === "unsupported") {
     return (
       <div>
@@ -407,15 +427,7 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
       {feedback && phase === "done" && <ResultsPanel feedback={feedback} onReset={reset} />}
 
       <div ref={surahRef}>
-        <SurahCard>
-          <SurahView
-            ayat={ayat}
-            statuses={showingLive ? liveStatuses : statuses}
-            maddVerdicts={maddVerdicts}
-            activeIndex={liveMode ? livePointer : undefined}
-            showTajweed={!showingLive && !feedback}
-          />
-        </SurahCard>
+        <SurahCard>{surahEl}</SurahCard>
       </div>
     </div>
   );
