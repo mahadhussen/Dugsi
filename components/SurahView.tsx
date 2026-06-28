@@ -202,8 +202,8 @@ export default function SurahView({
       ref={virtuosoRef}
       useWindowScroll
       totalCount={ayat.length}
-      overscan={800}
-      increaseViewportBy={400}
+      overscan={400}
+      increaseViewportBy={250}
       initialTopMostItemIndex={
         initialTopVerse && initialTopVerse > 1
           ? { index: initialTopVerse - 1, align: "start" }

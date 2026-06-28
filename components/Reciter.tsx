@@ -29,6 +29,14 @@ function pickMimeType(): string {
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "audio/webm";
 }
 
+// iPhone/iPad Safari can't reliably run the Whisper WASM model (memory limits),
+// so High accuracy there uses the browser recogniser instead of crashing.
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /iP(hone|ad|od)/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
+}
+
 export default function Reciter({
   ayat,
   surahNumber,
@@ -245,14 +253,19 @@ export default function Reciter({
     }
   };
 
+  // Whether to actually run on-device Whisper: only when High accuracy is chosen
+  // AND we're not on iOS (where the WASM model is the likely crash). On iOS,
+  // High accuracy still works — it just uses the browser recogniser as the final.
+  const whisperMode = engine === "accurate" && !isIOS();
+
   const start = () => {
     setError(null);
     setFeedback(null);
     setLiveStatuses({});
     setLivePointer(0);
     liveResultShownRef.current = false;
-    if (engine === "fast") startFast();
-    else void startAccurate();
+    if (whisperMode) void startAccurate();
+    else startFast();
   };
 
   // Resume point (read once when the surah loads) and a stable progress writer.
@@ -270,7 +283,7 @@ export default function Reciter({
 
   const stop = () => {
     stopTimer();
-    if (engine === "fast") {
+    if (!whisperMode) {
       setPhase("done");
       recognizerRef.current?.stop();
     } else {
@@ -374,6 +387,7 @@ export default function Reciter({
         fastOk={fastOk.current}
         modelStatus={modelStatus}
         modelPercent={modelPercent}
+        usesBrowserOnly={engine === "accurate" && !whisperMode}
       />
 
       {/* Recorder */}
@@ -449,6 +463,7 @@ function EngineToggle({
   fastOk,
   modelStatus,
   modelPercent,
+  usesBrowserOnly,
 }: {
   engine: Engine;
   onSelect: (e: Engine) => void;
@@ -456,6 +471,7 @@ function EngineToggle({
   fastOk: boolean;
   modelStatus: ModelStatus;
   modelPercent: number;
+  usesBrowserOnly: boolean;
 }) {
   return (
     <div className="flex flex-col items-center gap-1.5">
@@ -482,13 +498,15 @@ function EngineToggle({
       <p className="text-center text-xs text-ink/50">
         {engine === "fast"
           ? "Instant · live following. Uses your browser's speech recognition."
-          : modelStatus === "loading"
-            ? `Preparing on-device check… ${modelPercent}%`
-            : modelStatus === "ready"
-              ? "Live marking + a precise on-device check at the end."
-              : modelStatus === "error"
-                ? "Couldn't load the model — needs internet the first time."
-                : "Live marking, plus a precise on-device check. Small one-time download."}
+          : usesBrowserOnly
+            ? "Live marking · uses your browser's recogniser on this device."
+            : modelStatus === "loading"
+              ? `Preparing on-device check… ${modelPercent}%`
+              : modelStatus === "ready"
+                ? "Live marking + a precise on-device check at the end."
+                : modelStatus === "error"
+                  ? "Couldn't load the model — needs internet the first time."
+                  : "Live marking, plus a precise on-device check. Small one-time download."}
       </p>
     </div>
   );
