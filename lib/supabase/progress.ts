@@ -100,13 +100,31 @@ export function logSession(userId: string | null, s: SessionRecord): void {
     });
 }
 
+/** Per-surah memorisation/mastery, derived from recitation history. */
+export interface SurahStat {
+  surah: number;
+  attempts: number;
+  /** Best score ever — the mastery indicator. */
+  bestScore: number;
+  /** Most recent score. */
+  lastScore: number;
+  lastPracticed: string;
+}
+
 export interface Stats {
   totalSessions: number;
   /** Consecutive days (including today) with at least one session. */
   streak: number;
   averageScore: number;
+  /** Surahs with a best score ≥ 90 — effectively memorised. */
+  memorisedCount: number;
   recent: { surah: number; score: number; created_at: string }[];
+  /** One entry per practised surah, most recently practised first. */
+  bySurah: SurahStat[];
 }
+
+/** A best score at or above this counts a surah as "memorised". */
+export const MEMORISED_THRESHOLD = 90;
 
 export async function loadStats(userId: string): Promise<Stats | null> {
   const supabase = getSupabase();
@@ -118,14 +136,27 @@ export async function loadStats(userId: string): Promise<Stats | null> {
     .order("created_at", { ascending: false })
     .limit(500);
   if (error || !data) return null;
+  return computeStats(data as SessionRow[], new Date());
+}
 
+export interface SessionRow {
+  surah: number;
+  score: number;
+  created_at: string;
+}
+
+/**
+ * Aggregate raw session rows (newest-first) into display stats. Pure and
+ * time-injected so it can be unit-tested.
+ */
+export function computeStats(data: SessionRow[], now: Date): Stats {
   const total = data.length;
   const averageScore = total ? Math.round(data.reduce((a, r) => a + (r.score ?? 0), 0) / total) : 0;
 
   // Distinct local days that have a session; streak counts back from today.
   const days = new Set(data.map((r) => new Date(r.created_at).toDateString()));
   let streak = 0;
-  const cursor = new Date();
+  const cursor = new Date(now);
   // Allow the streak to start today or yesterday (so a not-yet-practised today
   // doesn't immediately zero a real streak).
   if (!days.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
@@ -134,5 +165,28 @@ export async function loadStats(userId: string): Promise<Stats | null> {
     cursor.setDate(cursor.getDate() - 1);
   }
 
-  return { totalSessions: total, streak, averageScore, recent: data.slice(0, 8) };
+  // Aggregate per surah (data is newest-first, so the first row seen per surah
+  // is its most recent attempt).
+  const map = new Map<number, SurahStat>();
+  for (const r of data) {
+    const cur = map.get(r.surah);
+    if (!cur) {
+      map.set(r.surah, {
+        surah: r.surah,
+        attempts: 1,
+        bestScore: r.score ?? 0,
+        lastScore: r.score ?? 0,
+        lastPracticed: r.created_at,
+      });
+    } else {
+      cur.attempts++;
+      cur.bestScore = Math.max(cur.bestScore, r.score ?? 0);
+    }
+  }
+  const bySurah = Array.from(map.values()).sort(
+    (a, b) => new Date(b.lastPracticed).getTime() - new Date(a.lastPracticed).getTime(),
+  );
+  const memorisedCount = bySurah.filter((s) => s.bestScore >= MEMORISED_THRESHOLD).length;
+
+  return { totalSessions: total, streak, averageScore, memorisedCount, recent: data.slice(0, 8), bySurah };
 }
