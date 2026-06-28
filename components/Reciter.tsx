@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SurahView from "./SurahView";
 import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
-import { warmUpWhisper, transcribeWithWhisper, isWhisperSupported } from "@/lib/speech/whisperLocal";
+import { transcribeWithWhisper, isWhisperSupported } from "@/lib/speech/whisperLocal";
 import { analyzeRecitation, type RecitationFeedback } from "@/lib/analyze";
 import type { WordStatus } from "@/lib/align";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
@@ -86,21 +86,15 @@ export default function Reciter({ ayat, progressKey }: { ayat: Ayah[]; progressK
     timerRef.current = null;
   };
 
-  // Begin downloading the Whisper model as soon as the user opts into accuracy.
+  // Just switch engine. The Whisper model is NOT preloaded here — loading a
+  // WASM ML model in the background is a likely memory spike on phones; it now
+  // loads only when the user actually records in High-accuracy mode.
   const selectEngine = (next: Engine) => {
     if (phase === "recording" || phase === "processing") return;
     setEngine(next);
     setFeedback(null);
     setError(null);
     setPhase("idle");
-    if (next === "accurate" && modelStatus === "idle") {
-      setModelStatus("loading");
-      warmUpWhisper((p) => {
-        if (p.stage === "loading-model" && typeof p.percent === "number") setModelPercent(p.percent);
-      })
-        .then(() => setModelStatus("ready"))
-        .catch(() => setModelStatus("error"));
-    }
   };
 
   const startTimer = () => {

@@ -2,6 +2,7 @@ import QuranTrainer from "@/components/QuranTrainer";
 import Legend from "@/components/Legend";
 import { Wordmark } from "@/components/Logo";
 import { fatiha } from "@/lib/quran/fatiha";
+import { BUILD_VERSION } from "@/lib/version";
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
@@ -64,6 +65,7 @@ export default function Home() {
           your device. The tajweed colours are a learning guide — always learn tajweed with a
           qualified teacher.
         </p>
+        <p className="mt-3 text-[11px] text-ink/40">Version {BUILD_VERSION}</p>
       </footer>
     </main>
   );

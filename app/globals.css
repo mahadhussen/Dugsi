@@ -69,14 +69,6 @@ body {
   }
 }
 
-/* Each verse skips rendering while off-screen, so even a 286-verse surah
-   paints only what's visible. The browser remembers each block's real height
-   (auto) and falls back to ~240px before it's first seen. */
-.ayah-block {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 240px;
-}
-
 /* ---- ornamental ayah medallion ---- */
 .ayah-medallion {
   display: inline-flex;
