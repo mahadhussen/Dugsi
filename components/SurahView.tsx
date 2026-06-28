@@ -50,32 +50,59 @@ const VerseBlock = memo(function VerseBlock({
   activeIndex,
 }: VerseProps) {
   const hasFeedback = !!statuses;
+  const len = ayah.words.length;
+
+  // Only split a verse into per-word spans when it actually needs them — the verse
+  // being recited (has the cursor), any verse with a status/madd mark, or a
+  // tajweed-coloured verse. Otherwise render it as one text node. This keeps the
+  // DOM tiny while reading a long surah (the iOS Safari out-of-memory case).
+  let needWords =
+    activeIndex !== undefined && activeIndex >= baseRefIndex && activeIndex < baseRefIndex + len;
+  if (!needWords) {
+    for (let i = 0; i < len; i++) {
+      const idx = baseRefIndex + i;
+      if (statuses?.[idx] || maddVerdicts?.[idx]) {
+        needWords = true;
+        break;
+      }
+      if (!hasFeedback && showTajweed && (ayah.words[i].rules?.length ?? 0) > 0) {
+        needWords = true;
+        break;
+      }
+    }
+  }
+
   return (
     <div data-verse={ayah.number} className="ayah-block py-5 first:pt-0 last:pb-0">
       <p className="ayah text-3xl sm:text-[2.1rem]">
-        {ayah.words.map((word, i) => {
-          const idx = baseRefIndex + i;
-          const status = statuses?.[idx];
-          const madd = maddVerdicts?.[idx];
-          const colorClass = !hasFeedback && showTajweed ? primaryRuleColor(word.rules ?? []) : null;
-          const statusBg = status ? statusClass[status] : "";
-          const active = activeIndex === idx ? "word-active" : "";
-          return (
-            <span
-              key={i}
-              data-ref={idx}
-              className={`word ${colorClass ?? ""} ${statusBg} ${active}`}
-              title={word.translit}
-            >
-              {word.uthmani}
-              {madd === "rushed" && (
-                <sup className="ml-0.5 text-xs text-red-600" title="Elongation may be rushed">
-                  ⏱
-                </sup>
-              )}{" "}
-            </span>
-          );
-        })}
+        {needWords ? (
+          ayah.words.map((word, i) => {
+            const idx = baseRefIndex + i;
+            const status = statuses?.[idx];
+            const madd = maddVerdicts?.[idx];
+            const colorClass =
+              !hasFeedback && showTajweed ? primaryRuleColor(word.rules ?? []) : null;
+            const statusBg = status ? statusClass[status] : "";
+            const active = activeIndex === idx ? "word-active" : "";
+            return (
+              <span
+                key={i}
+                data-ref={idx}
+                className={`word ${colorClass ?? ""} ${statusBg} ${active}`}
+                title={word.translit}
+              >
+                {word.uthmani}
+                {madd === "rushed" && (
+                  <sup className="ml-0.5 text-xs text-red-600" title="Elongation may be rushed">
+                    ⏱
+                  </sup>
+                )}{" "}
+              </span>
+            );
+          })
+        ) : (
+          <span>{ayah.words.map((w) => w.uthmani).join(" ")} </span>
+        )}
         <span className="ayah-medallion mx-1 align-middle">{toArabicNumeral(ayah.number)}</span>
       </p>
       {ayah.translit && (
