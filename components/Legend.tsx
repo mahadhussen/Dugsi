@@ -1,13 +1,26 @@
-import { fatiha, flattenWords, type RuleId } from "@/lib/quran/fatiha";
+import type { RuleId } from "@/lib/quran/types";
 import { RULES } from "@/lib/tajweed/rules";
 
-/** Tajweed legend — only shows the rules that actually occur in Al-Fatiha. */
+// Rules the auto-tagger colours across the whole Quran, in a sensible reading
+// order for the guide. (madd_natural / tafkhīm are only hand-tagged in
+// Al-Fatiha, so they're listed last.)
+const ORDER: RuleId[] = [
+  "sun_letter",
+  "moon_letter",
+  "lam_jalalah",
+  "ghunnah",
+  "qalqalah",
+  "leen",
+  "shaddah",
+  "madd_lazim",
+  "madd_natural",
+  "tafkheem",
+  "izhar",
+];
+
+/** Tajweed legend — the colour key for the whole app. */
 export default function Legend() {
-  const used = new Set<RuleId>();
-  for (const { word } of flattenWords(fatiha)) {
-    (word.rules ?? []).forEach((r) => used.add(r));
-  }
-  const items = Array.from(used).map((id) => RULES[id]);
+  const items = ORDER.map((id) => RULES[id]);
 
   return (
     <div className="rounded-2xl border border-gold/25 bg-white/70 p-5 shadow-soft backdrop-blur-sm sm:p-6">

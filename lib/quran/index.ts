@@ -1,5 +1,6 @@
-import type { Surah, Ayah } from "./types";
+import type { Surah, Ayah, Word } from "./types";
 import { fatiha } from "./fatiha";
+import { wordRules, wordMadd } from "@/lib/tajweed/engine";
 import META from "./surahs-meta.json";
 
 export type { Surah, Ayah, Word, RuleId } from "./types";
@@ -18,7 +19,7 @@ export interface SurahMeta {
 
 export const SURAHS: SurahMeta[] = (META as Omit<SurahMeta, "hasTajweed">[]).map((m) => ({
   ...m,
-  hasTajweed: m.id === 1, // only Al-Fatiha is hand-tagged for now
+  hasTajweed: true, // Al-Fatiha is hand-tagged; every other surah is auto-tagged
 }));
 
 export function surahMeta(id: number): SurahMeta | undefined {
@@ -39,7 +40,11 @@ function buildSurah(raw: RawSurah): Surah {
     words: v.text
       .split(/\s+/)
       .filter(Boolean)
-      .map((t) => ({ uthmani: t })),
+      .map((t): Word => {
+        const rules = wordRules(t);
+        const madd = wordMadd(rules);
+        return madd ? { uthmani: t, rules, madd } : { uthmani: t, rules };
+      }),
     translit: v.translit,
     translation: v.translation,
   }));

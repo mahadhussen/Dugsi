@@ -33,6 +33,13 @@ export const RULES: Record<RuleId, RuleMeta> = {
     swatch: "#059669",
     description: "Nasal sound (~2 counts) on a doubled noon or meem.",
   },
+  qalqalah: {
+    id: "qalqalah",
+    label: "Qalqalah",
+    color: "text-indigo-600",
+    swatch: "#4f46e5",
+    description: "A slight echo/bounce on ق ط ب ج د when they carry a sukūn.",
+  },
   sun_letter: {
     id: "sun_letter",
     label: "Sun letter (lām shamsiyya)",
@@ -88,14 +95,15 @@ export const RULES: Record<RuleId, RuleMeta> = {
 export function primaryRuleColor(rules: RuleId[]): string | null {
   const priority: RuleId[] = [
     "madd_lazim",
-    "madd_natural",
     "ghunnah",
+    "qalqalah",
+    "lam_jalalah",
     "sun_letter",
     "moon_letter",
     "leen",
-    "lam_jalalah",
     "tafkheem",
     "izhar",
+    "madd_natural",
     "shaddah",
   ];
   for (const id of priority) {

@@ -10,6 +10,7 @@ export type RuleId =
   | "lam_jalalah"
   | "tafkheem"
   | "ghunnah"
+  | "qalqalah"
   | "shaddah"
   | "izhar";
 
