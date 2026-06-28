@@ -83,10 +83,16 @@ export default function MistakeReview({
         ))}
       </ul>
       <p className="mt-3 text-xs text-ink/40">
-        Tap <strong>You</strong> to hear just that word, <strong>Correct</strong> for the qari, or{" "}
-        <strong>Hear yourself</strong> for the whole recitation — listen to the difference, then
-        recite it again.
-        {!recordingUrl && " Audio playback wasn't captured this time."}
+        Tap <strong>Correct</strong> to hear the qari
+        {recordingUrl ? (
+          <>
+            , <strong>You</strong> for just that word, or <strong>Hear yourself</strong> for the
+            whole recitation
+          </>
+        ) : (
+          " (recite this surah to also hear your own voice)"
+        )}{" "}
+        — listen to the difference, then recite it again.
       </p>
     </div>
   );

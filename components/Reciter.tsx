@@ -444,12 +444,17 @@ export default function Reciter({
   useEffect(() => {
     if (phase === "done" && feedback && userId && !loggedRef.current) {
       loggedRef.current = true;
+      const missed = feedback.alignment.words
+        .filter((w) => w.status === "wrong" || w.status === "missing")
+        .slice(0, 40)
+        .map((w) => ({ i: w.refIndex, h: w.heard }));
       logSession(userId, {
         surah: surahNumber,
         score: feedback.score,
         correct: countStatus(feedback, "correct"),
         wrong: countStatus(feedback, "wrong"),
         missing: countStatus(feedback, "missing"),
+        mistakes: missed,
       });
     }
   }, [phase, feedback, userId, surahNumber]);

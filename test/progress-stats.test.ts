@@ -57,6 +57,22 @@ test("todayCount counts only sessions from today", () => {
   assert.equal(s.todayCount, 2);
 });
 
+test("aggregates and dedupes per-surah mistakes, newest 'heard' kept", () => {
+  const at = (daysAgo: number) => {
+    const d = new Date(NOW);
+    d.setDate(d.getDate() - daysAgo);
+    return d.toISOString();
+  };
+  const rows = [
+    { surah: 2, score: 60, created_at: at(0), mistakes: [{ i: 5, h: "new" }, { i: 9, h: "y" }] },
+    { surah: 2, score: 50, created_at: at(1), mistakes: [{ i: 5, h: "old" }, { i: 12, h: "z" }] },
+  ];
+  const s = computeStats(rows, NOW);
+  const m = s.bySurah[0].mistakes;
+  assert.deepEqual(m.map((x) => x.i), [5, 9, 12]); // 5 deduped
+  assert.equal(m.find((x) => x.i === 5)!.h, "new"); // most recent attempt wins
+});
+
 test("empty history yields zeroed stats", () => {
   const s = computeStats([], NOW);
   assert.equal(s.totalSessions, 0);

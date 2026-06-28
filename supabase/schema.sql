@@ -29,8 +29,11 @@ create table if not exists public.sessions (
   correct    int  not null default 0,
   wrong      int  not null default 0,
   missing    int  not null default 0,
+  mistakes   jsonb,
   created_at timestamptz not null default now()
 );
+-- If the table already existed, add the column for reviewing past mistakes:
+alter table public.sessions add column if not exists mistakes jsonb;
 
 alter table public.sessions enable row level security;
 

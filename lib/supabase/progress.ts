@@ -80,23 +80,42 @@ export function resetFurthest(userId: string | null, surah: number): void {
   clearLocal(surah);
 }
 
+/** A single mistaken word, kept compact: reference index + what was heard
+ *  (null = the word was skipped). The correct text/verse is re-derived from the
+ *  surah at review time, so we don't duplicate the Quran text into every row. */
+export interface StoredMistake {
+  i: number;
+  h: string | null;
+}
+
 export interface SessionRecord {
   surah: number;
   score: number;
   correct: number;
   wrong: number;
   missing: number;
+  mistakes: StoredMistake[];
 }
 
 /** Record a finished recitation (signed-in only) and notify any listeners. */
 export function logSession(userId: string | null, s: SessionRecord): void {
   const supabase = getSupabase();
   if (!userId || !supabase) return;
+  const notify = () => {
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("dugsi:session"));
+  };
+  const { mistakes, ...base } = s;
   void supabase
     .from("sessions")
-    .insert({ user_id: userId, ...s })
-    .then(() => {
-      if (typeof window !== "undefined") window.dispatchEvent(new Event("dugsi:session"));
+    .insert({ user_id: userId, ...base, mistakes })
+    .then(({ error }) => {
+      if (!error) return notify();
+      // The `mistakes` column may not exist yet (migration not run). Fall back to
+      // logging the session without it so progress tracking still works.
+      void supabase
+        .from("sessions")
+        .insert({ user_id: userId, ...base })
+        .then(notify);
     });
 }
 
@@ -109,6 +128,8 @@ export interface SurahStat {
   /** Most recent score. */
   lastScore: number;
   lastPracticed: string;
+  /** Words missed across recent attempts (deduped), to review and learn from. */
+  mistakes: StoredMistake[];
 }
 
 export interface Stats {
@@ -131,20 +152,31 @@ export const MEMORISED_THRESHOLD = 90;
 export async function loadStats(userId: string): Promise<Stats | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
-  const { data, error } = await supabase
+  // Try to fetch the stored mistakes; if that column doesn't exist yet, retry
+  // without it so stats still load.
+  let res = await supabase
     .from("sessions")
-    .select("surah, score, created_at")
+    .select("surah, score, created_at, mistakes")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(500);
-  if (error || !data) return null;
-  return computeStats(data as SessionRow[], new Date());
+  if (res.error) {
+    res = (await supabase
+      .from("sessions")
+      .select("surah, score, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(500)) as typeof res;
+  }
+  if (res.error || !res.data) return null;
+  return computeStats(res.data as SessionRow[], new Date());
 }
 
 export interface SessionRow {
   surah: number;
   score: number;
   created_at: string;
+  mistakes?: StoredMistake[] | null;
 }
 
 /**
@@ -170,19 +202,34 @@ export function computeStats(data: SessionRow[], now: Date): Stats {
   // Aggregate per surah (data is newest-first, so the first row seen per surah
   // is its most recent attempt).
   const map = new Map<number, SurahStat>();
+  // Track which reference words are already collected per surah (dedupe), keeping
+  // the most recent "heard" for each. Capped so a surah can't store unboundedly.
+  const seen = new Map<number, Set<number>>();
+  const MISTAKE_CAP = 40;
   for (const r of data) {
-    const cur = map.get(r.surah);
+    let cur = map.get(r.surah);
     if (!cur) {
-      map.set(r.surah, {
+      cur = {
         surah: r.surah,
         attempts: 1,
         bestScore: r.score ?? 0,
         lastScore: r.score ?? 0,
         lastPracticed: r.created_at,
-      });
+        mistakes: [],
+      };
+      map.set(r.surah, cur);
+      seen.set(r.surah, new Set());
     } else {
       cur.attempts++;
       cur.bestScore = Math.max(cur.bestScore, r.score ?? 0);
+    }
+    const seenSet = seen.get(r.surah)!;
+    for (const m of r.mistakes ?? []) {
+      if (cur.mistakes.length >= MISTAKE_CAP) break;
+      if (m && typeof m.i === "number" && !seenSet.has(m.i)) {
+        seenSet.add(m.i);
+        cur.mistakes.push({ i: m.i, h: m.h ?? null });
+      }
     }
   }
   const bySurah = Array.from(map.values()).sort(
