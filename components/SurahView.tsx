@@ -56,6 +56,9 @@ interface VerseProps {
   statuses?: Record<number, WordStatus>;
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
   showTajweed: boolean;
+  /** Colour every word of every verse. Off for long surahs (kept light so iOS
+   *  Safari doesn't run out of memory) — they only colour the active/scored verse. */
+  tajweedEveryWord: boolean;
   activeIndex?: number;
   maskLevel: number;
   revealed?: Set<number>;
@@ -70,6 +73,7 @@ const VerseBlock = memo(function VerseBlock({
   statuses,
   maddVerdicts,
   showTajweed,
+  tajweedEveryWord,
   activeIndex,
   maskLevel,
   revealed,
@@ -90,7 +94,7 @@ const VerseBlock = memo(function VerseBlock({
         needWords = true;
         break;
       }
-      if (!hasFeedback && showTajweed && (ayah.words[i].rules?.length ?? 0) > 0) {
+      if (tajweedEveryWord && !hasFeedback && showTajweed && (ayah.words[i].rules?.length ?? 0) > 0) {
         needWords = true;
         break;
       }
@@ -160,6 +164,7 @@ const VerseBlock = memo(function VerseBlock({
 
 function versesEqual(prev: VerseProps, next: VerseProps): boolean {
   if (prev.showTajweed !== next.showTajweed) return false;
+  if (prev.tajweedEveryWord !== next.tajweedEveryWord) return false;
   if (prev.maskLevel !== next.maskLevel) return false;
   if (prev.ayah !== next.ayah || prev.baseRefIndex !== next.baseRefIndex || prev.index !== next.index)
     return false;
@@ -259,6 +264,7 @@ export default function SurahView({
       statuses={statuses}
       maddVerdicts={maddVerdicts}
       showTajweed={showTajweed}
+      tajweedEveryWord={!virtualized}
       activeIndex={activeIndex}
       maskLevel={maskLevel}
       revealed={revealed}
