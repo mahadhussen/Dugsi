@@ -28,6 +28,43 @@ function stopCurrent() {
   }
 }
 
+/** Prominent, always-available playback of the reciter's own recording. Shown in
+ *  the results header so it's findable even when there were no mistakes. */
+export function HearYourselfButton({ recordingUrl }: { recordingUrl?: string }) {
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => () => stopCurrent(), []);
+  if (!recordingUrl) return null;
+
+  const toggle = () => {
+    if (playing) {
+      stopCurrent();
+      setPlaying(false);
+      return;
+    }
+    stopCurrent();
+    const a = new Audio(recordingUrl);
+    a.onended = () => setPlaying(false);
+    a.onpause = () => setPlaying(false);
+    current = a;
+    setPlaying(true);
+    void a.play().catch(() => setPlaying(false));
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold ring-1 transition ${
+        playing ? "bg-ink text-white ring-ink" : "bg-white text-ink/80 ring-ink/20 hover:bg-ink/5"
+      }`}
+    >
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
+        {playing ? <rect x="6" y="5" width="12" height="14" rx="1" /> : <path d="M8 5v14l11-7z" />}
+      </svg>
+      Hear yourself
+    </button>
+  );
+}
+
 export default function MistakeReview({
   mistakes,
   surahNumber,
@@ -37,46 +74,14 @@ export default function MistakeReview({
   surahNumber: number;
   recordingUrl?: string;
 }) {
-  const [playingAll, setPlayingAll] = useState(false);
   useEffect(() => () => stopCurrent(), []);
   if (mistakes.length === 0) return null;
 
-  const playWhole = () => {
-    if (!recordingUrl) return;
-    if (playingAll) {
-      stopCurrent();
-      setPlayingAll(false);
-      return;
-    }
-    stopCurrent();
-    const a = new Audio(recordingUrl);
-    a.onended = () => setPlayingAll(false);
-    a.onpause = () => setPlayingAll(false);
-    current = a;
-    setPlayingAll(true);
-    void a.play().catch(() => setPlayingAll(false));
-  };
-
   return (
     <div className="mt-5 rounded-xl border border-ink/10 bg-white/70 p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink/45">
-          Review your mistakes ({mistakes.length})
-        </p>
-        {recordingUrl && (
-          <button
-            onClick={playWhole}
-            className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition ${
-              playingAll ? "bg-ink text-white ring-ink" : "text-ink/70 ring-ink/15"
-            }`}
-          >
-            <svg viewBox="0 0 24 24" className="h-3 w-3" fill="currentColor" aria-hidden>
-              {playingAll ? <rect x="6" y="5" width="12" height="14" rx="1" /> : <path d="M8 5v14l11-7z" />}
-            </svg>
-            Hear yourself
-          </button>
-        )}
-      </div>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink/45">
+        Review your mistakes ({mistakes.length})
+      </p>
       <ul className="space-y-2.5">
         {mistakes.map((m) => (
           <MistakeRow key={m.refIndex} m={m} surahNumber={surahNumber} recordingUrl={recordingUrl} />
@@ -86,8 +91,7 @@ export default function MistakeReview({
         Tap <strong>Correct</strong> to hear the qari
         {recordingUrl ? (
           <>
-            , <strong>You</strong> for just that word, or <strong>Hear yourself</strong> for the
-            whole recitation
+            {" "}or <strong>You</strong> for just that word
           </>
         ) : (
           " (recite this surah to also hear your own voice)"

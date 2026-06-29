@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
 import { mapRefTimes } from "@/lib/review";
 import type { TimedWord } from "@/lib/tajweed/timing";
-import MistakeReview, { type Mistake } from "./MistakeReview";
+import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
 
 type Phase = "idle" | "recording" | "processing" | "done" | "error" | "unsupported";
 type Engine = "fast" | "accurate";
@@ -297,11 +297,13 @@ export default function Reciter({
         }
       });
       setModelStatus("ready");
-      if (result.words?.length) {
+      // Always keep the recording so "Hear yourself" is available, even if Whisper
+      // returned no per-word timestamps (then only whole-recitation playback).
+      if (blob.size > 0) {
         const url = URL.createObjectURL(blob);
         setRecording((prev) => {
           if (prev) URL.revokeObjectURL(prev.url);
-          return { url, words: result.words };
+          return { url, words: result.words ?? [] };
         });
       }
       if (result.text.trim()) {
@@ -725,12 +727,15 @@ function ResultsPanel({
             <p className="text-sm text-ink/70">{feedback.summary}</p>
           </div>
         </div>
-        <button
-          onClick={onReset}
-          className="rounded-lg border border-ink/15 px-4 py-2 text-sm font-medium text-ink/80 transition hover:bg-ink/5"
-        >
-          Clear
-        </button>
+        <div className="flex items-center gap-2">
+          <HearYourselfButton recordingUrl={recordingUrl} />
+          <button
+            onClick={onReset}
+            className="rounded-lg border border-ink/15 px-4 py-2 text-sm font-medium text-ink/80 transition hover:bg-ink/5"
+          >
+            Clear
+          </button>
+        </div>
       </div>
 
       <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
