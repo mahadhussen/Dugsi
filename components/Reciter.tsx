@@ -422,41 +422,27 @@ export default function Reciter({
     [feedback],
   );
 
-  // Per-mistake review: wrong/skipped words. "You" plays back the whole verse the
-  // reciter said (more useful + robust than one word) so it lines up with the qari
-  // verse for a real side-by-side comparison.
+  // Per-mistake review: wrong/skipped words. "You" replays just that one word from
+  // the recording (one word at a time), and "Correct" plays the qari's verse.
   const mistakes = useMemo<Mistake[]>(() => {
     if (!feedback) return [];
     const times = mapRefTimes(
       feedback.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
       recording?.words ?? [],
     );
-    // The span of the recording covering each verse (min start … max end of its
-    // spoken words).
-    const verseTime: Record<number, { start: number; end: number }> = {};
-    for (const w of feedback.alignment.words) {
-      const t = times[w.refIndex];
-      const ayah = flatWords[w.refIndex]?.ayah;
-      if (!t || ayah == null) continue;
-      const cur = verseTime[ayah];
-      verseTime[ayah] = cur
-        ? { start: Math.min(cur.start, t.start), end: Math.max(cur.end, t.end) }
-        : { start: t.start, end: t.end };
-    }
     return feedback.alignment.words
       .filter((w) => w.status === "wrong" || w.status === "missing")
       .slice(0, 30)
       .map((w) => {
         const fw = flatWords[w.refIndex];
-        const verse = fw?.ayah ?? 1;
         return {
           refIndex: w.refIndex,
           uthmani: fw?.word.uthmani ?? w.expected,
           translit: fw?.word.translit,
           heard: w.heard,
-          verse,
+          verse: fw?.ayah ?? 1,
           skipped: w.status === "missing",
-          time: verseTime[verse] ?? times[w.refIndex],
+          time: times[w.refIndex],
         };
       });
   }, [feedback, recording, flatWords]);

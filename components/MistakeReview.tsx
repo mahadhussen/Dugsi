@@ -90,10 +90,10 @@ export default function MistakeReview({
         ))}
       </ul>
       <p className="mt-3 text-xs text-ink/40">
-        Tap <strong>Correct</strong> to hear the qari recite this verse
+        Tap <strong>Correct</strong> to hear the qari
         {hasYou ? (
           <>
-            {" "}and <strong>You</strong> to hear yourself on the same verse
+            {" "}and <strong>You</strong> to hear yourself say just that word
           </>
         ) : recordingUrl ? (
           <>
