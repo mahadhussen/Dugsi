@@ -282,6 +282,16 @@ export default function Reciter({
     // If we already showed an instant result from the browser recogniser, Whisper
     // just refines it in the background and must never remove it.
     const hadLive = liveResultShownRef.current;
+    // Keep the recording IMMEDIATELY — "hear yourself" must work even if Whisper
+    // then fails to load/transcribe. Word timings (for the per-verse "You") are
+    // added afterwards if transcription succeeds.
+    if (blob.size > 0) {
+      const url = URL.createObjectURL(blob);
+      setRecording((prev) => {
+        if (prev) URL.revokeObjectURL(prev.url);
+        return { url, words: [] };
+      });
+    }
     if (!hadLive) {
       setPhase("processing");
       setProgress("Transcribing your recitation…");
@@ -297,14 +307,10 @@ export default function Reciter({
         }
       });
       setModelStatus("ready");
-      // Always keep the recording so "Hear yourself" is available, even if Whisper
-      // returned no per-word timestamps (then only whole-recitation playback).
-      if (blob.size > 0) {
-        const url = URL.createObjectURL(blob);
-        setRecording((prev) => {
-          if (prev) URL.revokeObjectURL(prev.url);
-          return { url, words: result.words ?? [] };
-        });
+      // Upgrade the kept recording with word-level timings so the per-verse "You"
+      // playback can line up with each mistake.
+      if (result.words?.length) {
+        setRecording((prev) => (prev ? { ...prev, words: result.words } : prev));
       }
       if (result.text.trim()) {
         setFeedback(analyzeRecitation(ayat, result.text, result.words, "on-device Whisper"));

@@ -77,6 +77,8 @@ export default function MistakeReview({
   useEffect(() => () => stopCurrent(), []);
   if (mistakes.length === 0) return null;
 
+  const hasYou = mistakes.some((m) => m.time);
+
   return (
     <div className="mt-5 rounded-xl border border-ink/10 bg-white/70 p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink/45">
@@ -89,14 +91,19 @@ export default function MistakeReview({
       </ul>
       <p className="mt-3 text-xs text-ink/40">
         Tap <strong>Correct</strong> to hear the qari recite this verse
-        {recordingUrl ? (
+        {hasYou ? (
           <>
             {" "}and <strong>You</strong> to hear yourself on the same verse
+          </>
+        ) : recordingUrl ? (
+          <>
+            {" "}— use <strong>Hear yourself</strong> above for your recording (per-verse{" "}
+            <strong>You</strong> needs High accuracy mode)
           </>
         ) : (
           " (recite this surah to also hear your own voice)"
         )}{" "}
-        — compare them and recite it again.
+        — compare and recite it again.
       </p>
     </div>
   );
