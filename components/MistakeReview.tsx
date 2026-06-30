@@ -88,15 +88,15 @@ export default function MistakeReview({
         ))}
       </ul>
       <p className="mt-3 text-xs text-ink/40">
-        Tap <strong>Correct</strong> to hear the qari
+        Tap <strong>Correct</strong> to hear the qari recite this verse
         {recordingUrl ? (
           <>
-            {" "}or <strong>You</strong> for just that word
+            {" "}and <strong>You</strong> to hear yourself on the same verse
           </>
         ) : (
           " (recite this surah to also hear your own voice)"
         )}{" "}
-        — listen to the difference, then recite it again.
+        — compare them and recite it again.
       </p>
     </div>
   );
