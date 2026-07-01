@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { loadSurah, flattenAyat } from "@/lib/quran";
+import { loadRecording } from "@/lib/recordings";
 import MistakeReview, { type Mistake } from "./MistakeReview";
 import type { StoredMistake } from "@/lib/supabase/progress";
 
-/** Reviews the words you've previously got wrong in a surah, with qari playback,
- *  by re-deriving the correct text from the surah data. */
+/** Reviews the words you've previously got wrong in a surah, with the qari for
+ *  each — and, if a recording of this surah is saved on this device, "You" to
+ *  hear yourself on the words you missed. */
 export default function SurahMistakes({
   surahNumber,
   stored,
@@ -15,12 +17,20 @@ export default function SurahMistakes({
   stored: StoredMistake[];
 }) {
   const [mistakes, setMistakes] = useState<Mistake[] | null>(null);
+  const [recordingUrl, setRecordingUrl] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
-    void loadSurah(surahNumber).then((s) => {
+    let url: string | undefined;
+
+    void Promise.all([loadSurah(surahNumber), loadRecording(surahNumber)]).then(([s, rec]) => {
       if (cancelled) return;
       const flat = flattenAyat(s.ayat);
+      const times = rec?.times ?? {};
+      if (rec) {
+        url = URL.createObjectURL(rec.blob);
+        setRecordingUrl(url);
+      }
       const items: Mistake[] = stored
         .map((m): Mistake | null => {
           const fw = flat[m.i];
@@ -32,14 +42,17 @@ export default function SurahMistakes({
                 heard: m.h,
                 verse: fw.ayah,
                 skipped: m.h === null,
+                time: times[m.i],
               }
             : null;
         })
         .filter((x): x is Mistake => x !== null);
       setMistakes(items);
     });
+
     return () => {
       cancelled = true;
+      if (url) URL.revokeObjectURL(url);
     };
   }, [surahNumber, stored]);
 
@@ -53,5 +66,5 @@ export default function SurahMistakes({
       </p>
     );
   }
-  return <MistakeReview mistakes={mistakes} surahNumber={surahNumber} />;
+  return <MistakeReview mistakes={mistakes} surahNumber={surahNumber} recordingUrl={recordingUrl} />;
 }

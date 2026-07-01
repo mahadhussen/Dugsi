@@ -95,13 +95,8 @@ export default function MistakeReview({
           <>
             {" "}and <strong>You</strong> to hear yourself say just that word
           </>
-        ) : recordingUrl ? (
-          <>
-            {" "}— use <strong>Hear yourself</strong> above for your recording (per-verse{" "}
-            <strong>You</strong> needs High accuracy mode)
-          </>
         ) : (
-          " (recite this surah to also hear your own voice)"
+          " (recite this surah in High accuracy to also hear yourself here)"
         )}{" "}
         — compare and recite it again.
       </p>

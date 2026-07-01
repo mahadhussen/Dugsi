@@ -12,6 +12,7 @@ import { trackLive } from "@/lib/live";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
 import { mapRefTimes } from "@/lib/review";
+import { saveRecording } from "@/lib/recordings";
 import type { TimedWord } from "@/lib/tajweed/timing";
 import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
 
@@ -313,8 +314,18 @@ export default function Reciter({
         setRecording((prev) => (prev ? { ...prev, words: result.words } : prev));
       }
       if (result.text.trim()) {
-        setFeedback(analyzeRecitation(ayat, result.text, result.words, "on-device Whisper"));
+        const fb = analyzeRecitation(ayat, result.text, result.words, "on-device Whisper");
+        setFeedback(fb);
         setPhase("done");
+        // Save this recording on-device so "hear yourself" works when reviewing
+        // this surah's mistakes later. Store the word timings by reference index.
+        if (blob.size > 0 && result.words?.length) {
+          const times = mapRefTimes(
+            fb.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
+            result.words,
+          );
+          void saveRecording(surahNumber, blob, times, Date.now());
+        }
       } else if (!hadLive) {
         setError("We couldn't hear any recitation. Please try again in a quieter place.");
         setPhase("error");
