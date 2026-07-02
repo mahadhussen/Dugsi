@@ -60,13 +60,15 @@ export function mapRefTimes(words: HeardWord[], timed: TimedWord[]): Record<numb
 // (recognition reports a word a moment after it was said), so the windows are
 // wide: you hear the word in its passage. Precise Whisper times override them.
 
-/** Turn "the live tracker passed word i at t seconds" into playable windows. */
+/** Turn "the live tracker matched word i at t seconds" into playable windows.
+ *  Recognition reports a word shortly AFTER it was said, so the window leans
+ *  backwards from the stamp. */
 export function liveClipTimes(passedAt: Record<number, number>): Record<number, TimeRange> {
   const out: Record<number, TimeRange> = {};
   for (const key in passedAt) {
     const t = passedAt[key];
     if (!Number.isFinite(t)) continue;
-    out[key as unknown as number] = { start: Math.max(0, t - 3.5), end: t + 1.2 };
+    out[key as unknown as number] = { start: Math.max(0, t - 4), end: t + 0.8 };
   }
   return out;
 }
@@ -80,16 +82,19 @@ export function mergeClipTimes(
 }
 
 /**
- * The clip to play for a word — its own window, or the nearest timed
- * neighbour's within `maxDistance` (so a skipped word plays the passage where
- * the skip happened; the reciter never said the word itself).
+ * The clip to play for a mistake. A mis-said word only plays its OWN clip —
+ * playing a neighbour would be the wrong audio, worse than an honest "no
+ * clip". A skipped word was never said at all, so the passage around it
+ * (nearest timed neighbour, close by) is the honest thing to replay.
  */
-export function clipForWord(
+export function clipForMistake(
   times: Record<number, TimeRange>,
   refIndex: number,
-  maxDistance = 8,
+  skipped: boolean,
+  maxDistance = 4,
 ): TimeRange | undefined {
   if (times[refIndex]) return times[refIndex];
+  if (!skipped) return undefined;
   for (let d = 1; d <= maxDistance; d++) {
     const before = times[refIndex - d];
     if (before) return before;

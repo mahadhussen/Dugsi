@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { loadSurah, flattenAyat } from "@/lib/quran";
 import { loadRecording } from "@/lib/recordings";
-import { clipForWord } from "@/lib/review";
+import { clipForMistake } from "@/lib/review";
 import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
 import type { StoredMistake } from "@/lib/supabase/progress";
 
@@ -46,7 +46,7 @@ export default function SurahMistakes({
                 heard: m.h,
                 verse: fw.ayah,
                 skipped: m.h === null,
-                time: clipForWord(times, m.i),
+                time: clipForMistake(times, m.i, m.h === null),
               }
             : null;
         })

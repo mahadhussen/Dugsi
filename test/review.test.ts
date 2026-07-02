@@ -48,13 +48,13 @@ test("no timestamps yields an empty map", () => {
   assert.deepEqual(map, {});
 });
 
-import { liveClipTimes, mergeClipTimes, clipForWord } from "../lib/review";
+import { liveClipTimes, mergeClipTimes, clipForMistake } from "../lib/review";
 
-test("liveClipTimes builds wide windows around the pass moment", () => {
+test("liveClipTimes builds windows leaning back from the stamp", () => {
   const clips = liveClipTimes({ 5: 10 });
-  assert.deepEqual(clips[5], { start: 6.5, end: 11.2 });
+  assert.deepEqual(clips[5], { start: 6, end: 10.8 });
   // Early words clamp at 0.
-  assert.deepEqual(liveClipTimes({ 0: 1 })[0], { start: 0, end: 2.2 });
+  assert.deepEqual(liveClipTimes({ 0: 1 })[0], { start: 0, end: 1.8 });
 });
 
 test("mergeClipTimes lets precise Whisper times win over live windows", () => {
@@ -63,9 +63,10 @@ test("mergeClipTimes lets precise Whisper times win over live windows", () => {
   assert.deepEqual(merged[4], { start: 5, end: 9 }); // live fills the gap
 });
 
-test("clipForWord falls back to the nearest timed neighbour (skipped words)", () => {
+test("clipForMistake: skipped words play the nearby passage, mis-said words never borrow", () => {
   const times = { 10: { start: 20, end: 24 } };
-  assert.deepEqual(clipForWord(times, 10), times[10]); // exact
-  assert.deepEqual(clipForWord(times, 12), times[10]); // nearest within range
-  assert.equal(clipForWord(times, 30), undefined); // too far — honest "no clip"
+  assert.deepEqual(clipForMistake(times, 10, false), times[10]); // exact, mis-said
+  assert.deepEqual(clipForMistake(times, 12, true), times[10]); // skipped → nearby passage
+  assert.equal(clipForMistake(times, 12, false), undefined); // mis-said w/o own clip → honest "no clip"
+  assert.equal(clipForMistake(times, 30, true), undefined); // too far even for skipped
 });

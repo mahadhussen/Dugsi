@@ -12,7 +12,7 @@ import { trackLive } from "@/lib/live";
 import { pickBestAlternative } from "@/lib/speech/pickBest";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
-import { mapRefTimes, liveClipTimes, mergeClipTimes, clipForWord, type TimeRange } from "@/lib/review";
+import { mapRefTimes, liveClipTimes, mergeClipTimes, clipForMistake, type TimeRange } from "@/lib/review";
 import { saveRecording } from "@/lib/recordings";
 import {
   checkForPriorCrash,
@@ -117,6 +117,7 @@ export default function Reciter({
   // Live-derived word times: refIndex → seconds (on the recording clock) when the
   // live tracker passed it. Whisper-independent, so "You" playback always works.
   const liveTimesRef = useRef<Record<number, number>>({});
+  const lastStampRef = useRef(0);
   const recStartRef = useRef(0);
   const [liveClips, setLiveClips] = useState<Record<number, TimeRange>>({});
 
@@ -209,13 +210,25 @@ export default function Reciter({
           trackPointer,
         );
         processedTokens = tokens.length;
-        const prevPointer = trackPointer;
         trackPointer = Math.max(trackPointer, pointer);
-        // Stamp when each newly passed word was reached (recording clock).
+        // Stamp ONLY words that actually matched this tick (never pointer nudges
+        // past unheard words — those stamps would point at the wrong audio).
+        // A batch of matches is spread between the previous stamp and now, since
+        // the engine often commits several words at once.
         if (recStartRef.current > 0) {
           const tSec = (Date.now() - recStartRef.current) / 1000;
-          for (let i = prevPointer; i < trackPointer; i++) {
-            if (liveTimesRef.current[i] === undefined) liveTimesRef.current[i] = tSec;
+          const fresh: number[] = [];
+          for (const key in statuses) {
+            const idx = Number(key);
+            if (liveTimesRef.current[idx] === undefined) fresh.push(idx);
+          }
+          if (fresh.length > 0) {
+            fresh.sort((a, b) => a - b);
+            const from = lastStampRef.current;
+            fresh.forEach((idx, k) => {
+              liveTimesRef.current[idx] = from + ((tSec - from) * (k + 1)) / fresh.length;
+            });
+            lastStampRef.current = tSec;
           }
         }
 
@@ -400,6 +413,7 @@ export default function Reciter({
     loggedRef.current = false;
     discardRef.current = false;
     liveTimesRef.current = {};
+    lastStampRef.current = 0;
     recStartRef.current = 0;
     setLiveClips({});
     void startCapture();
@@ -489,14 +503,15 @@ export default function Reciter({
       .slice(0, 30)
       .map((w) => {
         const fw = flatWords[w.refIndex];
+        const skipped = w.status === "missing";
         return {
           refIndex: w.refIndex,
           uthmani: fw?.word.uthmani ?? w.expected,
           translit: fw?.word.translit,
           heard: w.heard,
           verse: fw?.ayah ?? 1,
-          skipped: w.status === "missing",
-          time: clipForWord(times, w.refIndex),
+          skipped,
+          time: clipForMistake(times, w.refIndex, skipped),
         };
       });
   }, [feedback, recording, liveClips, flatWords]);
