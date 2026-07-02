@@ -9,6 +9,7 @@ import type { WordStatus } from "@/lib/align";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
 import { tokenize, normalizeWord } from "@/lib/arabic";
 import { trackLive } from "@/lib/live";
+import { pickBestAlternative } from "@/lib/speech/pickBest";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
 import { mapRefTimes } from "@/lib/review";
@@ -17,8 +18,13 @@ import type { TimedWord } from "@/lib/tajweed/timing";
 import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
 
 type Phase = "idle" | "recording" | "processing" | "done" | "error" | "unsupported";
-type Engine = "fast" | "accurate";
 type ModelStatus = "idle" | "loading" | "ready" | "error";
+
+// Above this length we skip the Whisper refinement: decoding a very long
+// recording to raw PCM (plus the model's working memory) is exactly the kind of
+// memory spike that gets the tab killed on iOS Safari. The live result stands,
+// and the recording is still kept for "hear yourself".
+const MAX_WHISPER_SECONDS = 180;
 
 function MicIcon({ className = "" }: { className?: string }) {
   return (
@@ -35,12 +41,17 @@ function pickMimeType(): string {
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "audio/webm";
 }
 
-// iPhone/iPad Safari can't reliably run the Whisper WASM model (memory limits),
-// so High accuracy there uses the browser recogniser instead of crashing.
+// iPhone/iPad Safari can't reliably run the Whisper WASM model (memory limits);
+// there we only run Whisper when WebGPU is available (iOS 18+, efficient path).
 function isIOS(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
   return /iP(hone|ad|od)/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
+}
+
+/** Whether this device can safely run the on-device Whisper refinement. */
+function whisperCapable(): boolean {
+  return isWhisperSupported() && (!isIOS() || webgpuAvailable());
 }
 
 export default function Reciter({
@@ -55,7 +66,6 @@ export default function Reciter({
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const [phase, setPhase] = useState<Phase>("idle");
-  const [engine, setEngine] = useState<Engine>("fast");
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<RecitationFeedback | null>(null);
   const [liveText, setLiveText] = useState("");
@@ -66,13 +76,14 @@ export default function Reciter({
   const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
   const [livePointer, setLivePointer] = useState(0);
   const [hifz, setHifz] = useState(0); // 0 = off, 1 easy, 2 medium, 3 hide all
-  // The user's own recording + word timestamps, to replay mistakes (High accuracy).
+  // The user's own recording (always kept) + word timestamps when Whisper ran.
   const [recording, setRecording] = useState<{ url: string; words: TimedWord[] } | null>(null);
 
   // Flattened words (for verse↔word mapping) and their normalised forms (for
   // live tracking).
   const flatWords = useMemo(() => flattenAyat(ayat), [ayat]);
   const expectedNorm = useMemo(() => flatWords.map((f) => normalizeWord(f.word.uthmani)), [flatWords]);
+  const expectedSet = useMemo(() => new Set(expectedNorm), [expectedNorm]);
 
   const clearRecording = useCallback(() => {
     setRecording((prev) => {
@@ -81,33 +92,45 @@ export default function Reciter({
     });
   }, []);
 
-  const fastOk = useRef(true);
   const recognizerRef = useRef<Recognizer | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const secondsRef = useRef(0); // mirrors `seconds` for use inside callbacks
   const liveRef = useRef("");
   const liveResultShownRef = useRef(false);
   const loggedRef = useRef(false); // one session record per recitation
+  const discardRef = useRef(false); // drop the next recorder result (surah switch/unmount)
+
+  // Stop the mic/recorder without processing the result (surah switch, unmount).
+  const discardCapture = useCallback(() => {
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      discardRef.current = true;
+      try {
+        recorderRef.current.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }, []);
 
   useEffect(() => {
-    const fast = isSpeechSupported();
-    const accurate = isWhisperSupported();
-    fastOk.current = fast;
-    if (!fast && !accurate) setPhase("unsupported");
-    else if (!fast && accurate) setEngine("accurate");
+    if (!isSpeechSupported() && !isWhisperSupported()) setPhase("unsupported");
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       recognizerRef.current?.cancel();
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      discardCapture();
     };
-  }, []);
+  }, [discardCapture]);
 
   // When the practice target (surah/section) changes, clear any prior result.
   useEffect(() => {
     recognizerRef.current?.cancel();
     if (timerRef.current) clearInterval(timerRef.current);
+    discardCapture();
     setFeedback(null);
     setError(null);
     setLiveText("");
@@ -116,37 +139,34 @@ export default function Reciter({
     setLivePointer(0);
     clearRecording();
     setPhase((p) => (p === "unsupported" ? p : "idle"));
-  }, [ayat, clearRecording]);
+  }, [ayat, clearRecording, discardCapture]);
 
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
   };
 
-  // Just switch engine. The Whisper model is NOT preloaded here — loading a
-  // WASM ML model in the background is a likely memory spike on phones; it now
-  // loads only when the user actually records in High-accuracy mode.
-  const selectEngine = (next: Engine) => {
-    if (phase === "recording" || phase === "processing") return;
-    setEngine(next);
-    setFeedback(null);
-    setError(null);
-    setPhase("idle");
-  };
-
   const startTimer = () => {
     setSeconds(0);
-    timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+    secondsRef.current = 0;
+    timerRef.current = setInterval(() => {
+      secondsRef.current += 1;
+      setSeconds(secondsRef.current);
+    }, 1000);
   };
 
-  // The live (Web Speech) recogniser drives the real-time green/red highlighting.
-  // In Fast mode it also produces the final result; in High-accuracy mode it only
-  // powers the live marking while Whisper computes the precise final score.
-  const makeLiveRecognizer = (useForFinal: boolean): Recognizer => {
+  // The live (Web Speech) recogniser drives the real-time green highlighting and
+  // provides the instant result at stop; Whisper refines it afterwards when the
+  // device supports it. Live hiccups are never fatal — the recording still is
+  // the source of truth for the final analysis.
+  const makeLiveRecognizer = (): Recognizer => {
     setLiveText("");
     liveRef.current = "";
     let lastTrack = 0;
     return new Recognizer({
+      // When the engine offers alternatives, take the one closest to this surah's
+      // wording — noticeably better live matching for Quranic Arabic.
+      pickBest: (alts) => pickBestAlternative(alts, expectedSet),
       onTranscript: (text) => {
         liveRef.current = text;
         setLiveText(text);
@@ -179,41 +199,35 @@ export default function Reciter({
           if (verse) saveFurthest(userId, surahNumber, verse);
         }
       },
-      onError: (message) => {
-        if (!useForFinal) return; // a live hiccup in accurate mode is non-fatal
-        stopTimer();
-        setError(message);
-        setPhase("error");
+      onError: () => {
+        /* live hiccups are non-fatal — the recording carries the result */
       },
-      onDone: (finalText) => {
-        if (!useForFinal) return; // Whisper produces the result in accurate mode
-        stopTimer();
-        const transcript = finalText || liveRef.current;
-        if (!transcript.trim()) {
-          setError("We couldn't hear any recitation. Please try again in a quieter place.");
-          setPhase("error");
-          return;
-        }
-        setFeedback(analyzeRecitation(ayat, transcript, [], "on-device speech"));
-        setPhase("done");
+      onDone: () => {
+        /* the final result is produced in stop()/processAccurate */
       },
     });
   };
 
-  const startFast = () => {
-    const recognizer = makeLiveRecognizer(true);
-    recognizerRef.current = recognizer;
-    recognizer.start("ar-SA");
-    setPhase("recording");
-    startTimer();
-    // Best-effort: also capture the audio so the reciter can replay themselves
-    // afterwards (the browser recogniser gives text but no recording).
-    void captureAudio();
+  // Finalise from the live transcript when Whisper isn't run (not capable, or
+  // the recording was too long to decode safely).
+  const finalizeFromLive = () => {
+    if (liveResultShownRef.current) return; // stop() already showed the result
+    const live = liveRef.current.trim();
+    if (live) {
+      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
+      setPhase("done");
+    } else {
+      setError("We couldn't hear any recitation. Please try again in a quieter place.");
+      setPhase("error");
+    }
   };
 
-  // Record the mic to a blob in parallel (used for "hear yourself"). Failure is
-  // non-fatal — the recitation/recognition still works without it.
-  const captureAudio = async () => {
+  // One automatic engine for everyone: record the mic (always — powers "hear
+  // yourself"), mark words live via the browser recogniser, and refine with
+  // on-device Whisper afterwards when the device supports it.
+  const startCapture = async () => {
+    // The recorder is best-effort: if the mic stream fails but the browser
+    // recogniser works, reciting still functions (just without playback).
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -227,83 +241,65 @@ export default function Reciter({
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         const blob = new Blob(chunksRef.current, { type: mimeType });
+        chunksRef.current = []; // free the buffered audio
+        if (discardRef.current) {
+          discardRef.current = false;
+          return;
+        }
+        // Keep the recording no matter what happens next.
         if (blob.size > 0) {
           const url = URL.createObjectURL(blob);
           setRecording((prev) => {
             if (prev) URL.revokeObjectURL(prev.url);
-            return { url, words: [] }; // no word timings in Fast mode
+            return { url, words: [] };
           });
         }
-      };
-      recorder.start();
-      recorderRef.current = recorder;
-    } catch {
-      /* no playback this time — recitation still works */
-    }
-  };
-
-  const startAccurate = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const mimeType = pickMimeType();
-      const recorder = new MediaRecorder(stream, { mimeType });
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        void processAccurate(blob);
-      };
-      recorder.start();
-      recorderRef.current = recorder;
-      setPhase("recording");
-      startTimer();
-
-      // Best-effort live marking via the browser recogniser, in parallel.
-      if (isSpeechSupported()) {
-        try {
-          const live = makeLiveRecognizer(false);
-          recognizerRef.current = live;
-          live.start("ar-SA");
-        } catch {
-          /* concurrent live not available — Whisper still gives the result */
+        if (whisperCapable() && blob.size > 0 && secondsRef.current <= MAX_WHISPER_SECONDS) {
+          void processAccurate(blob);
+        } else {
+          finalizeFromLive();
         }
-      }
+      };
+      recorder.start();
+      recorderRef.current = recorder;
     } catch {
-      setError("Microphone access was denied. Please allow the mic and try again.");
-      setPhase("error");
+      recorderRef.current = null;
+      if (!isSpeechSupported()) {
+        setError("Microphone access was denied. Please allow the mic and try again.");
+        setPhase("error");
+        return;
+      }
     }
+
+    // Live marking via the browser recogniser, in parallel with the recording.
+    if (isSpeechSupported()) {
+      try {
+        const live = makeLiveRecognizer();
+        recognizerRef.current = live;
+        live.start("ar-SA");
+      } catch {
+        /* no live marking — the recording still produces the result */
+      }
+    }
+    setPhase("recording");
+    startTimer();
   };
 
   const processAccurate = async (blob: Blob) => {
     // If we already showed an instant result from the browser recogniser, Whisper
     // just refines it in the background and must never remove it.
     const hadLive = liveResultShownRef.current;
-    // Keep the recording IMMEDIATELY — "hear yourself" must work even if Whisper
-    // then fails to load/transcribe. Word timings (for the per-verse "You") are
-    // added afterwards if transcription succeeds.
-    if (blob.size > 0) {
-      const url = URL.createObjectURL(blob);
-      setRecording((prev) => {
-        if (prev) URL.revokeObjectURL(prev.url);
-        return { url, words: [] };
-      });
-    }
     if (!hadLive) {
       setPhase("processing");
       setProgress("Transcribing your recitation…");
     }
     try {
       const result = await transcribeWithWhisper(blob, (p) => {
-        if (hadLive) return; // refine silently
         if (p.stage === "loading-model" && typeof p.percent === "number") {
+          setModelStatus("loading");
           setModelPercent(p.percent);
-          setProgress(`Downloading the recitation model… ${p.percent}%`);
-        } else if (p.stage === "transcribing") {
+          if (!hadLive) setProgress(`Downloading the recitation model… ${p.percent}%`);
+        } else if (p.stage === "transcribing" && !hadLive) {
           setProgress("Transcribing your recitation…");
         }
       });
@@ -331,28 +327,14 @@ export default function Reciter({
         setPhase("error");
       }
     } catch {
-      // Whisper failed (e.g. couldn't load / not enough memory). Keep the live
-      // result if we have one; otherwise fall back to it, or show an error.
-      if (!hadLive) {
-        const live = liveRef.current.trim();
-        if (live) {
-          setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
-          setPhase("done");
-        } else {
-          setError("Couldn't analyse the recitation. Please try again, or use Fast mode.");
-          setPhase("error");
-        }
-      }
+      // Whisper failed (e.g. couldn't load / not enough memory). Fall back to
+      // the live transcript — never leave the reciter with nothing.
+      setModelStatus("error");
+      finalizeFromLive();
     } finally {
       setProgress(null);
     }
   };
-
-  // Whether to actually run on-device Whisper. On iOS we only do it when WebGPU
-  // is available (newer iPhones, iOS 18+) and run on WebGPU — that's efficient
-  // and avoids the WASM out-of-memory crash. Older iPhones keep the browser
-  // recogniser as the final result.
-  const whisperMode = engine === "accurate" && (!isIOS() || webgpuAvailable());
 
   const start = () => {
     setError(null);
@@ -362,8 +344,8 @@ export default function Reciter({
     clearRecording();
     liveResultShownRef.current = false;
     loggedRef.current = false;
-    if (whisperMode) void startAccurate();
-    else startFast();
+    discardRef.current = false;
+    void startCapture();
   };
 
   // Resume point (from the account or this device) and a stable progress writer.
@@ -389,24 +371,25 @@ export default function Reciter({
 
   const stop = () => {
     stopTimer();
-    if (!whisperMode) {
+    recognizerRef.current?.cancel(); // stop the live recogniser
+    // Show the instant result from the live transcript right away, so finishing
+    // always shows something even if the refinement is slow or fails.
+    const live = liveRef.current.trim();
+    if (live) {
+      liveResultShownRef.current = true;
+      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
       setPhase("done");
-      recognizerRef.current?.stop();
-      recorderRef.current?.stop(); // finalise the "hear yourself" recording
     } else {
-      recognizerRef.current?.cancel(); // stop the live recogniser
-      // Show the instant browser-recogniser result right away, so finishing
-      // always shows something even if Whisper is slow or fails on this phone.
-      const live = liveRef.current.trim();
-      if (live) {
-        liveResultShownRef.current = true;
-        setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
-        setPhase("done");
-      } else {
-        liveResultShownRef.current = false;
-        setPhase("processing");
-      }
-      recorderRef.current?.stop(); // → processAccurate refines (or sets) the result
+      liveResultShownRef.current = false;
+      setPhase("processing");
+    }
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop(); // → onstop keeps the recording and refines/finalises
+    } else if (!live) {
+      // No recorder and nothing heard live — don't get stuck on a spinner.
+      setError("We couldn't hear any recitation. Please try again in a quieter place.");
+      setPhase("error");
     }
   };
 
@@ -531,19 +514,9 @@ export default function Reciter({
     );
   }
 
-  const busy = phase === "recording" || phase === "processing";
-
   return (
     <div className="space-y-6">
-      <EngineToggle
-        engine={engine}
-        onSelect={selectEngine}
-        disabled={busy}
-        fastOk={fastOk.current}
-        modelStatus={modelStatus}
-        modelPercent={modelPercent}
-        usesBrowserOnly={engine === "accurate" && !whisperMode}
-      />
+      <EngineStatus modelStatus={modelStatus} modelPercent={modelPercent} />
 
       <HifzToggle level={hifz} onSelect={setHifz} />
 
@@ -621,59 +594,18 @@ export default function Reciter({
   );
 }
 
-function EngineToggle({
-  engine,
-  onSelect,
-  disabled,
-  fastOk,
-  modelStatus,
-  modelPercent,
-  usesBrowserOnly,
-}: {
-  engine: Engine;
-  onSelect: (e: Engine) => void;
-  disabled: boolean;
-  fastOk: boolean;
-  modelStatus: ModelStatus;
-  modelPercent: number;
-  usesBrowserOnly: boolean;
-}) {
+/** No modes to choose any more — the best available engine is picked
+ *  automatically. This line just tells the reciter what their device does. */
+function EngineStatus({ modelStatus, modelPercent }: { modelStatus: ModelStatus; modelPercent: number }) {
+  const capable = typeof window !== "undefined" && whisperCapable();
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <div className="inline-flex rounded-full border border-gold/30 bg-white/70 p-1 text-sm shadow-soft">
-        <button
-          onClick={() => onSelect("fast")}
-          disabled={disabled || !fastOk}
-          className={`rounded-full px-4 py-1.5 font-medium transition disabled:opacity-40 ${
-            engine === "fast" ? "bg-emerald text-white shadow" : "text-ink/70 hover:text-ink"
-          }`}
-        >
-          Fast
-        </button>
-        <button
-          onClick={() => onSelect("accurate")}
-          disabled={disabled}
-          className={`rounded-full px-4 py-1.5 font-medium transition disabled:opacity-40 ${
-            engine === "accurate" ? "bg-emerald text-white shadow" : "text-ink/70 hover:text-ink"
-          }`}
-        >
-          High accuracy
-        </button>
-      </div>
-      <p className="text-center text-xs text-ink/50">
-        {engine === "fast"
-          ? "Instant · live following. Uses your browser's speech recognition."
-          : usesBrowserOnly
-            ? "Live marking · uses your browser's recogniser on this device."
-            : modelStatus === "loading"
-              ? `Preparing on-device check… ${modelPercent}%`
-              : modelStatus === "ready"
-                ? "Live marking + a precise on-device check at the end."
-                : modelStatus === "error"
-                  ? "Couldn't load the model — needs internet the first time."
-                  : "Live marking, plus a precise on-device check. Small one-time download."}
-      </p>
-    </div>
+    <p className="text-center text-xs text-ink/50">
+      {modelStatus === "loading"
+        ? `Preparing the precise on-device check… ${modelPercent}%`
+        : capable
+          ? "Live word marking + your recording, refined by a precise on-device check."
+          : "Live word marking + your recording — free, on your device."}
+    </p>
   );
 }
 

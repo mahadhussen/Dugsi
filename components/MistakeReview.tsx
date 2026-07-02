@@ -96,7 +96,7 @@ export default function MistakeReview({
             {" "}and <strong>You</strong> to hear yourself say just that word
           </>
         ) : (
-          " (recite this surah in High accuracy to also hear yourself here)"
+          " (recite this surah again and you'll be able to hear yourself here too)"
         )}{" "}
         — compare and recite it again.
       </p>

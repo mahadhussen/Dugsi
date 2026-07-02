@@ -20,9 +20,15 @@ interface SpeechRecognitionLike {
   onend: (() => void) | null;
 }
 
+interface SpeechRecognitionResultLike {
+  readonly length: number;
+  readonly isFinal: boolean;
+  [index: number]: { transcript: string };
+}
+
 interface SpeechRecognitionEventLike {
   resultIndex: number;
-  results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }>;
+  results: ArrayLike<SpeechRecognitionResultLike>;
 }
 
 function getCtor(): SpeechRecognitionCtor | null {
@@ -45,6 +51,9 @@ export interface RecognizerHandlers {
   onError?: (message: string) => void;
   /** Called once when recognition has fully stopped, with the final transcript. */
   onDone?: (finalText: string) => void;
+  /** Given the engine's alternative transcripts for one segment, return the one
+   *  to use (e.g. the closest to the expected Quran text). Default: the first. */
+  pickBest?: (alternatives: string[]) => string;
 }
 
 /**
@@ -80,14 +89,21 @@ export class Recognizer {
     rec.lang = lang;
     rec.continuous = true;
     rec.interimResults = true;
-    rec.maxAlternatives = 1;
+    // Ask for alternatives so the caller can pick the one closest to the verse
+    // being recited (the engine's top guess is tuned for everyday Arabic).
+    rec.maxAlternatives = 3;
 
     rec.onresult = (event) => {
       let final = "";
       let interim = "";
       for (let i = 0; i < event.results.length; i++) {
         const res = event.results[i];
-        const text = res[0].transcript;
+        let text = res[0]?.transcript ?? "";
+        if (this.handlers.pickBest && res.length > 1) {
+          const alts: string[] = [];
+          for (let j = 0; j < res.length; j++) alts.push(res[j].transcript);
+          text = this.handlers.pickBest(alts);
+        }
         if (res.isFinal) final += text + " ";
         else interim += text;
       }

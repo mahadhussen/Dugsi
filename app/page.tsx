@@ -71,9 +71,8 @@ export default function Home() {
           progress and recitation scores are saved (privately, to your account) so they sync across
           devices — your audio is never uploaded. The live word-by-word marking uses your
           browser&apos;s speech recognition (in some browsers, e.g. Chrome, that transcribes audio in
-          the cloud). <strong>High accuracy</strong> adds a precise check that runs fully on your
-          device. The tajweed colours are a learning guide — always learn tajweed with a qualified
-          teacher.
+          the cloud); on supported devices a precise check then runs fully on your device. The
+          tajweed colours are a learning guide — always learn tajweed with a qualified teacher.
         </p>
         <p className="mt-3 text-[11px] text-ink/40">Version {BUILD_VERSION}</p>
       </footer>
