@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { loadSurah, flattenAyat } from "@/lib/quran";
 import { loadRecording } from "@/lib/recordings";
+import { clipForWord } from "@/lib/review";
 import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
 import type { StoredMistake } from "@/lib/supabase/progress";
 
-/** Reviews the words you've previously got wrong in a surah, with the qari for
- *  each — and, if a recording of this surah is saved on this device, "You" to
- *  hear yourself on the words you missed. */
+/** Reviews the words you've previously got wrong in a surah: the qari for each,
+ *  and — when this surah has been recited on this device — "You" to replay
+ *  yourself at each mistake. When there's no recording, it says so explicitly
+ *  instead of silently hiding buttons. */
 export default function SurahMistakes({
   surahNumber,
   stored,
@@ -18,6 +20,7 @@ export default function SurahMistakes({
 }) {
   const [mistakes, setMistakes] = useState<Mistake[] | null>(null);
   const [recordingUrl, setRecordingUrl] = useState<string | undefined>(undefined);
+  const [hasRecording, setHasRecording] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,6 +30,7 @@ export default function SurahMistakes({
       if (cancelled) return;
       const flat = flattenAyat(s.ayat);
       const times = rec?.times ?? {};
+      setHasRecording(!!rec);
       if (rec) {
         url = URL.createObjectURL(rec.blob);
         setRecordingUrl(url);
@@ -42,7 +46,7 @@ export default function SurahMistakes({
                 heard: m.h,
                 verse: fw.ayah,
                 skipped: m.h === null,
-                time: times[m.i],
+                time: clipForWord(times, m.i),
               }
             : null;
         })
@@ -68,10 +72,15 @@ export default function SurahMistakes({
   }
   return (
     <div>
-      {recordingUrl && (
+      {hasRecording ? (
         <div className="flex justify-end pt-3">
           <HearYourselfButton recordingUrl={recordingUrl} />
         </div>
+      ) : (
+        <p className="px-1 pt-3 text-xs text-amber-700">
+          No recording of this surah on <strong>this device</strong> yet — recite it once here and
+          you&apos;ll be able to hear yourself at each mistake below.
+        </p>
       )}
       <MistakeReview mistakes={mistakes} surahNumber={surahNumber} recordingUrl={recordingUrl} />
     </div>

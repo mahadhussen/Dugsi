@@ -47,3 +47,25 @@ test("no timestamps yields an empty map", () => {
   const map = mapRefTimes([{ refIndex: 0, heard: "بسم" }], []);
   assert.deepEqual(map, {});
 });
+
+import { liveClipTimes, mergeClipTimes, clipForWord } from "../lib/review";
+
+test("liveClipTimes builds wide windows around the pass moment", () => {
+  const clips = liveClipTimes({ 5: 10 });
+  assert.deepEqual(clips[5], { start: 6.5, end: 11.2 });
+  // Early words clamp at 0.
+  assert.deepEqual(liveClipTimes({ 0: 1 })[0], { start: 0, end: 2.2 });
+});
+
+test("mergeClipTimes lets precise Whisper times win over live windows", () => {
+  const merged = mergeClipTimes({ 3: { start: 4, end: 4.6 } }, { 3: { start: 1, end: 6 }, 4: { start: 5, end: 9 } });
+  assert.deepEqual(merged[3], { start: 4, end: 4.6 }); // precise wins
+  assert.deepEqual(merged[4], { start: 5, end: 9 }); // live fills the gap
+});
+
+test("clipForWord falls back to the nearest timed neighbour (skipped words)", () => {
+  const times = { 10: { start: 20, end: 24 } };
+  assert.deepEqual(clipForWord(times, 10), times[10]); // exact
+  assert.deepEqual(clipForWord(times, 12), times[10]); // nearest within range
+  assert.equal(clipForWord(times, 30), undefined); // too far — honest "no clip"
+});

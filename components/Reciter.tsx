@@ -12,7 +12,7 @@ import { trackLive } from "@/lib/live";
 import { pickBestAlternative } from "@/lib/speech/pickBest";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
-import { mapRefTimes } from "@/lib/review";
+import { mapRefTimes, liveClipTimes, mergeClipTimes, clipForWord, type TimeRange } from "@/lib/review";
 import { saveRecording } from "@/lib/recordings";
 import {
   checkForPriorCrash,
@@ -114,6 +114,11 @@ export default function Reciter({
   const liveResultShownRef = useRef(false);
   const loggedRef = useRef(false); // one session record per recitation
   const discardRef = useRef(false); // drop the next recorder result (surah switch/unmount)
+  // Live-derived word times: refIndex → seconds (on the recording clock) when the
+  // live tracker passed it. Whisper-independent, so "You" playback always works.
+  const liveTimesRef = useRef<Record<number, number>>({});
+  const recStartRef = useRef(0);
+  const [liveClips, setLiveClips] = useState<Record<number, TimeRange>>({});
 
   // Stop the mic/recorder without processing the result (surah switch, unmount).
   const discardCapture = useCallback(() => {
@@ -204,7 +209,15 @@ export default function Reciter({
           trackPointer,
         );
         processedTokens = tokens.length;
+        const prevPointer = trackPointer;
         trackPointer = Math.max(trackPointer, pointer);
+        // Stamp when each newly passed word was reached (recording clock).
+        if (recStartRef.current > 0) {
+          const tSec = (Date.now() - recStartRef.current) / 1000;
+          for (let i = prevPointer; i < trackPointer; i++) {
+            if (liveTimesRef.current[i] === undefined) liveTimesRef.current[i] = tSec;
+          }
+        }
 
         // Merge forward-only and sticky: once a word is green it stays green, and
         // the cursor never moves backward. This makes the marking consistent and
@@ -276,15 +289,16 @@ export default function Reciter({
           return;
         }
         // Keep the recording no matter what happens next — in memory for this
-        // session, and on-device so "hear yourself" works in the history too
-        // (Whisper overwrites it with per-word timings when it runs).
+        // session, and on-device so "hear yourself" works in the history too.
+        // Clip times come from the live tracker (always available); Whisper
+        // overwrites them with precise ones when it runs.
         if (blob.size > 0) {
           const url = URL.createObjectURL(blob);
           setRecording((prev) => {
             if (prev) URL.revokeObjectURL(prev.url);
             return { url, words: [] };
           });
-          void saveRecording(surahNumber, blob, {}, Date.now());
+          void saveRecording(surahNumber, blob, liveClipTimes(liveTimesRef.current), Date.now());
         }
         if (whisperCapable() && blob.size > 0 && secondsRef.current <= maxWhisperSeconds()) {
           void processAccurate(blob);
@@ -294,8 +308,10 @@ export default function Reciter({
       };
       recorder.start();
       recorderRef.current = recorder;
+      recStartRef.current = Date.now();
     } catch {
       recorderRef.current = null;
+      recStartRef.current = 0;
       if (!isSpeechSupported()) {
         setError("Microphone access was denied. Please allow the mic and try again.");
         setPhase("error");
@@ -349,14 +365,15 @@ export default function Reciter({
         const fb = analyzeRecitation(ayat, result.text, result.words, "on-device Whisper");
         setFeedback(fb);
         setPhase("done");
-        // Save this recording on-device so "hear yourself" works when reviewing
-        // this surah's mistakes later. Store the word timings by reference index.
+        // Re-save with precise Whisper word times layered over the live-derived
+        // ones, so the history review can replay each mistaken word exactly.
         if (blob.size > 0 && result.words?.length) {
-          const times = mapRefTimes(
+          const precise = mapRefTimes(
             fb.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
             result.words,
           );
-          void saveRecording(surahNumber, blob, times, Date.now());
+          const merged = mergeClipTimes(precise, liveClipTimes(liveTimesRef.current));
+          void saveRecording(surahNumber, blob, merged, Date.now());
         }
       } else if (!hadLive) {
         setError("We couldn't hear any recitation. Please try again in a quieter place.");
@@ -382,6 +399,9 @@ export default function Reciter({
     liveResultShownRef.current = false;
     loggedRef.current = false;
     discardRef.current = false;
+    liveTimesRef.current = {};
+    recStartRef.current = 0;
+    setLiveClips({});
     void startCapture();
   };
 
@@ -409,6 +429,7 @@ export default function Reciter({
   const stop = () => {
     stopTimer();
     recognizerRef.current?.cancel(); // stop the live recogniser
+    setLiveClips(liveClipTimes(liveTimesRef.current)); // for per-word "You" playback
     // Show the instant result from the live transcript right away, so finishing
     // always shows something even if the refinement is slow or fails.
     const live = liveRef.current.trim();
@@ -453,14 +474,16 @@ export default function Reciter({
     [feedback],
   );
 
-  // Per-mistake review: wrong/skipped words. "You" replays just that one word from
-  // the recording (one word at a time), and "Correct" plays the qari's verse.
+  // Per-mistake review. "You" replays the mistaken word from the recording:
+  // precise Whisper times when available, otherwise the live tracker's window —
+  // and skipped words play the passage around them (they were never spoken).
   const mistakes = useMemo<Mistake[]>(() => {
     if (!feedback) return [];
-    const times = mapRefTimes(
+    const precise = mapRefTimes(
       feedback.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
       recording?.words ?? [],
     );
+    const times = mergeClipTimes(precise, liveClips);
     return feedback.alignment.words
       .filter((w) => w.status === "wrong" || w.status === "missing")
       .slice(0, 30)
@@ -473,10 +496,10 @@ export default function Reciter({
           heard: w.heard,
           verse: fw?.ayah ?? 1,
           skipped: w.status === "missing",
-          time: times[w.refIndex],
+          time: clipForWord(times, w.refIndex),
         };
       });
-  }, [feedback, recording, flatWords]);
+  }, [feedback, recording, liveClips, flatWords]);
 
   // Record one session per finished recitation (signed-in only). The first
   // finalised result wins; a later Whisper refinement won't double-log.

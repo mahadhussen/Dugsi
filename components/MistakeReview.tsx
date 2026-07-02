@@ -176,9 +176,14 @@ function MistakeRow({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
-        {recordingUrl && m.time && (
-          <AudioChip label="You" active={playing === "you"} tone="ink" onClick={playYou} />
-        )}
+        {recordingUrl &&
+          (m.time ? (
+            <AudioChip label="You" active={playing === "you"} tone="ink" onClick={playYou} />
+          ) : (
+            <span className="text-[10px] text-ink/35" title="This word isn't in your last recording of this surah">
+              no clip
+            </span>
+          ))}
         <AudioChip label="Correct" active={playing === "correct"} tone="emerald" onClick={playCorrect} />
       </div>
     </li>
