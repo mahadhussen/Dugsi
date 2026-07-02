@@ -26,9 +26,9 @@ const RECOVER_AFTER = 2; // consecutive misses before stepping the pointer forwa
  * jump to far-away occurrences of common words. `expected` must be normalised;
  * `heard` are normalised spoken tokens.
  */
-export function trackLive(expected: string[], heard: string[]): LiveResult {
+export function trackLive(expected: string[], heard: string[], startPointer = 0): LiveResult {
   const statuses: Record<number, WordStatus> = {};
-  let pointer = 0;
+  let pointer = Math.max(0, Math.min(expected.length, startPointer));
   let miss = 0;
 
   for (const h of heard) {

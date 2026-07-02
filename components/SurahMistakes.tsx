@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { loadSurah, flattenAyat } from "@/lib/quran";
 import { loadRecording } from "@/lib/recordings";
-import MistakeReview, { type Mistake } from "./MistakeReview";
+import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
 import type { StoredMistake } from "@/lib/supabase/progress";
 
 /** Reviews the words you've previously got wrong in a surah, with the qari for
@@ -66,5 +66,14 @@ export default function SurahMistakes({
       </p>
     );
   }
-  return <MistakeReview mistakes={mistakes} surahNumber={surahNumber} recordingUrl={recordingUrl} />;
+  return (
+    <div>
+      {recordingUrl && (
+        <div className="flex justify-end pt-3">
+          <HearYourselfButton recordingUrl={recordingUrl} />
+        </div>
+      )}
+      <MistakeReview mistakes={mistakes} surahNumber={surahNumber} recordingUrl={recordingUrl} />
+    </div>
+  );
 }

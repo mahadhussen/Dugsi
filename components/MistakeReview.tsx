@@ -98,7 +98,8 @@ export default function MistakeReview({
         ) : (
           " (recite this surah again and you'll be able to hear yourself here too)"
         )}{" "}
-        — compare and recite it again.
+        — compare and recite it again. Skipped words were never spoken, so there is nothing of you
+        to replay for them.
       </p>
     </div>
   );

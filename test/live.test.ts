@@ -50,3 +50,11 @@ test("continuity bias keeps the cursor near position (no jump to a far repeat)",
   const { pointer } = trackLive(exp, ["الله", "رب"].map(normalizeWord));
   assert.equal(pointer, 2); // matched the first الله, not the one at index 5
 });
+
+test("startPointer resumes tracking mid-surah (incremental updates)", () => {
+  // Simulate processing only newly heard tokens, continuing from pointer 2.
+  const { statuses, pointer } = trackLive(expected, ["الرحمن", "الرحيم"].map(normalizeWord), 2);
+  assert.equal(statuses[2], "correct");
+  assert.equal(statuses[3], "correct");
+  assert.equal(pointer, 4);
+});

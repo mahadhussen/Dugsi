@@ -14,6 +14,12 @@ import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
 import { mapRefTimes } from "@/lib/review";
 import { saveRecording } from "@/lib/recordings";
+import {
+  checkForPriorCrash,
+  whisperDisabledByCrashes,
+  markWhisperRunning,
+  markWhisperFinished,
+} from "@/lib/crashGuard";
 import type { TimedWord } from "@/lib/tajweed/timing";
 import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
 
@@ -51,7 +57,13 @@ function isIOS(): boolean {
 
 /** Whether this device can safely run the on-device Whisper refinement. */
 function whisperCapable(): boolean {
-  return isWhisperSupported() && (!isIOS() || webgpuAvailable());
+  return isWhisperSupported() && (!isIOS() || webgpuAvailable()) && !whisperDisabledByCrashes();
+}
+
+/** Refinement cap: iOS gets a tighter limit — decoding long audio is what
+ *  memory-kills the tab there. */
+function maxWhisperSeconds(): number {
+  return isIOS() ? 120 : MAX_WHISPER_SECONDS;
 }
 
 export default function Reciter({
@@ -118,6 +130,7 @@ export default function Reciter({
   }, []);
 
   useEffect(() => {
+    checkForPriorCrash(); // if a past Whisper run killed the page, note it
     if (!isSpeechSupported() && !isWhisperSupported()) setPhase("unsupported");
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -163,19 +176,35 @@ export default function Reciter({
     setLiveText("");
     liveRef.current = "";
     let lastTrack = 0;
+    // Incremental tracking: only newly appended tokens are matched each tick, so
+    // the work per update stays constant no matter how long the recitation gets
+    // (re-matching the whole transcript grew unbounded on long surahs).
+    let processedTokens = 0;
+    let trackPointer = 0;
     return new Recognizer({
       // When the engine offers alternatives, take the one closest to this surah's
       // wording — noticeably better live matching for Quranic Arabic.
       pickBest: (alts) => pickBestAlternative(alts, expectedSet),
       onTranscript: (text) => {
         liveRef.current = text;
-        setLiveText(text);
+        // Show only the tail on screen — rendering an ever-growing paragraph is
+        // wasted layout work during long recitations.
+        const words = text.split(" ");
+        setLiveText(words.length > 25 ? "… " + words.slice(-25).join(" ") : text);
         // Light throttle to coalesce bursts (rendering is virtualised + memoised,
         // so we can update often and keep up with fast reading).
         const now = Date.now();
         if (now - lastTrack < 60) return;
         lastTrack = now;
-        const { statuses, pointer } = trackLive(expectedNorm, tokenize(text));
+        const tokens = tokenize(text);
+        if (tokens.length <= processedTokens) return; // interim revision — wait for growth
+        const { statuses, pointer } = trackLive(
+          expectedNorm,
+          tokens.slice(processedTokens),
+          trackPointer,
+        );
+        processedTokens = tokens.length;
+        trackPointer = Math.max(trackPointer, pointer);
 
         // Merge forward-only and sticky: once a word is green it stays green, and
         // the cursor never moves backward. This makes the marking consistent and
@@ -246,15 +275,18 @@ export default function Reciter({
           discardRef.current = false;
           return;
         }
-        // Keep the recording no matter what happens next.
+        // Keep the recording no matter what happens next — in memory for this
+        // session, and on-device so "hear yourself" works in the history too
+        // (Whisper overwrites it with per-word timings when it runs).
         if (blob.size > 0) {
           const url = URL.createObjectURL(blob);
           setRecording((prev) => {
             if (prev) URL.revokeObjectURL(prev.url);
             return { url, words: [] };
           });
+          void saveRecording(surahNumber, blob, {}, Date.now());
         }
-        if (whisperCapable() && blob.size > 0 && secondsRef.current <= MAX_WHISPER_SECONDS) {
+        if (whisperCapable() && blob.size > 0 && secondsRef.current <= maxWhisperSeconds()) {
           void processAccurate(blob);
         } else {
           finalizeFromLive();
@@ -294,6 +326,9 @@ export default function Reciter({
       setProgress("Transcribing your recitation…");
     }
     try {
+      // Breadcrumb: if the tab is memory-killed during this call, the next app
+      // start sees it and (after repeats) disables Whisper on this device.
+      markWhisperRunning();
       const result = await transcribeWithWhisper(blob, (p) => {
         if (p.stage === "loading-model" && typeof p.percent === "number") {
           setModelStatus("loading");
@@ -303,6 +338,7 @@ export default function Reciter({
           setProgress("Transcribing your recitation…");
         }
       });
+      markWhisperFinished();
       setModelStatus("ready");
       // Upgrade the kept recording with word-level timings so the per-verse "You"
       // playback can line up with each mistake.
@@ -329,6 +365,7 @@ export default function Reciter({
     } catch {
       // Whisper failed (e.g. couldn't load / not enough memory). Fall back to
       // the live transcript — never leave the reciter with nothing.
+      markWhisperFinished();
       setModelStatus("error");
       finalizeFromLive();
     } finally {
@@ -598,13 +635,16 @@ export default function Reciter({
  *  automatically. This line just tells the reciter what their device does. */
 function EngineStatus({ modelStatus, modelPercent }: { modelStatus: ModelStatus; modelPercent: number }) {
   const capable = typeof window !== "undefined" && whisperCapable();
+  const disabled = typeof window !== "undefined" && whisperDisabledByCrashes();
   return (
     <p className="text-center text-xs text-ink/50">
       {modelStatus === "loading"
         ? `Preparing the precise on-device check… ${modelPercent}%`
         : capable
           ? "Live word marking + your recording, refined by a precise on-device check."
-          : "Live word marking + your recording — free, on your device."}
+          : disabled
+            ? "Live word marking + your recording. The precise check is off — it crashed on this device."
+            : "Live word marking + your recording — free, on your device."}
     </p>
   );
 }
