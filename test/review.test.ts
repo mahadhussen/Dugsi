@@ -70,3 +70,21 @@ test("clipForMistake: skipped words play the nearby passage, mis-said words neve
   assert.equal(clipForMistake(times, 12, false), undefined); // mis-said w/o own clip → honest "no clip"
   assert.equal(clipForMistake(times, 30, true), undefined); // too far even for skipped
 });
+
+import { sanePreciseTimes } from "../lib/review";
+
+test("sanePreciseTimes drops clips pointing outside the recording", () => {
+  const times = { 1: { start: 2, end: 3 }, 2: { start: 50, end: 51 }, 3: { start: 4, end: 5 } };
+  const ok = sanePreciseTimes(times, 10);
+  assert.deepEqual(Object.keys(ok), ["1", "3"]); // the 50s clip can't exist in a 10s recording
+});
+
+test("sanePreciseTimes distrusts the whole set when most times are broken", () => {
+  const times = { 1: { start: 40, end: 41 }, 2: { start: 50, end: 51 }, 3: { start: 4, end: 5 } };
+  assert.deepEqual(sanePreciseTimes(times, 10), {}); // 2 of 3 broken → trust none
+});
+
+test("sanePreciseTimes passes through when duration is unknown", () => {
+  const times = { 1: { start: 2, end: 3 } };
+  assert.deepEqual(sanePreciseTimes(times, 0), times);
+});

@@ -12,7 +12,14 @@ import { trackLive } from "@/lib/live";
 import { pickBestAlternative } from "@/lib/speech/pickBest";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
-import { mapRefTimes, liveClipTimes, mergeClipTimes, clipForMistake, type TimeRange } from "@/lib/review";
+import {
+  mapRefTimes,
+  liveClipTimes,
+  mergeClipTimes,
+  clipForMistake,
+  sanePreciseTimes,
+  type TimeRange,
+} from "@/lib/review";
 import { saveRecording } from "@/lib/recordings";
 import {
   checkForPriorCrash,
@@ -380,10 +387,15 @@ export default function Reciter({
         setPhase("done");
         // Re-save with precise Whisper word times layered over the live-derived
         // ones, so the history review can replay each mistaken word exactly.
+        // Whisper's timestamps are sanity-checked against the real recording
+        // length first — broken ones would point at the wrong audio.
         if (blob.size > 0 && result.words?.length) {
-          const precise = mapRefTimes(
-            fb.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
-            result.words,
+          const precise = sanePreciseTimes(
+            mapRefTimes(
+              fb.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
+              result.words,
+            ),
+            secondsRef.current,
           );
           const merged = mergeClipTimes(precise, liveClipTimes(liveTimesRef.current));
           void saveRecording(surahNumber, blob, merged, Date.now());
@@ -493,9 +505,12 @@ export default function Reciter({
   // and skipped words play the passage around them (they were never spoken).
   const mistakes = useMemo<Mistake[]>(() => {
     if (!feedback) return [];
-    const precise = mapRefTimes(
-      feedback.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
-      recording?.words ?? [],
+    const precise = sanePreciseTimes(
+      mapRefTimes(
+        feedback.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
+        recording?.words ?? [],
+      ),
+      seconds,
     );
     const times = mergeClipTimes(precise, liveClips);
     return feedback.alignment.words
@@ -514,7 +529,7 @@ export default function Reciter({
           time: clipForMistake(times, w.refIndex, skipped),
         };
       });
-  }, [feedback, recording, liveClips, flatWords]);
+  }, [feedback, recording, liveClips, seconds, flatWords]);
 
   // Record one session per finished recitation (signed-in only). The first
   // finalised result wins; a later Whisper refinement won't double-log.

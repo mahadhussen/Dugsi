@@ -82,6 +82,32 @@ export function mergeClipTimes(
 }
 
 /**
+ * Whisper word timestamps can come back broken (chunked long-form decoding is
+ * known to misplace them). A clip pointing outside the actual recording plays
+ * a completely wrong passage — worse than none. Keep only times that fit
+ * inside the recording; if most don't, distrust the lot.
+ */
+export function sanePreciseTimes(
+  precise: Record<number, TimeRange>,
+  durationSec: number,
+): Record<number, TimeRange> {
+  if (!Number.isFinite(durationSec) || durationSec <= 0) return precise;
+  const keys = Object.keys(precise);
+  if (keys.length === 0) return precise;
+  const out: Record<number, TimeRange> = {};
+  let kept = 0;
+  for (const k of keys) {
+    const t = precise[k as unknown as number];
+    if (t.start >= 0 && t.end > t.start && t.end <= durationSec + 2) {
+      out[k as unknown as number] = t;
+      kept++;
+    }
+  }
+  // If most timestamps don't even fit in the recording, none can be trusted.
+  return kept >= keys.length / 2 ? out : {};
+}
+
+/**
  * The clip to play for a mistake. A mis-said word only plays its OWN clip —
  * playing a neighbour would be the wrong audio, worse than an honest "no
  * clip". A skipped word was never said at all, so the passage around it

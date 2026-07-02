@@ -28,6 +28,40 @@ function stopCurrent() {
   }
 }
 
+function once(a: HTMLAudioElement, ev: string, timeoutMs = 3000): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, timeoutMs);
+    a.addEventListener(
+      ev,
+      () => {
+        clearTimeout(t);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+/**
+ * Seek reliably before playing. Two real-world traps this handles:
+ * - Safari/iOS silently DROPS a currentTime set before metadata has loaded, so
+ *   playback would start at 0:00 — a completely different part of the recording.
+ * - Chrome's MediaRecorder webm blobs can report duration=Infinity until you
+ *   force a seek to the end, making normal seeks unreliable.
+ */
+async function seekTo(a: HTMLAudioElement, from: number): Promise<void> {
+  if (a.readyState < 1) {
+    a.load();
+    await once(a, "loadedmetadata");
+  }
+  if (!Number.isFinite(a.duration)) {
+    a.currentTime = 1e101;
+    await once(a, "seeked");
+  }
+  a.currentTime = from;
+  await once(a, "seeked");
+}
+
 /** Prominent, always-available playback of the reciter's own recording. Shown in
  *  the results header so it's findable even when there were no mistakes. */
 export function HearYourselfButton({ recordingUrl }: { recordingUrl?: string }) {
@@ -127,19 +161,26 @@ function MistakeRow({
     stopCurrent();
     const a = localRef.current ?? new Audio(recordingUrl);
     localRef.current = a;
-    // Pad the window a little — Whisper's word timestamps drift, so a slightly
-    // wider slice reliably contains the whole word.
+    // Pad the window a little — word timestamps drift, so a slightly wider
+    // slice reliably contains the whole word.
     const PAD = 0.15;
     const from = Math.max(0, m.time.start - PAD);
     const to = m.time.end + PAD;
-    a.currentTime = from;
-    a.ontimeupdate = () => {
-      if (a.currentTime >= to) a.pause();
-    };
-    a.onpause = () => setPlaying(null);
     current = a;
     setPlaying("you");
-    void a.play().catch(() => setPlaying(null));
+    void (async () => {
+      try {
+        await seekTo(a, from);
+        if (current !== a) return; // another clip was started meanwhile
+        a.ontimeupdate = () => {
+          if (a.currentTime >= to) a.pause();
+        };
+        a.onpause = () => setPlaying(null);
+        await a.play();
+      } catch {
+        setPlaying(null);
+      }
+    })();
   };
 
   const playCorrect = () => {
