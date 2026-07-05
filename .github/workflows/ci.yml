@@ -21,6 +21,8 @@ jobs:
         run: npm ci
       - name: Unit tests
         run: npm test
+      - name: Generate version stamp (lib/version.ts is generated, not committed)
+        run: node scripts/stamp-version.mjs
       - name: Type check
         run: npx tsc --noEmit
       - name: Production build
