@@ -35,7 +35,19 @@ export interface RecitationFeedback {
   timing: TimingReport;
   score: number; // 0..100 overall
   summary: string;
+  /** Fraction of the attempted span the recogniser actually matched (0..1). */
+  matchRate: number;
+  /** Whether we heard clearly enough to show a scored verdict. When false the UI
+   *  must NOT show a score or red marks — a correct reciter judged as wrong
+   *  destroys trust. It shows an honest "could not hear you" state instead. */
+  reliable: boolean;
 }
+
+// Confidence thresholds for showing a scored verdict. Deliberately conservative:
+// wrong feedback on someone's recitation is worse than asking them to try again.
+const MIN_HEARD_WORDS = 3; // too little said to judge anything
+const MIN_SPAN_WORDS = 2; // the attempted span must be real
+const MIN_MATCH_RATE = 0.45; // below this the recogniser clearly failed, not the reciter
 
 /**
  * Turn a raw transcription (text + optional word timings) into structured
@@ -93,6 +105,15 @@ export function analyzeRecitation(
   const maddPenalty = maddTotal > 0 ? (rushed / maddTotal) * 10 : 0;
   const score = Math.max(0, Math.round(accuracyPart - maddPenalty));
 
+  // Confidence: how much of the attempted span the recogniser actually matched.
+  // If it barely matched, marking the rest wrong/skipped would be a false
+  // accusation, so the verdict is withheld.
+  const spanWords = alignment.words.length;
+  const matched = alignment.words.filter((w) => w.status === "correct" || w.status === "close").length;
+  const matchRate = spanWords > 0 ? matched / spanWords : 0;
+  const reliable =
+    heardTokens.length >= MIN_HEARD_WORDS && spanWords >= MIN_SPAN_WORDS && matchRate >= MIN_MATCH_RATE;
+
   return {
     transcript,
     engine,
@@ -100,6 +121,8 @@ export function analyzeRecitation(
     timing,
     score,
     summary: buildSummary(alignment, rushed, maddTotal),
+    matchRate,
+    reliable,
   };
 }
 
