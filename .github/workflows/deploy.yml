@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Unit tests (block deploy on failure)
+        run: npm test
+
+      - name: Type check
+        run: npx tsc --noEmit
+
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
