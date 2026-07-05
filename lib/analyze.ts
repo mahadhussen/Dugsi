@@ -8,18 +8,38 @@ import { evaluateMadd, type TimingReport, type TimedWord } from "@/lib/tajweed/t
 // 6118 words of Al-Baqarah) would allocate a huge matrix and crash phones.
 const WINDOW_THRESHOLD = 600;
 
+// How many heard words to slide when locating the recited passage. A short
+// refrain matches in many places (Ar-Rahman repeats a phrase dozens of times),
+// but a long window only aligns well at the true offset, so 5 was too few. A
+// hint from the live tracker (roughly where the reciter actually was) breaks any
+// remaining tie between genuinely identical repetitions.
+const ANCHOR_PROBES = 16;
+const HINT_BIAS = 0.02; // per word of distance from the live-tracker hint
+
 /**
- * Find where a short recitation begins inside a long expected sequence by
- * sliding the first few heard words across it (cheap single pass).
+ * Find where a recitation begins inside a long expected sequence. Slides a
+ * window of heard words across the reference and scores each start by total
+ * similarity, so the correct offset (where the whole passage matches) wins over
+ * a shorter refrain match elsewhere. An optional `hint` (a reference index the
+ * live tracker matched) nudges the choice toward where the reciter was.
+ * Exported for testing.
  */
-function bestAnchor(expectedNorm: string[], heard: string[]): number {
-  const probes = heard.slice(0, 5);
-  if (probes.length === 0) return 0;
+export function bestAnchor(expectedNorm: string[], heard: string[], hint?: number): number {
+  const n = expectedNorm.length;
+  if (n === 0) return 0;
+  const probes = heard.slice(0, ANCHOR_PROBES);
+  if (probes.length === 0) {
+    return hint != null ? Math.max(0, Math.min(n - 1, Math.round(hint))) : 0;
+  }
+  const limit = Math.max(0, n - probes.length);
   let bestStart = 0;
   let bestScore = -Infinity;
-  for (let s = 0; s + probes.length <= expectedNorm.length; s++) {
+  for (let s = 0; s <= limit; s++) {
     let score = 0;
-    for (let j = 0; j < probes.length; j++) score += similarity(probes[j], expectedNorm[s + j]);
+    for (let j = 0; j < probes.length && s + j < n; j++) {
+      score += similarity(probes[j], expectedNorm[s + j]);
+    }
+    if (hint != null) score -= HINT_BIAS * Math.abs(s - hint);
     if (score > bestScore) {
       bestScore = score;
       bestStart = s;
@@ -58,6 +78,9 @@ export function analyzeRecitation(
   transcript: string,
   timedWords: TimedWord[],
   engine: string,
+  /** Reference index the live tracker matched, used as an anchor prior for long
+   *  surahs so a repeated phrase does not lock the window onto the wrong copy. */
+  anchorHint?: number,
 ): RecitationFeedback {
   const flat = flattenAyat(ayat);
   const expectedTokens = flat.map((f) => f.word.uthmani);
@@ -69,7 +92,7 @@ export function analyzeRecitation(
   let windowTokens = expectedTokens;
   if (expectedTokens.length > WINDOW_THRESHOLD && heardTokens.length > 0) {
     const expectedNorm = expectedTokens.map(normalizeWord);
-    const anchor = bestAnchor(expectedNorm, heardTokens);
+    const anchor = bestAnchor(expectedNorm, heardTokens, anchorHint);
     const pad = 30;
     windowStart = Math.max(0, anchor - pad);
     const windowEnd = Math.min(expectedTokens.length, anchor + heardTokens.length + pad);

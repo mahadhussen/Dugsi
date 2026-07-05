@@ -129,6 +129,9 @@ export default function Reciter({
   const liveTimesRef = useRef<Record<number, number>>({});
   const lastStampRef = useRef(0);
   const recStartRef = useRef(0);
+  // Earliest reference word the live tracker matched — an anchor prior so a long
+  // surah with a repeated phrase does not window onto the wrong repetition.
+  const firstLiveMatchRef = useRef<number | undefined>(undefined);
   const [liveClips, setLiveClips] = useState<Record<number, TimeRange>>({});
 
   // Stop the mic/recorder without processing the result (surah switch, unmount).
@@ -240,6 +243,9 @@ export default function Reciter({
           const fresh: number[] = [];
           for (const key in statuses) {
             const idx = Number(key);
+            if (firstLiveMatchRef.current === undefined || idx < firstLiveMatchRef.current) {
+              firstLiveMatchRef.current = idx;
+            }
             if (liveTimesRef.current[idx] === undefined) fresh.push(idx);
           }
           if (fresh.length > 0) {
@@ -289,7 +295,7 @@ export default function Reciter({
     if (liveResultShownRef.current) return; // stop() already showed the result
     const live = liveRef.current.trim();
     if (live) {
-      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
+      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech", firstLiveMatchRef.current));
       setPhase("done");
     } else {
       setError("We couldn't hear any recitation. Please try again in a quieter place.");
@@ -395,7 +401,7 @@ export default function Reciter({
         setRecording((prev) => (prev ? { ...prev, words: result.words } : prev));
       }
       if (result.text.trim()) {
-        const fb = analyzeRecitation(ayat, result.text, result.words, "on-device Whisper");
+        const fb = analyzeRecitation(ayat, result.text, result.words, "on-device Whisper", firstLiveMatchRef.current);
         setFeedback(fb);
         setPhase("done");
         // Re-save with precise Whisper word times layered over the live-derived
@@ -440,6 +446,7 @@ export default function Reciter({
     liveTimesRef.current = {};
     lastStampRef.current = 0;
     recStartRef.current = 0;
+    firstLiveMatchRef.current = undefined;
     setLiveClips({});
     void startCapture();
   };
@@ -474,7 +481,7 @@ export default function Reciter({
     const live = liveRef.current.trim();
     if (live) {
       liveResultShownRef.current = true;
-      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
+      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech", firstLiveMatchRef.current));
       setPhase("done");
     } else {
       liveResultShownRef.current = false;
