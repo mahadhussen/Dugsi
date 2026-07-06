@@ -132,7 +132,7 @@ export default function MistakeReview({
         ))}
       </ul>
       <p className="mt-3 text-xs text-ink/40">
-        Tap <strong>Correct</strong> to hear the qari
+        Tap <strong>Correct</strong> to hear the qari recite that whole verse
         {hasYou ? (
           <>
             {" "}and <strong>You</strong> to hear yourself say just that word
@@ -223,6 +223,7 @@ function MistakeRow({
             </>
           )}
           {m.translit ? ` · ${m.translit}` : ""}
+          {` · verse ${m.verse}`}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">

@@ -50,11 +50,30 @@ test("no timestamps yields an empty map", () => {
 
 import { liveClipTimes, mergeClipTimes, clipForMistake } from "../lib/review";
 
-test("liveClipTimes builds windows leaning back from the stamp", () => {
+test("liveClipTimes builds a short window leaning back from the stamp", () => {
+  // A word is reported ~1s after it is spoken, so the clip leans back a little
+  // and reaches slightly past the stamp — but stays SHORT (about a word long),
+  // not the old 4.8s blur that made neighbouring mistakes sound identical.
   const clips = liveClipTimes({ 5: 10 });
-  assert.deepEqual(clips[5], { start: 6, end: 10.8 });
+  assert.deepEqual(clips[5], { start: 9, end: 10.25 });
   // Early words clamp at 0.
-  assert.deepEqual(liveClipTimes({ 0: 1 })[0], { start: 0, end: 1.8 });
+  assert.deepEqual(liveClipTimes({ 0: 1 })[0], { start: 0, end: 1.25 });
+});
+
+test("liveClipTimes keeps adjacent mistakes distinct (the 'You plays the same thing' bug)", () => {
+  const passedAt: Record<number, number> = {};
+  for (let i = 0; i < 8; i++) passedAt[i] = 2 + i * 0.9; // ~0.9s apart
+  const clips = liveClipTimes(passedAt);
+  const order = Object.keys(passedAt)
+    .map(Number)
+    .sort((a, b) => passedAt[a] - passedAt[b]);
+  for (let k = 1; k < order.length; k++) {
+    assert.ok(
+      clips[order[k]].start >= clips[order[k - 1]].end - 1e-9,
+      `clip ${order[k]} must not overlap the previous clip`,
+    );
+  }
+  assert.notDeepEqual(clips[3], clips[6]); // two mistakes → two different slices
 });
 
 test("mergeClipTimes lets precise Whisper times win over live windows", () => {
