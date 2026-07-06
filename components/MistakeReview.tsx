@@ -43,22 +43,29 @@ function once(a: HTMLAudioElement, ev: string, timeoutMs = 3000): Promise<void> 
 }
 
 /**
- * Seek reliably before playing. Two real-world traps this handles:
- * - Safari/iOS silently DROPS a currentTime set before metadata has loaded, so
- *   playback would start at 0:00 — a completely different part of the recording.
- * - Chrome's MediaRecorder webm blobs can report duration=Infinity until you
- *   force a seek to the end, making normal seeks unreliable.
+ * Seek reliably before playing a clip. Safari/iOS silently DROPS a currentTime
+ * set before metadata has loaded, so playback would start at 0:00 — a completely
+ * different part of the recording. We wait for metadata first.
+ *
+ * We deliberately do NOT probe the recording's total duration. MediaRecorder
+ * blobs (especially on iOS) frequently report duration=Infinity because their
+ * container is written without a duration box, and the old workaround — setting
+ * currentTime to a huge sentinel to force the browser to resolve it — can crash
+ * mobile Safari's media pipeline. Clip playback never needs the total duration:
+ * it only seeks to `from` and stops at `to` via a timeupdate handler, so the
+ * probe was both unnecessary and dangerous.
  */
 async function seekTo(a: HTMLAudioElement, from: number): Promise<void> {
   if (a.readyState < 1) {
     a.load();
     await once(a, "loadedmetadata");
   }
-  if (!Number.isFinite(a.duration)) {
-    a.currentTime = 1e101;
-    await once(a, "seeked");
+  try {
+    a.currentTime = from;
+  } catch {
+    // Some blobs reject a seek until more is buffered; play from where it can
+    // rather than throwing out of the handler.
   }
-  a.currentTime = from;
   await once(a, "seeked");
 }
 
@@ -79,6 +86,7 @@ export function HearYourselfButton({ recordingUrl }: { recordingUrl?: string }) 
     const a = new Audio(recordingUrl);
     a.onended = () => setPlaying(false);
     a.onpause = () => setPlaying(false);
+    a.onerror = () => setPlaying(false);
     current = a;
     setPlaying(true);
     void a.play().catch(() => setPlaying(false));
@@ -168,6 +176,7 @@ function MistakeRow({
     const to = m.time.end + PAD;
     current = a;
     setPlaying("you");
+    a.onerror = () => setPlaying(null);
     void (async () => {
       try {
         await seekTo(a, from);
