@@ -60,15 +60,35 @@ export function mapRefTimes(words: HeardWord[], timed: TimedWord[]): Record<numb
 // (recognition reports a word a moment after it was said), so the windows are
 // wide: you hear the word in its passage. Precise Whisper times override them.
 
-/** Turn "the live tracker matched word i at t seconds" into playable windows.
- *  Recognition reports a word shortly AFTER it was said, so the window leans
- *  backwards from the stamp. */
+// Recognition reports a word a moment after it was spoken, so a clip leans a
+// little behind its stamp. The window must stay SHORT and must not overlap the
+// neighbouring words' windows — otherwise two mistakes close together in the
+// recitation replay almost the same audio, and every "You" sounds identical.
+const CLIP_LAG = 1.0; // a word is reported ~this long after it is spoken
+const CLIP_TAIL = 0.25; // reach a little past the stamp to catch the word's end
+const CLIP_MAX = 2.0; // never let one word's clip run longer than this
+
+/** Turn "the live tracker matched word i at t seconds" into playable windows,
+ *  one per word. Windows are bounded by their neighbours so each mistake plays a
+ *  distinct slice of the recording rather than a wide, overlapping blur. */
 export function liveClipTimes(passedAt: Record<number, number>): Record<number, TimeRange> {
+  const entries = Object.keys(passedAt)
+    .map((k) => ({ i: Number(k), t: passedAt[Number(k)] }))
+    .filter((e) => Number.isFinite(e.t))
+    .sort((a, b) => a.t - b.t);
+
   const out: Record<number, TimeRange> = {};
-  for (const key in passedAt) {
-    const t = passedAt[key];
-    if (!Number.isFinite(t)) continue;
-    out[key as unknown as number] = { start: Math.max(0, t - 4), end: t + 0.8 };
+  let prevEnd = 0;
+  for (const { i, t } of entries) {
+    let start = Math.max(0, t - CLIP_LAG);
+    // Never start before the previous word's clip ended — keeps clips distinct.
+    if (start < prevEnd) start = prevEnd;
+    let end = t + CLIP_TAIL;
+    // Cap the length so a long pause before a word doesn't make a huge window.
+    if (end - start > CLIP_MAX) start = end - CLIP_MAX;
+    if (end <= start) end = start + 0.3;
+    out[i] = { start, end };
+    prevEnd = end;
   }
   return out;
 }
