@@ -26,6 +26,8 @@ import {
   whisperDisabledByCrashes,
   markWhisperRunning,
   markWhisperFinished,
+  clearCrashBreadcrumb,
+  reEnableWhisper,
 } from "@/lib/crashGuard";
 import type { TimedWord } from "@/lib/tajweed/timing";
 import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
@@ -95,6 +97,7 @@ export default function Reciter({
   const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
   const [livePointer, setLivePointer] = useState(0);
   const [hifz, setHifz] = useState(0); // 0 = off, 1 easy, 2 medium, 3 hide all
+  const [engineTick, setEngineTick] = useState(0); // re-render the status line after re-enable
   // The user's own recording (always kept) + word timestamps when Whisper ran.
   const [recording, setRecording] = useState<{ url: string; words: TimedWord[] } | null>(null);
 
@@ -126,6 +129,9 @@ export default function Reciter({
   const liveTimesRef = useRef<Record<number, number>>({});
   const lastStampRef = useRef(0);
   const recStartRef = useRef(0);
+  // Earliest reference word the live tracker matched — an anchor prior so a long
+  // surah with a repeated phrase does not window onto the wrong repetition.
+  const firstLiveMatchRef = useRef<number | undefined>(undefined);
   const [liveClips, setLiveClips] = useState<Record<number, TimeRange>>({});
 
   // Stop the mic/recorder without processing the result (surah switch, unmount).
@@ -145,7 +151,17 @@ export default function Reciter({
   useEffect(() => {
     checkForPriorCrash(); // if a past Whisper run killed the page, note it
     if (!isSpeechSupported() && !isWhisperSupported()) setPhase("unsupported");
+    // A deliberate close or backgrounding is not a crash — drop the breadcrumb so
+    // it is never miscounted. A real memory kill fires neither event.
+    const onLeave = () => clearCrashBreadcrumb();
+    const onHide = () => {
+      if (document.visibilityState === "hidden") clearCrashBreadcrumb();
+    };
+    window.addEventListener("pagehide", onLeave);
+    document.addEventListener("visibilitychange", onHide);
     return () => {
+      window.removeEventListener("pagehide", onLeave);
+      document.removeEventListener("visibilitychange", onHide);
       if (timerRef.current) clearInterval(timerRef.current);
       recognizerRef.current?.cancel();
       discardCapture();
@@ -227,6 +243,9 @@ export default function Reciter({
           const fresh: number[] = [];
           for (const key in statuses) {
             const idx = Number(key);
+            if (firstLiveMatchRef.current === undefined || idx < firstLiveMatchRef.current) {
+              firstLiveMatchRef.current = idx;
+            }
             if (liveTimesRef.current[idx] === undefined) fresh.push(idx);
           }
           if (fresh.length > 0) {
@@ -276,7 +295,7 @@ export default function Reciter({
     if (liveResultShownRef.current) return; // stop() already showed the result
     const live = liveRef.current.trim();
     if (live) {
-      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
+      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech", firstLiveMatchRef.current));
       setPhase("done");
     } else {
       setError("We couldn't hear any recitation. Please try again in a quieter place.");
@@ -382,7 +401,7 @@ export default function Reciter({
         setRecording((prev) => (prev ? { ...prev, words: result.words } : prev));
       }
       if (result.text.trim()) {
-        const fb = analyzeRecitation(ayat, result.text, result.words, "on-device Whisper");
+        const fb = analyzeRecitation(ayat, result.text, result.words, "on-device Whisper", firstLiveMatchRef.current);
         setFeedback(fb);
         setPhase("done");
         // Re-save with precise Whisper word times layered over the live-derived
@@ -427,6 +446,7 @@ export default function Reciter({
     liveTimesRef.current = {};
     lastStampRef.current = 0;
     recStartRef.current = 0;
+    firstLiveMatchRef.current = undefined;
     setLiveClips({});
     void startCapture();
   };
@@ -461,7 +481,7 @@ export default function Reciter({
     const live = liveRef.current.trim();
     if (live) {
       liveResultShownRef.current = true;
-      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech"));
+      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech", firstLiveMatchRef.current));
       setPhase("done");
     } else {
       liveResultShownRef.current = false;
@@ -534,7 +554,9 @@ export default function Reciter({
   // Record one session per finished recitation (signed-in only). The first
   // finalised result wins; a later Whisper refinement won't double-log.
   useEffect(() => {
-    if (phase === "done" && feedback && userId && !loggedRef.current) {
+    // Only record sessions we actually heard well enough to score — logging a
+    // low-confidence guess would corrupt streaks, scores and mastery.
+    if (phase === "done" && feedback && feedback.reliable && userId && !loggedRef.current) {
       loggedRef.current = true;
       const missed = feedback.alignment.words
         .filter((w) => w.status === "wrong" || w.status === "missing")
@@ -556,6 +578,8 @@ export default function Reciter({
   // through the short "processing" step in accurate mode until the final lands.
   const liveMode = phase === "recording";
   const showingLive = (phase === "recording" || phase === "processing") && !feedback;
+  // A scored verdict is only shown when we heard clearly enough (confidence gate).
+  const scored = !!feedback && feedback.reliable;
 
   // Memoise the surah so the (frequent) live-transcript text updates don't
   // re-invoke it — it only rebuilds when statuses / cursor / target actually change.
@@ -564,10 +588,10 @@ export default function Reciter({
       <SurahView
         ayat={ayat}
         surahNumber={surahNumber}
-        statuses={showingLive ? liveStatuses : statuses}
-        maddVerdicts={maddVerdicts}
+        statuses={showingLive ? liveStatuses : scored ? statuses : undefined}
+        maddVerdicts={scored ? maddVerdicts : undefined}
         activeIndex={liveMode ? livePointer : undefined}
-        showTajweed={!showingLive && !feedback}
+        showTajweed={!showingLive && !scored}
         maskLevel={hifz}
         initialTopVerse={initialTopVerse}
         onTopVerseChange={handleTopVerseChange}
@@ -582,7 +606,7 @@ export default function Reciter({
       maddVerdicts,
       liveMode,
       livePointer,
-      feedback,
+      scored,
       hifz,
       initialTopVerse,
       handleTopVerseChange,
@@ -606,7 +630,15 @@ export default function Reciter({
 
   return (
     <div className="space-y-6">
-      <EngineStatus modelStatus={modelStatus} modelPercent={modelPercent} />
+      <EngineStatus
+        modelStatus={modelStatus}
+        modelPercent={modelPercent}
+        engineTick={engineTick}
+        onReEnable={() => {
+          reEnableWhisper();
+          setEngineTick((t) => t + 1);
+        }}
+      />
 
       <HifzToggle level={hifz} onSelect={setHifz} />
 
@@ -686,18 +718,37 @@ export default function Reciter({
 
 /** No modes to choose any more — the best available engine is picked
  *  automatically. This line just tells the reciter what their device does. */
-function EngineStatus({ modelStatus, modelPercent }: { modelStatus: ModelStatus; modelPercent: number }) {
+function EngineStatus({
+  modelStatus,
+  modelPercent,
+  engineTick,
+  onReEnable,
+}: {
+  modelStatus: ModelStatus;
+  modelPercent: number;
+  engineTick: number;
+  onReEnable: () => void;
+}) {
+  // engineTick is read so the line re-evaluates after a manual re-enable.
+  void engineTick;
   const capable = typeof window !== "undefined" && whisperCapable();
   const disabled = typeof window !== "undefined" && whisperDisabledByCrashes();
   return (
     <p className="text-center text-xs text-ink/50">
-      {modelStatus === "loading"
-        ? `Preparing the precise on-device check… ${modelPercent}%`
-        : capable
-          ? "Live word marking + your recording, refined by a precise on-device check."
-          : disabled
-            ? "Live word marking + your recording. The precise check is off — it crashed on this device."
-            : "Live word marking + your recording — free, on your device."}
+      {modelStatus === "loading" ? (
+        `Preparing the precise on device check… ${modelPercent}%`
+      ) : capable ? (
+        "Live word marking (via your browser), plus a precise check that runs on your device."
+      ) : disabled ? (
+        <>
+          Live word marking via your browser. The on device check is off after a crash here.{" "}
+          <button onClick={onReEnable} className="font-semibold text-emerald-deep underline underline-offset-2">
+            Try it again
+          </button>
+        </>
+      ) : (
+        "Live word marking via your browser. Free, and your recording stays on your device."
+      )}
     </p>
   );
 }
@@ -759,6 +810,36 @@ function ResultsPanel({
   recordingUrl?: string;
 }) {
   const rushed = feedback.timing.checks.filter((c) => c.verdict === "rushed");
+
+  // Confidence gate: if we could not hear clearly, never show a score or red
+  // marks — that would tell a correct reciter she failed. Show an honest state.
+  if (!feedback.reliable) {
+    return (
+      <div className="animate-in rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-soft">
+        <h2 className="text-lg font-bold text-ink">We could not hear you clearly enough</h2>
+        <p className="mt-2 text-sm text-ink/70">
+          To avoid marking your recitation wrong by mistake, we are not scoring this attempt. Try
+          again a little closer to the microphone, in a quieter place, and recite at a steady pace.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            onClick={onReset}
+            className="rounded-lg bg-gradient-to-b from-emerald to-emerald-deep px-4 py-2 text-sm font-semibold text-white shadow-soft"
+          >
+            Try again
+          </button>
+          <HearYourselfButton recordingUrl={recordingUrl} />
+        </div>
+        <details className="mt-4 text-xs text-ink/40">
+          <summary className="cursor-pointer">What we heard</summary>
+          <p className="ayah mt-1 text-lg" dir="rtl">
+            {feedback.transcript || "—"}
+          </p>
+        </details>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-in rounded-2xl border border-emerald/25 bg-white/85 p-6 shadow-soft">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -807,8 +888,8 @@ function ResultsPanel({
           {feedback.transcript}
         </p>
         <p className="mt-1 text-xs text-ink/40">
-          Recognised free, on your device ({feedback.engine}). Recognition can misread classical
-          Arabic — if a word is marked wrong but you said it right, it may be the recogniser, not you.
+          Recognised free ({feedback.engine}). Recognition can misread classical Arabic — if a word
+          is marked wrong but you said it right, it may be the recogniser, not you.
         </p>
       </details>
     </div>
