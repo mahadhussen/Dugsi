@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ayahAudioUrl } from "@/lib/audio-quran";
+import { useReciter } from "@/lib/reciter-store";
 
 // Only one ayah plays at a time across the page.
 let currentAudio: HTMLAudioElement | null = null;
 
 export default function PlayButton({ surah, ayah }: { surah: number; ayah: number }) {
+  const { reciterId } = useReciter();
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -19,6 +21,16 @@ export default function PlayButton({ surah, ayah }: { surah: number; ayah: numbe
     };
   }, []);
 
+  // Switching Sheikh mid-session should make the next tap use the new voice.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (a) {
+      a.pause();
+      audioRef.current = null;
+      setPlaying(false);
+    }
+  }, [reciterId]);
+
   const toggle = () => {
     let a = audioRef.current;
     if (a && !a.paused) {
@@ -27,7 +39,7 @@ export default function PlayButton({ surah, ayah }: { surah: number; ayah: numbe
     }
     if (currentAudio && currentAudio !== a) currentAudio.pause();
     if (!a) {
-      a = new Audio(ayahAudioUrl(surah, ayah));
+      a = new Audio(ayahAudioUrl(surah, ayah, reciterId));
       a.preload = "none";
       a.onplay = () => setPlaying(true);
       a.onpause = () => setPlaying(false);

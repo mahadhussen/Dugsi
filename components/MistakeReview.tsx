@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ayahAudioUrl } from "@/lib/audio-quran";
+import { useReciter } from "@/lib/reciter-store";
 import type { TimeRange } from "@/lib/review";
 
 export interface Mistake {
@@ -156,6 +157,7 @@ function MistakeRow({
   surahNumber: number;
   recordingUrl?: string;
 }) {
+  const { reciterId } = useReciter();
   const [playing, setPlaying] = useState<"you" | "correct" | null>(null);
   const localRef = useRef<HTMLAudioElement | null>(null);
 
@@ -199,7 +201,7 @@ function MistakeRow({
       return;
     }
     stopCurrent();
-    const a = new Audio(ayahAudioUrl(surahNumber, m.verse));
+    const a = new Audio(ayahAudioUrl(surahNumber, m.verse, reciterId));
     a.onended = () => setPlaying(null);
     a.onpause = () => setPlaying(null);
     a.onerror = () => setPlaying(null);

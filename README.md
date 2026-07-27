@@ -34,6 +34,14 @@ reading-progress marker.
    flags rushed ones (⏱) — e.g. the 6-count madd in *aḍ-ḍāāāllīn*.
 4. **Tajweed guide.** The surah is rendered with colour-coded tajweed rules
    (madd, sun/moon letters, leen, lām of Allah, tafkhīm, …) to learn as you read.
+5. **Listen to the whole Quran, in your Sheikh's voice.** Pick from a range of
+   beloved qaris (Alafasy, Al-Husary, Abdul Basit, Al-Minshawi, As-Sudais, …)
+   and press play: Dugsi recites the surah verse by verse and flows straight
+   into the next one, so you can listen to the entire Quran hands-free. It hooks
+   into the phone's Media Session, so the lock-screen and headphone controls
+   (play / pause / skip) work too — handy while driving or with the screen off.
+   Audio streams from the public everyayah.com archive at play time. Your chosen
+   Sheikh is remembered on the device and used everywhere audio plays.
 
 ### Quran text integrity
 
@@ -65,8 +73,13 @@ app/
 components/
   Reciter.tsx              On-device recognition + results UI (client)
   SurahView.tsx            Ayah rendering with tajweed colours / result overlay
+  ReciterPicker.tsx        Choose which Sheikh (qari) to listen to
+  ListenPlayer.tsx         Hands-free full-Quran player (auto-advance + MediaSession)
+  PlayButton.tsx           Per-verse listen button (uses the chosen Sheikh)
   Legend.tsx               Tajweed colour key
 lib/
+  audio-quran.ts           Reciter catalogue + per-ayah audio URLs (everyayah.com)
+  reciter-store.ts         Shared, persisted "current Sheikh" choice
   quran/fatiha.ts          Verified text + per-word tajweed metadata
   arabic.ts                Normalisation, tokenisation, similarity
   align.ts                 Needleman–Wunsch word alignment (heard vs expected)
