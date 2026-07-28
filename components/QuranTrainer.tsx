@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Reciter from "./Reciter";
 import SurahPicker from "./SurahPicker";
-import ReciterPicker from "./ReciterPicker";
-import ListenPlayer from "./ListenPlayer";
 import { surahMeta, loadSurah, type Surah } from "@/lib/quran";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, resetFurthest } from "@/lib/supabase/progress";
@@ -78,19 +77,17 @@ export default function QuranTrainer() {
 
   return (
     <div className="space-y-6">
-      {/* Surah + Sheikh pickers (all 114 surahs, choose your qari) */}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <SurahPicker current={surahId} onSelect={selectSurah} />
-        <ReciterPicker />
-      </div>
-
-      {/* Hands-free listening — play the whole Quran in your chosen Sheikh's voice */}
-      <ListenPlayer surahId={surahId} onSurahChange={selectSurah} />
+      {/* Surah picker (all 114) */}
+      <SurahPicker current={surahId} onSelect={selectSurah} />
 
       <p className="text-center text-sm text-ink/60">
         {isLong
           ? "Scroll to read · recite any part (only that part is scored) · tap ▶ to hear a qari."
           : "Recite aloud, or tap ▶ to hear a qari."}
+        {" "}
+        <Link href="/listen" className="underline underline-offset-2 hover:text-ink">
+          Just listen instead →
+        </Link>
       </p>
 
       {resumeVerse > 1 && (

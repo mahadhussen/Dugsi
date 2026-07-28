@@ -1,6 +1,5 @@
 import QuranTrainer from "@/components/QuranTrainer";
 import Legend from "@/components/Legend";
-import AccountButton from "@/components/AccountButton";
 import ProgressPanel from "@/components/ProgressPanel";
 import { Wordmark } from "@/components/Logo";
 import { fatiha } from "@/lib/quran/fatiha";
@@ -19,7 +18,6 @@ export default function Home() {
     <main className="mx-auto max-w-3xl px-4 pb-16">
       {/* Hero */}
       <header className="relative -mx-4 overflow-hidden rounded-b-[2rem] bg-emerald-dark px-6 pb-10 pt-8 text-center shadow-soft sm:px-10">
-        <AccountButton />
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.12]"
           style={{

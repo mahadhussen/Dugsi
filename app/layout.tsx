@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Amiri } from "next/font/google";
 import "./globals.css";
 import UpdateChecker from "@/components/UpdateChecker";
+import AppNav from "@/components/AppNav";
 import { AuthProvider } from "@/lib/supabase/AuthProvider";
 
 const amiri = Amiri({
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={amiri.variable}>
       <body>
         <AuthProvider>
+          <AppNav />
           {children}
           <UpdateChecker />
         </AuthProvider>

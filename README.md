@@ -42,6 +42,17 @@ reading-progress marker.
    (play / pause / skip) work too — handy while driving or with the screen off.
    Audio streams from the public everyayah.com archive at play time. Your chosen
    Sheikh is remembered on the device and used everywhere audio plays.
+6. **Prayer times for Göteborg + adhan.** A dedicated page shows today's times
+   (Fajr, Shuruq, Dhuhr, Asr, Maghrib, Isha) with the next prayer and a live
+   countdown, computed **on-device** with the Muslim World League method and the
+   "one-seventh of the night" high-latitude rule — the same method as
+   [salatgbg.se](https://salatgbg.se), so it stays accurate through Sweden's
+   bright summer nights, offline and server-free. A built-in adhan player lets
+   you choose a call-to-prayer recording and listen whenever you like.
+
+The three areas each live on their own page — **Recitera** (`/`), **Lyssna**
+(`/listen`) and **Bönetider** (`/prayer`) — reached from a slide-out side menu,
+so the recite, listen and prayer-time flows never get in each other's way.
 
 ### Quran text integrity
 
@@ -69,17 +80,25 @@ updated.
 
 ```
 app/
-  page.tsx                 Home: recorder + surah + tajweed legend
+  page.tsx                 Recite: recorder + surah + tajweed legend
+  listen/page.tsx          Listen: full-Quran player + read-along
+  prayer/page.tsx          Prayer times (Göteborg) + adhan
 components/
+  AppNav.tsx               Slide-out side menu across all pages
   Reciter.tsx              On-device recognition + results UI (client)
   SurahView.tsx            Ayah rendering with tajweed colours / result overlay
   ReciterPicker.tsx        Choose which Sheikh (qari) to listen to
   ListenPlayer.tsx         Hands-free full-Quran player (auto-advance + MediaSession)
+  ListenView.tsx           The /listen page: pickers + player + read-along
+  PrayerView.tsx           Prayer times, next-prayer countdown (client, live)
+  AdhanPlayer.tsx          Choose and play a call-to-prayer recording
   PlayButton.tsx           Per-verse listen button (uses the chosen Sheikh)
   Legend.tsx               Tajweed colour key
 lib/
   audio-quran.ts           Reciter catalogue + per-ayah audio URLs (everyayah.com)
   reciter-store.ts         Shared, persisted "current Sheikh" choice
+  prayer-times.ts          On-device prayer times (adhan lib, MWL + 1/7-night)
+  adhan-audio.ts           Adhan recording catalogue
   quran/fatiha.ts          Verified text + per-word tajweed metadata
   arabic.ts                Normalisation, tokenisation, similarity
   align.ts                 Needleman–Wunsch word alignment (heard vs expected)
