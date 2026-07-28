@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Reciter from "./Reciter";
 import SurahPicker from "./SurahPicker";
 import { surahMeta, loadSurah, type Surah } from "@/lib/quran";
@@ -83,6 +84,10 @@ export default function QuranTrainer() {
         {isLong
           ? "Scroll to read · recite any part (only that part is scored) · tap ▶ to hear a qari."
           : "Recite aloud, or tap ▶ to hear a qari."}
+        {" "}
+        <Link href="/listen" className="underline underline-offset-2 hover:text-ink">
+          Just listen instead →
+        </Link>
       </p>
 
       {resumeVerse > 1 && (
