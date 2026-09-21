@@ -41,8 +41,8 @@ export function Wordmark({ className = "" }: { className?: string }) {
     <div className={`flex items-center gap-3 ${className}`}>
       <LogoMark size={44} />
       <div className="leading-none">
-        <div className="text-2xl font-bold tracking-tight text-white">Dugsi</div>
-        <div className="text-[11px] uppercase tracking-[0.28em] text-gold-soft/90">
+        <div className="text-2xl font-bold tracking-tight text-ink">Dugsi</div>
+        <div className="text-[11px] uppercase tracking-[0.28em] text-gold-deep">
           Recite &amp; learn
         </div>
       </div>

@@ -14,7 +14,7 @@ export interface Adhan {
 const HOST = "https://www.islamcan.com/audio/adhan";
 
 export const ADHANS: Adhan[] = [
-  { id: "adhan1", name: "Adhan 1", note: "Klassisk böneutropare", url: `${HOST}/azan1.mp3` },
+  { id: "adhan1", name: "Adhan 1", note: "Classic call to prayer", url: `${HOST}/azan1.mp3` },
   { id: "adhan2", name: "Adhan 2", note: "Lugn och tydlig", url: `${HOST}/azan2.mp3` },
   { id: "adhan3", name: "Adhan 3", note: "Klar röst", url: `${HOST}/azan3.mp3` },
   { id: "adhan4", name: "Adhan 4", note: "Fyllig och varm", url: `${HOST}/azan4.mp3` },

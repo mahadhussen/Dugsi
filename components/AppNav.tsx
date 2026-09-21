@@ -11,11 +11,11 @@ import { useAuth } from "@/lib/supabase/AuthProvider";
 import { Wordmark } from "./Logo";
 
 const LINKS = [
-  { href: "/", label: "Recitera", sub: "Läs upp & få feedback", icon: "mic" },
-  { href: "/listen", label: "Lyssna", sub: "Hela Koranen, valfri Sheikh", icon: "play" },
-  { href: "/progress", label: "Framsteg", sub: "Statistik, mål, misstag, inspelningar", icon: "chart" },
-  { href: "/prayer", label: "Bönetider", sub: "Göteborg · adhan", icon: "clock" },
-  { href: "/about", label: "Om & källor", sub: "Licenser, modeller, ärliga gränser", icon: "info" },
+  { href: "/", label: "Recite", sub: "Read aloud, get checked word by word", icon: "mic" },
+  { href: "/listen", label: "Listen", sub: "The whole Quran, any Sheikh", icon: "play" },
+  { href: "/progress", label: "Progress", sub: "Stats, goals, mistakes, recordings", icon: "chart" },
+  { href: "/prayer", label: "Prayer times", sub: "Gothenburg · adhan", icon: "clock" },
+  { href: "/about", label: "About & sources", sub: "Licences, models, honest limits", icon: "info" },
 ] as const;
 
 function Icon({ name, className }: { name: string; className?: string }) {
@@ -70,7 +70,7 @@ export default function AppNav() {
     <>
       <header className="sticky top-0 z-40 border-b border-ink/10 bg-surface/95 backdrop-blur">
         <div className="relative mx-auto flex max-w-3xl items-center gap-1 px-2 py-1.5">
-          <button onClick={() => setOpen(true)} aria-label="Öppna meny" className={btn}>
+          <button onClick={() => setOpen(true)} aria-label="Open menu" className={btn}>
             <Icon name="menu" className="h-6 w-6" />
           </button>
           {reader ? (
@@ -130,7 +130,7 @@ export default function AppNav() {
               <Wordmark />
               <button
                 onClick={() => setOpen(false)}
-                aria-label="Stäng meny"
+                aria-label="Close menu"
                 className="grid h-8 w-8 place-items-center rounded-full text-ink/60 transition hover:bg-ink/10 hover:text-ink"
               >
                 ✕
@@ -161,7 +161,7 @@ export default function AppNav() {
             </ul>
             <div className="border-t border-ink/10 p-4">
               <AccountButton inline />
-              <p className="mt-3 text-center text-[11px] text-ink/40">Gratis · inga annonser · inget spårande</p>
+              <p className="mt-3 text-center text-[11px] text-ink/40">Free · no ads · no tracking</p>
             </div>
           </nav>
         </div>

@@ -58,7 +58,7 @@ const statusClass: Record<WordStatus, string> = {
 };
 
 /** Verses per virtualised item in flowing mode. */
-const FLOW_CHUNK = 8;
+const FLOW_CHUNK = 12;
 
 interface WordsProps {
   ayah: Ayah;
@@ -319,9 +319,38 @@ export default function SurahView({
   }, [ayat, virtualized]);
   const chunkOf = (verseIndex: number) => Math.floor(verseIndex / (virtualized ? FLOW_CHUNK : Math.max(1, ayat.length)));
 
-  // Tell the top bar where we are.
+  // Tell the top bar where we are: the first verse still visible under the
+  // header as the page scrolls (throttled), and the verse being recited.
+  const activeRef = useRef(activeIndex);
+  activeRef.current = activeIndex;
   useEffect(() => {
     if (ayat.length > 0) setReaderPosition(surahNumber, ayat[0].number);
+    if (typeof window === "undefined") return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      if (activeRef.current !== undefined) return; // reciting: the active verse wins
+      const els = document.querySelectorAll<HTMLElement>("[data-verse]");
+      const top = 64; // below the sticky header
+      let best: number | null = null;
+      for (const el of els) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom >= top) {
+          best = Number(el.dataset.verse);
+          break;
+        }
+      }
+      if (best !== null) setReaderPosition(surahNumber, best);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [surahNumber, ayat]);
 
   // Follow the reciter, book-style: keep the verse being recited in view.
@@ -371,12 +400,16 @@ export default function SurahView({
     />
   );
 
-  const Header = () => (
-    <>
-      {showHeader && <SurahBanner surahNumber={surahNumber} />}
-      {basmala && <Basmala />}
-    </>
-  );
+  // Stable component identity so Virtuoso doesn't remount the banner each render.
+  const Header = useMemo(() => {
+    const H = () => (
+      <>
+        {showHeader && <SurahBanner surahNumber={surahNumber} />}
+        {basmala && <Basmala />}
+      </>
+    );
+    return H;
+  }, [showHeader, basmala, surahNumber]);
 
   // Short surahs (e.g. Al-Fatiha): render plainly — no need to virtualise.
   if (!virtualized) {

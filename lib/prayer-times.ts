@@ -13,7 +13,7 @@ import {
 } from "adhan";
 
 export const GOTHENBURG = {
-  name: "Göteborg",
+  name: "Gothenburg",
   lat: 57.7089,
   lng: 11.9746,
   tz: "Europe/Stockholm",
@@ -94,14 +94,14 @@ export function formatCountdown(ms: number): string {
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  if (h > 0) return `${h} tim ${m} min`;
+  if (h > 0) return `${h} h ${m} min`;
   if (m > 0) return `${m} min ${s} s`;
   return `${s} s`;
 }
 
-/** Today's date written for Göteborg, e.g. "tisdag 28 juli". */
+/** Today's date written for Gothenburg, e.g. "Tuesday 28 July". */
 export function formatDate(d = new Date()): string {
-  return d.toLocaleDateString("sv-SE", {
+  return d.toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",

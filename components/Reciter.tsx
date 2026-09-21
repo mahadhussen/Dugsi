@@ -110,6 +110,9 @@ export default function Reciter({
   const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
   const [modelPercent, setModelPercent] = useState(0);
   const [modelInUse, setModelInUse] = useState<WhisperModel | null>(null);
+  // Decided after mount (depends on the device), so server and client render alike.
+  const [plannedModel, setPlannedModel] = useState<WhisperModel | null>(null);
+  useEffect(() => setPlannedModel(pickWhisperModel(settings.quranModel)), [settings.quranModel]);
   // Voice activity: long mid-recitation pauses (memorisation weak spots) and
   // the optional auto-stop. Best-effort — absent when the VAD can't load.
   const vadRef = useRef<VadHandle | null>(null);
@@ -595,6 +598,25 @@ export default function Reciter({
 
   stopRef.current = stop;
 
+  // Results appear above the page: bring them into view when they land.
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (phase === "done" && feedback) {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [phase, feedback]);
+
+  // QA: `?demo=result` renders a canned result (a few slips) without a mic.
+  useEffect(() => {
+    if (typeof window === "undefined" || phase !== "idle") return;
+    if (new URLSearchParams(window.location.search).get("demo") !== "result") return;
+    const words = flatWords.map((f) => f.word.uthmani);
+    const spoken = words.filter((_, i) => i % 7 !== 3).map((w, i) => (i % 11 === 5 ? "كتاب" : w));
+    setFeedback(analyzeRecitation(ayat, spoken.join(" "), [], "demo", 0));
+    setPhase("done");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ayat]);
+
   const reset = () => {
     setFeedback(null);
     setError(null);
@@ -817,7 +839,7 @@ export default function Reciter({
           <EngineStatus
             modelStatus={modelStatus}
             modelPercent={modelPercent}
-            model={modelInUse ?? (typeof window !== "undefined" ? pickWhisperModel(settings.quranModel) : null)}
+            model={modelInUse ?? plannedModel}
             engineTick={engineTick}
             onReEnable={() => {
               reEnableWhisper();
@@ -849,6 +871,7 @@ export default function Reciter({
       )}
 
       {feedback && phase === "done" && (
+        <div ref={resultsRef} className="scroll-mt-16">
         <ResultsPanel
           feedback={feedback}
           onReset={reset}
@@ -861,6 +884,7 @@ export default function Reciter({
             verse: flatWords[h.beforeRefIndex]?.ayah ?? 0,
           }))}
         />
+        </div>
       )}
 
       {/* The mushaf page */}
@@ -967,8 +991,9 @@ function EngineStatus({
 }) {
   // engineTick is read so the line re-evaluates after a manual re-enable.
   void engineTick;
-  const capable = typeof window !== "undefined" && whisperCapable();
-  const disabled = typeof window !== "undefined" && whisperDisabledByCrashes();
+  const [caps, setCaps] = useState({ capable: false, disabled: false });
+  useEffect(() => setCaps({ capable: whisperCapable(), disabled: whisperDisabledByCrashes() }), [engineTick]);
+  const { capable, disabled } = caps;
   return (
     <p className="truncate text-[11px] text-ink/45">
       {modelStatus === "loading" ? (

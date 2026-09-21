@@ -47,7 +47,7 @@ export default function ReciterPicker() {
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={close}
         >
           <div
@@ -60,7 +60,7 @@ export default function ReciterPicker() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search Sheikh…"
                 autoFocus
-                className="w-full rounded-lg border border-ink/15 bg-surface-2 px-3 py-2 text-sm outline-none focus:border-emerald"
+                className="w-full rounded-lg border border-ink/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-emerald"
               />
               <button onClick={close} className="px-2 text-sm text-ink/60 hover:text-ink">
                 Close
@@ -78,7 +78,7 @@ export default function ReciterPicker() {
                       r.id === reciter.id ? "bg-emerald/10" : ""
                     }`}
                   >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gold/15 text-emerald">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald/10 text-emerald">
                       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
                         <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zm-7 9a7 7 0 0 0 6 6.92V21H8v2h8v-2h-3v-2.08A7 7 0 0 0 19 12h-2a5 5 0 0 1-10 0H5z" />
                       </svg>

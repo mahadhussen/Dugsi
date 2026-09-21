@@ -45,20 +45,20 @@ export default function PrayerView() {
           }}
         />
         <div className="relative">
-          <p className="text-xs uppercase tracking-wide text-gold-soft/80">
+          <p className="text-xs uppercase tracking-wide text-gold/90">
             {GOTHENBURG.name} · {formatDate(now)}
           </p>
           <p className="mt-3 text-sm text-white/70">
-            Nästa bön{np.tomorrow ? " (imorgon)" : ""}
+            Next prayer{np.tomorrow ? " (tomorrow)" : ""}
           </p>
-          <p className="ayah mt-1 text-3xl text-gold-soft" dir="rtl">
+          <p className="ayah mt-1 text-3xl text-gold" dir="rtl">
             {np.slot.arabic}
           </p>
           <p className="text-xl font-semibold">
             {np.slot.label} · {formatTime(np.slot.time)}
           </p>
-          <p className="mt-2 inline-block rounded-full bg-ink/10 px-4 py-1.5 text-sm text-gold-soft ring-1 ring-ink/15">
-            om {formatCountdown(np.msUntil)}
+          <p className="mt-2 inline-block rounded-full bg-white/10 px-4 py-1.5 text-sm text-gold ring-1 ring-white/15">
+            in {formatCountdown(np.msUntil)}
           </p>
         </div>
       </section>
@@ -75,8 +75,8 @@ export default function PrayerView() {
       <AdhanPlayer />
 
       <p className="text-center text-xs text-ink/50">
-        Tiderna beräknas på din enhet med Muslim World League-metoden och korrigeringen “en sjundedel
-        av natten” — samma metod som{" "}
+        Times are computed on your device with the Muslim World League method and the “one-seventh of
+        the night” high-latitude rule, the same method as{" "}
         <a
           href="https://salatgbg.se"
           target="_blank"
@@ -85,7 +85,7 @@ export default function PrayerView() {
         >
           salatgbg.se
         </a>
-        . Små avvikelser på någon minut kan förekomma.
+        . Expect a minute or so of difference.
       </p>
     </div>
   );
@@ -108,7 +108,7 @@ function TimeRow({ slot, isNext }: { slot: PrayerSlot; isNext: boolean }) {
         </span>
         <span>
           <span className="block text-sm font-semibold">{slot.label}</span>
-          {isNext && <span className="text-[11px] font-medium text-emerald-bright">nästa bön</span>}
+          {isNext && <span className="text-[11px] font-medium text-emerald-bright">next</span>}
         </span>
       </span>
       <span className="flex items-center gap-3">

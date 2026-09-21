@@ -1,8 +1,8 @@
 import ListenView from "@/components/ListenView";
 
 export const metadata = {
-  title: "Lyssna på Koranen — Dugsi",
-  description: "Lyssna på hela Koranen, vers för vers, i din valda Sheikhs röst.",
+  title: "Listen to the Quran — Dugsi",
+  description: "Listen to the whole Quran, verse by verse, in the voice of the Sheikh you choose.",
 };
 
 export default function ListenPage() {

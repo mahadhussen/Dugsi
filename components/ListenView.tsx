@@ -75,8 +75,8 @@ export default function ListenView() {
       <ListenPlayer surahId={surahId} onSurahChange={selectSurah} onWordChange={onWordChange} />
 
       <p className="text-center text-xs text-ink/55">
-        Surah {meta.id} · {meta.ayahCount} verser · tryck ▶ ovan för att lyssna, eller ▶ vid en
-        enskild vers.
+        Surah {meta.id} · {meta.ayahCount} verses · press ▶ above to listen through, or tap a verse
+        marker for that verse.
       </p>
 
       {/* Read along */}

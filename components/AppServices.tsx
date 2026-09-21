@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { stopVerse } from "@/lib/verse-player";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { syncHistory } from "@/lib/history";
 import { syncSettings, useSettings } from "@/lib/settings";
@@ -15,6 +17,12 @@ import { armReminder, ensureServiceWorker } from "@/lib/reminders";
 export default function AppServices() {
   const { user } = useAuth();
   const settings = useSettings();
+  const pathname = usePathname();
+
+  // A verse started from a marker must not keep playing on another page.
+  useEffect(() => {
+    stopVerse();
+  }, [pathname]);
 
   useEffect(() => {
     if (!user) return;
