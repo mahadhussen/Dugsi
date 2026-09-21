@@ -100,7 +100,7 @@ export function HearYourselfButton({ recordingUrl }: { recordingUrl?: string }) 
     <button
       onClick={toggle}
       className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-semibold ring-1 transition ${
-        playing ? "bg-ink text-white ring-ink" : "bg-white text-ink/80 ring-ink/20 hover:bg-ink/5"
+        playing ? "bg-ink text-shell ring-ink" : "bg-surface-2 text-ink/80 ring-white/20 hover:bg-white/5"
       }`}
     >
       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
@@ -138,7 +138,7 @@ export default function MistakeReview({
   const hasWordClips = !!timings;
 
   return (
-    <div className="mt-5 rounded-xl border border-ink/10 bg-white/70 p-4">
+    <div className="mt-5 rounded-xl border border-white/10 bg-surface/90 p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink/45">
         Review your mistakes ({mistakes.length})
       </p>
@@ -268,14 +268,14 @@ function MistakeRow({
   };
 
   return (
-    <li className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 ring-1 ring-ink/5">
+    <li className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2 ring-1 ring-white/5">
       <div className="min-w-0">
         <div className="ayah text-2xl leading-tight text-ink" dir="rtl">
           {m.uthmani}
         </div>
         <div className="text-xs text-ink/50">
           {m.skipped ? (
-            <span className="text-amber-700">skipped</span>
+            <span className="text-amber-300">skipped</span>
           ) : (
             <>
               you said <span className="font-arabic text-ink/70" dir="rtl">{m.heard}</span>
@@ -312,8 +312,8 @@ function AudioChip({
   tone: "ink" | "emerald";
   onClick: () => void;
 }) {
-  const base = tone === "emerald" ? "text-emerald ring-emerald/30" : "text-ink/70 ring-ink/15";
-  const on = tone === "emerald" ? "bg-emerald text-white ring-emerald" : "bg-ink text-white ring-ink";
+  const base = tone === "emerald" ? "text-emerald ring-emerald/30" : "text-ink/70 ring-white/15";
+  const on = tone === "emerald" ? "bg-emerald text-white ring-emerald" : "bg-ink text-shell ring-ink";
   return (
     <button
       onClick={onClick}

@@ -68,11 +68,11 @@ function AuthModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl border border-gold/25 bg-white p-6 shadow-soft"
+        className="w-full max-w-sm rounded-2xl border border-gold/25 bg-surface-2 p-6 shadow-soft"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-1 flex items-center justify-between">
@@ -95,7 +95,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-ink/15 px-3.5 py-2.5 text-sm outline-none focus:border-emerald focus:ring-2 focus:ring-emerald/20"
+            className="w-full rounded-xl border border-white/15 px-3.5 py-2.5 text-sm outline-none focus:border-emerald focus:ring-2 focus:ring-emerald/20"
           />
           <input
             type="password"
@@ -104,11 +104,11 @@ function AuthModal({ onClose }: { onClose: () => void }) {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl border border-ink/15 px-3.5 py-2.5 text-sm outline-none focus:border-emerald focus:ring-2 focus:ring-emerald/20"
+            className="w-full rounded-xl border border-white/15 px-3.5 py-2.5 text-sm outline-none focus:border-emerald focus:ring-2 focus:ring-emerald/20"
           />
 
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          {info && <p className="rounded-lg bg-emerald/10 px-3 py-2 text-sm text-emerald-deep">{info}</p>}
+          {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>}
+          {info && <p className="rounded-lg bg-emerald/10 px-3 py-2 text-sm text-emerald-bright">{info}</p>}
 
           <button
             type="submit"
@@ -127,7 +127,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
               setError(null);
               setInfo(null);
             }}
-            className="font-semibold text-emerald-deep underline underline-offset-2"
+            className="font-semibold text-emerald-bright underline underline-offset-2"
           >
             {mode === "in" ? "Create an account" : "Sign in"}
           </button>

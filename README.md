@@ -103,7 +103,14 @@ reading-progress marker.
     words light up as the Sheikh recites them on the Listen page (with 0.75× /
     1× / 1.25× speed), and in the mistake review **Correct** plays *just that
     word* in the qari's voice next to **You**.
-20. **Sources & licences page** (`/about`) crediting every text, audio, model
+20. **A real mushaf.** The Quran text sits on a cream page framed in gold,
+    set in Amiri Quran with justified lines, ornamental verse-end medallions,
+    a surah banner (name, Makki/Madani, verse count) and the basmala where the
+    printed mushaf has it. The app shell around it is dark, Tarteel-style, with
+    a bottom tab bar and the mic in a control dock that stays within reach
+    while the page scrolls. Translation and transliteration are one-tap
+    toggles above the page.
+21. **Sources & licences page** (`/about`) crediting every text, audio, model
     and library source; `THIRD_PARTY.md` has the full review.
 
 The areas each live on their own page — **Recitera** (`/`), **Lyssna**

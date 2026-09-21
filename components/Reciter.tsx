@@ -16,7 +16,8 @@ import type { WordStatus } from "@/lib/align";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
 import { tokenize, normalizeWord } from "@/lib/arabic";
 import { trackLive, mergeLiveStatuses } from "@/lib/live";
-import { useSettings } from "@/lib/settings";
+import { useSettings, updateSettings } from "@/lib/settings";
+import { surahMeta } from "@/lib/quran";
 import { pickBestAlternative } from "@/lib/speech/pickBest";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
@@ -757,11 +758,15 @@ export default function Reciter({
         revealed={revealed}
         onReveal={reveal}
         bookmarks
+        showTranslation={settings.showTranslation}
+        showTranslit={settings.showTranslit}
       />
     ),
     [
       revealed,
       reveal,
+      settings.showTranslation,
+      settings.showTranslit,
       ayat,
       surahNumber,
       showingLive,
@@ -780,96 +785,61 @@ export default function Reciter({
   if (phase === "unsupported") {
     return (
       <div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
           Your browser doesn&apos;t support on-device recitation yet. Open Dugsi in{" "}
           <strong>Google Chrome</strong> (or Safari on iPhone) to use voice feedback — you can still
           read the surah and tajweed guide below.
         </div>
-        <SurahCard>
+        <div className="mt-4">
           <SurahView ayat={ayat} surahNumber={surahNumber} showTajweed />
-        </SurahCard>
+        </div>
       </div>
     );
   }
 
+  const surahInfo = surahMeta(surahNumber);
+
   return (
-    <div className="space-y-6">
-      <EngineStatus
-        modelStatus={modelStatus}
-        modelPercent={modelPercent}
-        model={modelInUse ?? (typeof window !== "undefined" ? pickWhisperModel(settings.quranModel) : null)}
-        engineTick={engineTick}
-        onReEnable={() => {
-          reEnableWhisper();
-          setEngineTick((t) => t + 1);
-        }}
-      />
-
-      <HifzToggle level={hifz} onSelect={setHifz} onPeekWord={peekWord} onPeekVerse={peekVerse} />
-
-      {/* Recorder */}
-      <div className="flex flex-col items-center gap-4">
-        {phase === "recording" ? (
-          <button onClick={stop} className="relative grid h-24 w-24 place-items-center" aria-label="Stop reciting">
-            <span className="absolute inset-0 animate-ring rounded-full bg-red-500/40" />
-            <span className="absolute inset-0 rounded-full bg-red-500/15" />
-            <span className="relative grid h-20 w-20 place-items-center rounded-full bg-red-600 text-white shadow-soft transition active:scale-95">
-              <span className="h-6 w-6 rounded-md bg-white" />
+    <div className="space-y-4">
+      {/* Mushaf toolbar: what is open, and how the page is displayed */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink">
+            {surahInfo?.transliteration ?? `Surah ${surahNumber}`}
+            <span className="text-ink/40"> · </span>
+            <span className="font-normal text-ink/60">
+              {ayat.length === (surahInfo?.ayahCount ?? ayat.length)
+                ? `${ayat.length} verses`
+                : `verses ${ayat[0]?.number}–${ayat[ayat.length - 1]?.number}`}
             </span>
-          </button>
-        ) : (
-          <button
-            onClick={start}
-            disabled={phase === "processing"}
-            className="group relative grid h-24 w-24 place-items-center disabled:opacity-60"
-            aria-label="Start reciting"
-          >
-            <span className="absolute inset-0 rounded-full bg-emerald/10 transition group-hover:bg-emerald/20" />
-            <span className="relative grid h-20 w-20 place-items-center rounded-full bg-gradient-to-b from-emerald to-emerald-deep text-white shadow-soft ring-4 ring-emerald/15 transition group-active:scale-95">
-              {phase === "processing" ? (
-                <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              ) : (
-                <MicIcon className="h-9 w-9" />
-              )}
-            </span>
-          </button>
-        )}
-
-        {phase === "recording" ? (
-          <div className="flex items-center gap-2 text-sm font-medium text-red-600">
-            <span className="rec-dot h-2.5 w-2.5 rounded-full bg-red-600" />
-            Listening · {formatTime(seconds)} · tap to stop
-          </div>
-        ) : phase === "processing" ? (
-          <p className="text-center text-sm text-ink/60">{progress ?? "Working…"}</p>
-        ) : (
-          <p className="text-center text-sm text-ink/60">
-            {phase === "done" || phase === "error"
-              ? "Tap to recite again"
-              : "Tap the mic, recite the verses aloud, then tap to stop."}
           </p>
-        )}
-
-        {phase === "recording" && (
-          <div className="w-full animate-in rounded-2xl border border-emerald/25 bg-white/80 p-4 text-center shadow-soft">
-            <p className="ayah text-2xl text-ink/80" dir="rtl">
-              {liveText || "…"}
-            </p>
-            <LiveTally
-              correct={liveCounts.correct}
-              missing={liveCounts.missing}
-              wrong={liveCounts.wrong}
-              extra={liveExtras}
-              detecting={settings.liveMistakes}
-            />
-          </div>
-        )}
+          <EngineStatus
+            modelStatus={modelStatus}
+            modelPercent={modelPercent}
+            model={modelInUse ?? (typeof window !== "undefined" ? pickWhisperModel(settings.quranModel) : null)}
+            engineTick={engineTick}
+            onReEnable={() => {
+              reEnableWhisper();
+              setEngineTick((t) => t + 1);
+            }}
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Toggle
+            on={settings.showTranslation}
+            label="Translation"
+            onClick={() => updateSettings({ showTranslation: !settings.showTranslation }, userId)}
+          />
+          <Toggle
+            on={settings.showTranslit}
+            label="Latin"
+            onClick={() => updateSettings({ showTranslit: !settings.showTranslit }, userId)}
+          />
+        </div>
       </div>
 
       {error && (
-        <div className="animate-in rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
+        <div className="animate-in rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>
       )}
 
       {feedback && phase === "done" && (
@@ -887,8 +857,90 @@ export default function Reciter({
         />
       )}
 
-      <SurahCard>{surahEl}</SurahCard>
+      {/* The mushaf page */}
+      {surahEl}
+
+      {/* Control dock — pinned above the tab bar while the page scrolls */}
+      <div className="sticky bottom-[4.4rem] z-30">
+        <div className="rounded-2xl border border-white/10 bg-shell/85 p-3 shadow-soft backdrop-blur-md">
+          {phase === "recording" && (
+            <div className="mb-2 px-1 text-center">
+              <p className="ayah truncate text-xl text-ink/80" dir="rtl">
+                {liveText || "…"}
+              </p>
+              <LiveTally
+                correct={liveCounts.correct}
+                missing={liveCounts.missing}
+                wrong={liveCounts.wrong}
+                extra={liveExtras}
+                detecting={settings.liveMistakes}
+              />
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-2">
+            {/* Memorise */}
+            <HifzToggle level={hifz} onSelect={setHifz} onPeekWord={peekWord} onPeekVerse={peekVerse} />
+
+            {/* Mic */}
+            {phase === "recording" ? (
+              <button onClick={stop} className="relative grid h-16 w-16 shrink-0 place-items-center" aria-label="Stop reciting">
+                <span className="absolute inset-0 animate-ring rounded-full bg-red-500/40" />
+                <span className="absolute inset-0 rounded-full bg-red-500/15" />
+                <span className="relative grid h-14 w-14 place-items-center rounded-full bg-red-600 text-white shadow-soft transition active:scale-95">
+                  <span className="h-5 w-5 rounded-md bg-white" />
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={start}
+                disabled={phase === "processing"}
+                className="group relative grid h-16 w-16 shrink-0 place-items-center disabled:opacity-60"
+                aria-label="Start reciting"
+              >
+                <span className="absolute inset-0 rounded-full bg-emerald/15 transition group-hover:bg-emerald/25" />
+                <span className="relative grid h-14 w-14 place-items-center rounded-full bg-gradient-to-b from-emerald-bright to-emerald text-shell shadow-soft ring-4 ring-emerald/20 transition group-active:scale-95">
+                  {phase === "processing" ? (
+                    <span className="h-7 w-7 animate-spin rounded-full border-2 border-shell/40 border-t-shell" />
+                  ) : (
+                    <MicIcon className="h-8 w-8" />
+                  )}
+                </span>
+              </button>
+            )}
+
+            {/* Status */}
+            <div className="min-w-0 flex-1 text-right text-xs text-ink/60">
+              {phase === "recording" ? (
+                <span className="inline-flex items-center gap-1.5 font-medium text-red-400">
+                  <span className="rec-dot h-2 w-2 rounded-full bg-red-500" />
+                  {formatTime(seconds)}
+                </span>
+              ) : phase === "processing" ? (
+                <span>{progress ?? "Working…"}</span>
+              ) : phase === "done" || phase === "error" ? (
+                <span>Tap the mic to recite again</span>
+              ) : (
+                <span>Tap the mic and recite aloud</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={on}
+      className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
+        on ? "bg-emerald/20 text-emerald-bright ring-emerald/40" : "text-ink/50 ring-white/15 hover:text-ink"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -912,7 +964,7 @@ function EngineStatus({
   const capable = typeof window !== "undefined" && whisperCapable();
   const disabled = typeof window !== "undefined" && whisperDisabledByCrashes();
   return (
-    <p className="text-center text-xs text-ink/50">
+    <p className="truncate text-[11px] text-ink/45">
       {modelStatus === "loading" ? (
         `Preparing the precise on device check… ${modelPercent}%`
       ) : capable ? (
@@ -922,7 +974,7 @@ function EngineStatus({
       ) : disabled ? (
         <>
           Live word marking via your browser. The on device check is off after a crash here.{" "}
-          <button onClick={onReEnable} className="font-semibold text-emerald-deep underline underline-offset-2">
+          <button onClick={onReEnable} className="font-semibold text-emerald-bright underline underline-offset-2">
             Try it again
           </button>
         </>
@@ -949,12 +1001,12 @@ function LiveTally({
 }) {
   return (
     <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
-      <span className="font-semibold text-emerald-deep">✓ {correct}</span>
+      <span className="font-semibold text-emerald-bright">✓ {correct}</span>
       {detecting ? (
         <>
-          <span className={wrong > 0 ? "font-semibold text-red-600" : "text-ink/40"}>✗ {wrong} wrong</span>
-          <span className={missing > 0 ? "font-semibold text-amber-700" : "text-ink/40"}>↷ {missing} skipped</span>
-          <span className={extra > 0 ? "font-semibold text-amber-700" : "text-ink/40"}>+ {extra} added</span>
+          <span className={wrong > 0 ? "font-semibold text-red-400" : "text-ink/40"}>✗ {wrong} wrong</span>
+          <span className={missing > 0 ? "font-semibold text-amber-300" : "text-ink/40"}>↷ {missing} skipped</span>
+          <span className={extra > 0 ? "font-semibold text-amber-300" : "text-ink/40"}>+ {extra} added</span>
         </>
       ) : (
         <span className="text-ink/40">Recite at your own pace.</span>
@@ -974,60 +1026,28 @@ function HifzToggle({
   onPeekWord: () => void;
   onPeekVerse: () => void;
 }) {
-  const options: { value: number; label: string }[] = [
-    { value: 0, label: "Off" },
-    { value: 1, label: "Easy" },
-    { value: 2, label: "Medium" },
-    { value: 3, label: "Hard" },
-  ];
+  const labels = ["Off", "Easy", "Medium", "Hard"];
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <div className="inline-flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-ink/45">Memorise</span>
-        <div className="inline-flex rounded-full border border-gold/30 bg-white/70 p-1 text-sm shadow-soft">
-          {options.map((o) => (
-            <button
-              key={o.value}
-              onClick={() => onSelect(o.value)}
-              className={`rounded-full px-3.5 py-1.5 font-medium transition ${
-                level === o.value ? "bg-gold text-white shadow" : "text-ink/70 hover:text-ink"
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+      <button
+        onClick={() => onSelect((level + 1) % 4)}
+        className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition ${
+          level > 0 ? "bg-gold/20 text-gold-soft ring-gold/40" : "text-ink/60 ring-white/15 hover:text-ink"
+        }`}
+        title="Memorisation: hide words and reveal them as you recite"
+      >
+        Memorise · {labels[level]}
+      </button>
       {level > 0 && (
-        <>
-          <div className="mt-1 flex items-center gap-2">
-            <button
-              onClick={onPeekWord}
-              className="rounded-full border border-gold/40 bg-white/80 px-3 py-1 text-xs font-semibold text-gold-deep shadow-soft transition hover:bg-gold/10 active:scale-95"
-            >
-              👁 Peek next word
-            </button>
-            <button
-              onClick={onPeekVerse}
-              className="rounded-full border border-gold/40 bg-white/80 px-3 py-1 text-xs font-semibold text-gold-deep shadow-soft transition hover:bg-gold/10 active:scale-95"
-            >
-              Peek verse
-            </button>
-          </div>
-          <p className="max-w-md text-center text-xs text-ink/50">
-            Hidden words reveal as you recite them correctly. Stuck? Peek at the next word or verse
-            (peeks are counted), or tap any hidden word. Hit the mic and recite from memory.
-          </p>
-        </>
+        <div className="flex items-center gap-1">
+          <button onClick={onPeekWord} className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-gold-soft ring-1 ring-gold/30 hover:bg-gold/10">
+            👁 word
+          </button>
+          <button onClick={onPeekVerse} className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-gold-soft ring-1 ring-gold/30 hover:bg-gold/10">
+            👁 verse
+          </button>
+        </div>
       )}
-    </div>
-  );
-}
-
-function SurahCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-gold/25 bg-white/75 p-6 shadow-soft backdrop-blur-sm sm:p-8">
-      {children}
     </div>
   );
 }
@@ -1053,7 +1073,7 @@ function ResultsPanel({
   // marks — that would tell a correct reciter she failed. Show an honest state.
   if (!feedback.reliable) {
     return (
-      <div className="animate-in rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-soft">
+      <div className="animate-in rounded-2xl border border-amber-400/30 bg-amber-400/10 p-6 shadow-soft">
         <h2 className="text-lg font-bold text-ink">We could not hear you clearly enough</h2>
         <p className="mt-2 text-sm text-ink/70">
           To avoid marking your recitation wrong by mistake, we are not scoring this attempt. Try
@@ -1079,7 +1099,7 @@ function ResultsPanel({
   }
 
   return (
-    <div className="animate-in rounded-2xl border border-emerald/25 bg-white/85 p-6 shadow-soft">
+    <div className="animate-in rounded-2xl border border-emerald/25 bg-surface/90 p-6 shadow-soft">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <ScoreRing score={feedback.score} />
@@ -1092,7 +1112,7 @@ function ResultsPanel({
           <HearYourselfButton recordingUrl={recordingUrl} />
           <button
             onClick={onReset}
-            className="rounded-lg border border-ink/15 px-4 py-2 text-sm font-medium text-ink/80 transition hover:bg-ink/5"
+            className="rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-ink/80 transition hover:bg-white/5"
           >
             Clear
           </button>
@@ -1116,18 +1136,18 @@ function ResultsPanel({
       )}
 
       {rushed.length > 0 && (
-        <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="mt-4 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-200">
           <strong>Tajweed tip:</strong> {rushed.length} elongation{rushed.length > 1 ? "s" : ""}{" "}
           looked rushed (marked ⏱ below). Hold the madd letters longer — especially the 6-count madd
           in <span className="font-arabic">ٱلضَّآلِّينَ</span>.
-          <span className="block text-xs text-amber-700/80">
+          <span className="block text-xs text-amber-200/80">
             Timing estimate from word-level timestamps — treat it as a hint.
           </span>
         </div>
       )}
 
       {hesitations.length > 0 && (
-        <div className="mt-4 rounded-xl border border-ink/10 bg-white/70 p-3 text-sm">
+        <div className="mt-4 rounded-xl border border-white/10 bg-surface/90 p-3 text-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-ink/45">
             Hesitations ({hesitations.length})
           </p>
@@ -1136,7 +1156,7 @@ function ResultsPanel({
           </p>
           <ul className="mt-2 flex flex-wrap gap-2">
             {hesitations.slice(0, 12).map((h, i) => (
-              <li key={i} className="rounded-lg bg-white px-2.5 py-1 ring-1 ring-ink/5">
+              <li key={i} className="rounded-lg bg-surface-2 px-2.5 py-1 ring-1 ring-white/5">
                 <span className="ayah text-lg" dir="rtl">
                   {h.word}
                 </span>
@@ -1168,14 +1188,14 @@ function ResultsPanel({
 }
 
 function ScoreRing({ score }: { score: number }) {
-  const color = score >= 85 ? "#0f766e" : score >= 60 ? "#d97706" : "#dc2626";
+  const color = score >= 85 ? "#4fd8a8" : score >= 60 ? "#fbbf24" : "#f87171";
   const r = 26;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - Math.max(0, Math.min(100, score)) / 100);
   return (
     <div className="relative h-[68px] w-[68px] shrink-0">
       <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90">
-        <circle cx="32" cy="32" r={r} fill="none" stroke="#e7e1d3" strokeWidth="6" />
+        <circle cx="32" cy="32" r={r} fill="none" stroke="#2a3530" strokeWidth="6" />
         <circle
           cx="32"
           cy="32"
@@ -1196,9 +1216,9 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: "good" | "bad" | "warn" }) {
-  const color = tone === "good" ? "#0f766e" : tone === "bad" ? "#dc2626" : "#d97706";
+  const color = tone === "good" ? "#4fd8a8" : tone === "bad" ? "#f87171" : "#fbbf24";
   return (
-    <div className="rounded-xl border border-ink/10 bg-white p-3 text-center sm:text-left">
+    <div className="rounded-xl border border-white/10 bg-surface-2 p-3 text-center sm:text-left">
       <div className="text-2xl font-bold" style={{ color }}>
         {value}
       </div>

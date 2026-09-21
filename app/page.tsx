@@ -2,12 +2,11 @@ import QuranTrainer from "@/components/QuranTrainer";
 import Legend from "@/components/Legend";
 import ProgressPanel from "@/components/ProgressPanel";
 import { Wordmark } from "@/components/Logo";
-import { fatiha } from "@/lib/quran/fatiha";
 import { BUILD_VERSION } from "@/lib/version";
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-gold-soft ring-1 ring-white/15">
+    <span className="rounded-full bg-emerald/10 px-3 py-1 text-xs font-medium text-emerald-bright ring-1 ring-emerald/25">
       {children}
     </span>
   );
@@ -16,49 +15,32 @@ function Badge({ children }: { children: React.ReactNode }) {
 export default function Home() {
   return (
     <main className="mx-auto max-w-3xl px-4 pb-16">
-      {/* Hero */}
-      <header className="relative -mx-4 overflow-hidden rounded-b-[2rem] bg-emerald-dark px-6 pb-10 pt-8 text-center shadow-soft sm:px-10">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.12]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 20%, #e3c987 0 2px, transparent 3px), radial-gradient(circle at 80% 60%, #e3c987 0 2px, transparent 3px)",
-            backgroundSize: "48px 48px",
-          }}
-        />
-        <div className="relative">
-          <div className="flex justify-center">
-            <Wordmark />
-          </div>
-
-          <p className="ayah mx-auto mt-6 text-3xl text-gold-soft sm:text-4xl" dir="rtl">
-            {fatiha.nameArabic}
-          </p>
-          <h1 className="mt-2 text-xl font-semibold text-white sm:text-2xl">
-            Recite the Quran. Get instant feedback.
-          </h1>
-          <p className="mx-auto mt-2 max-w-md text-sm text-white/70">
-            Read aloud and Dugsi checks every word with you — gently, word by word.
-          </p>
-
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            <Badge>100% free</Badge>
-            <Badge>No ads, ever</Badge>
-            <Badge>Live mistake detection</Badge>
-            <Badge>Memorise · peek · goals</Badge>
-            <Badge>Optional account to sync</Badge>
-          </div>
+      {/* Header */}
+      <header className="pt-6 text-center">
+        <div className="flex justify-center">
+          <Wordmark />
+        </div>
+        <h1 className="mt-4 text-xl font-semibold text-ink sm:text-2xl">Recite. Get checked, word by word.</h1>
+        <p className="mx-auto mt-1 max-w-md text-sm text-ink/60">
+          Read from the mushaf below and Dugsi follows along — gently, every word.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <Badge>100% free</Badge>
+          <Badge>No ads, ever</Badge>
+          <Badge>Live mistakes</Badge>
+          <Badge>Memorise · peek · goals</Badge>
+          <Badge>Sync across devices</Badge>
         </div>
       </header>
 
-      {/* Your progress (signed-in) */}
-      <section className="mt-8 empty:mt-0">
-        <ProgressPanel />
+      {/* Recite + mushaf first — the book is the app */}
+      <section className="mt-6">
+        <QuranTrainer />
       </section>
 
-      {/* Recite + surah */}
-      <section className="mt-8">
-        <QuranTrainer />
+      {/* Today */}
+      <section className="mt-8 empty:mt-0">
+        <ProgressPanel />
       </section>
 
       <section className="mt-10">

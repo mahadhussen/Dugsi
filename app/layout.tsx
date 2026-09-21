@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Amiri } from "next/font/google";
+import { Amiri, Amiri_Quran } from "next/font/google";
 import "./globals.css";
 import UpdateChecker from "@/components/UpdateChecker";
 import AppNav from "@/components/AppNav";
+import BottomNav from "@/components/BottomNav";
 import { AuthProvider } from "@/lib/supabase/AuthProvider";
 import AppServices from "@/components/AppServices";
 
@@ -15,6 +16,14 @@ const amiri = Amiri({
   display: "swap",
 });
 
+// A typeface drawn for the mushaf itself (SIL OFL), used for the Quran text.
+const amiriQuran = Amiri_Quran({
+  subsets: ["arabic"],
+  weight: "400",
+  variable: "--font-quran",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Dugsi — Recite & Learn the Quran",
   description:
@@ -24,14 +33,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#08332f",
+  themeColor: "#0b100e",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={amiri.variable}>
+    <html lang="en" className={`${amiri.variable} ${amiriQuran.variable}`}>
       <head>
         <link rel="manifest" href={`${BASE}/manifest.webmanifest`} />
         <link rel="apple-touch-icon" href={`${BASE}/icons/icon-192.png`} />
@@ -39,7 +48,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AuthProvider>
           <AppNav />
-          {children}
+          <div className="pb-20">{children}</div>
+          <BottomNav />
           <UpdateChecker />
           <AppServices />
         </AuthProvider>

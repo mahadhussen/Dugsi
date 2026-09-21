@@ -64,7 +64,7 @@ export default function PrayerView() {
       </section>
 
       {/* Today's times */}
-      <section className="overflow-hidden rounded-2xl border border-gold/25 bg-white/80 shadow-soft">
+      <section className="overflow-hidden rounded-2xl border border-gold/25 bg-surface/90 shadow-soft">
         <ul className="divide-y divide-gold/15">
           {slots.map((s) => (
             <TimeRow key={s.key} slot={s} isNext={!np.tomorrow && s.key === np.slot.key} />
@@ -101,14 +101,14 @@ function TimeRow({ slot, isNext }: { slot: PrayerSlot; isNext: boolean }) {
       <span className="flex items-center gap-3">
         <span
           className={`grid h-8 w-8 place-items-center rounded-full text-sm ${
-            isNext ? "bg-emerald text-white" : slot.isPrayer ? "bg-gold/15 text-gold-deep" : "bg-ink/5 text-ink/40"
+            isNext ? "bg-emerald text-white" : slot.isPrayer ? "bg-gold/15 text-gold-soft" : "bg-ink/5 text-ink/40"
           }`}
         >
           {slot.isPrayer ? "🕌" : "☀︎"}
         </span>
         <span>
           <span className="block text-sm font-semibold">{slot.label}</span>
-          {isNext && <span className="text-[11px] font-medium text-emerald-deep">nästa bön</span>}
+          {isNext && <span className="text-[11px] font-medium text-emerald-bright">nästa bön</span>}
         </span>
       </span>
       <span className="flex items-center gap-3">

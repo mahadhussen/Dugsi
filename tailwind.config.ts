@@ -1,32 +1,43 @@
 import type { Config } from "tailwindcss";
 
+// Design tokens. The app shell is dark (Tarteel-like); the mushaf itself is a
+// cream "paper" page so the Quran text reads like a printed page.
 const config: Config = {
-  content: [
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
+  content: ["./app/**/*.{js,ts,jsx,tsx,mdx}", "./components/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       fontFamily: {
         arabic: ["var(--font-arabic)", "Amiri", "Scheherazade New", "serif"],
+        quran: ["var(--font-quran)", "var(--font-arabic)", "Amiri", "serif"],
       },
       colors: {
-        ink: "#10241f",
-        parchment: "#faf6ec",
+        // Foreground on the dark shell (was the dark "ink" on parchment).
+        ink: "#e9efec",
+        // Shell + surfaces.
+        shell: "#0b100e",
+        surface: "#131a17",
+        "surface-2": "#1a2320",
+        parchment: "#131a17",
+        // The mushaf paper and its ink.
+        paper: "#f6efdf",
+        "paper-deep": "#eadfc6",
+        "paper-ink": "#1c1a14",
         gold: {
-          DEFAULT: "#c9a24b",
-          soft: "#e3c987",
+          DEFAULT: "#cfae5e",
+          soft: "#e6cf8f",
           deep: "#a9842f",
         },
         emerald: {
-          DEFAULT: "#0f766e",
-          deep: "#0b4f4a",
-          dark: "#08332f",
+          DEFAULT: "#159f78",
+          bright: "#4fd8a8",
+          deep: "#0f7a5c",
+          dark: "#0d1613",
         },
       },
       boxShadow: {
-        soft: "0 10px 30px -12px rgba(8, 51, 47, 0.35)",
-        glow: "0 0 0 6px rgba(201, 162, 75, 0.18)",
+        soft: "0 10px 30px -12px rgba(0, 0, 0, 0.6)",
+        glow: "0 0 0 6px rgba(79, 216, 168, 0.18)",
+        paper: "0 20px 60px -20px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(169,132,47,0.25)",
       },
       keyframes: {
         ring: {

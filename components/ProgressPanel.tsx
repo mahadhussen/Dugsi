@@ -36,18 +36,18 @@ export default function ProgressPanel() {
     .slice(0, 3);
 
   return (
-    <div className="rounded-2xl border border-gold/25 bg-white/70 p-5 shadow-soft backdrop-blur-sm sm:p-6">
+    <div className="rounded-2xl border border-gold/25 bg-surface/90 p-5 shadow-soft backdrop-blur-sm sm:p-6">
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="h-5 w-1.5 rounded-full bg-gold" />
           <h3 className="text-sm font-semibold uppercase tracking-wide text-ink/70">Today</h3>
         </div>
-        <Link href="/progress" className="text-xs font-semibold text-emerald-deep underline underline-offset-2">
+        <Link href="/progress" className="text-xs font-semibold text-emerald-bright underline underline-offset-2">
           Full progress →
         </Link>
       </div>
 
-      <div className="flex items-center gap-4 rounded-xl border border-emerald/15 bg-emerald/5 p-4">
+      <div className="flex items-center gap-4 rounded-xl border border-emerald/15 bg-emerald/10 p-4">
         <GoalRing pct={Math.min(1, (minutes / settings.dailyMinutes + stats.todayCount / settings.dailySessions) / 2)} met={goalMet} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-ink">
@@ -74,7 +74,7 @@ export default function ProgressPanel() {
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/45">Work on next</p>
           <ul className="space-y-2">
             {needsWork.map((s) => (
-              <li key={s.surah} className="flex items-center justify-between rounded-xl border border-ink/10 bg-white px-3 py-2">
+              <li key={s.surah} className="flex items-center justify-between rounded-xl border border-white/10 bg-surface-2 px-3 py-2">
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-ink/80">{surahMeta(s.surah)?.transliteration ?? `Surah ${s.surah}`}</span>
                   <span className="text-xs text-ink/45">
@@ -99,11 +99,11 @@ export default function ProgressPanel() {
 function GoalRing({ pct, met }: { pct: number; met: boolean }) {
   const r = 22;
   const c = 2 * Math.PI * r;
-  const color = met ? "#0f766e" : "#c9a24b";
+  const color = met ? "#4fd8a8" : "#cfae5e";
   return (
     <div className="relative h-14 w-14 shrink-0">
       <svg viewBox="0 0 56 56" className="h-full w-full -rotate-90">
-        <circle cx="28" cy="28" r={r} fill="none" stroke="#e7e1d3" strokeWidth="5" />
+        <circle cx="28" cy="28" r={r} fill="none" stroke="#2a3530" strokeWidth="5" />
         <circle cx="28" cy="28" r={r} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - Math.max(0, Math.min(1, pct)))} />
       </svg>
       <span className="absolute inset-0 grid place-items-center text-sm font-bold" style={{ color }}>
@@ -115,8 +115,8 @@ function GoalRing({ pct, met }: { pct: number; met: boolean }) {
 
 function Metric({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-xl border border-ink/10 bg-white p-3">
-      <div className="text-2xl font-bold text-emerald-deep">{value}</div>
+    <div className="rounded-xl border border-white/10 bg-surface-2 p-3">
+      <div className="text-2xl font-bold text-emerald-bright">{value}</div>
       <div className="text-xs text-ink/55">{label}</div>
     </div>
   );

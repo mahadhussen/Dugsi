@@ -13,12 +13,12 @@ export function LogoMark({ size = 40, className = "" }: { size?: number; classNa
     >
       <defs>
         <linearGradient id="dugsi-tile" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#0f766e" />
+          <stop offset="0%" stopColor="#159f78" />
           <stop offset="100%" stopColor="#08332f" />
         </linearGradient>
       </defs>
       <rect x="1" y="1" width="46" height="46" rx="13" fill="url(#dugsi-tile)" />
-      <rect x="1" y="1" width="46" height="46" rx="13" stroke="#c9a24b" strokeOpacity="0.45" />
+      <rect x="1" y="1" width="46" height="46" rx="13" stroke="#cfae5e" strokeOpacity="0.45" />
       {/* mihrab arch */}
       <path
         d="M15 37V23c0-6 4-10 9-10s9 4 9 10v14"

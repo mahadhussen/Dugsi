@@ -74,9 +74,7 @@ export default function ListenView() {
           <span className="h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
         </div>
       ) : (
-        <div className="rounded-2xl border border-gold/20 bg-white/70 px-4 shadow-soft">
-          <SurahView ayat={surah.ayat} surahNumber={surahId} showTajweed activeIndex={activeIndex} bookmarks />
-        </div>
+        <SurahView ayat={surah.ayat} surahNumber={surahId} showTajweed activeIndex={activeIndex} bookmarks />
       )}
     </div>
   );

@@ -71,7 +71,7 @@ export default function ProgressDashboard() {
         </p>
       </header>
 
-      <nav className="flex gap-1 overflow-x-auto rounded-full border border-gold/25 bg-white/70 p-1 text-sm shadow-soft">
+      <nav className="flex gap-1 overflow-x-auto rounded-full border border-gold/25 bg-surface/90 p-1 text-sm shadow-soft">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -164,7 +164,7 @@ export default function ProgressDashboard() {
             {bookmarks.map((b) => {
               const meta = surahMeta(b.surah);
               return (
-                <li key={`${b.surah}:${b.verse}`} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-ink/5">
+                <li key={`${b.surah}:${b.verse}`} className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm ring-1 ring-white/5">
                   <Link href={`/?surah=${b.surah}&verse=${b.verse}`} className="min-w-0 truncate text-ink hover:underline">
                     {meta?.transliteration ?? `Surah ${b.surah}`} · verse {b.verse}
                     <span className="ayah ml-2 text-lg text-emerald" dir="rtl">
@@ -173,7 +173,7 @@ export default function ProgressDashboard() {
                   </Link>
                   <button
                     onClick={() => toggleBookmark(b.surah, b.verse, user?.id ?? null)}
-                    className="shrink-0 text-xs text-ink/40 hover:text-red-600"
+                    className="shrink-0 text-xs text-ink/40 hover:text-red-400"
                     aria-label="Remove bookmark"
                   >
                     remove
@@ -194,9 +194,9 @@ function Overview({ stats }: { stats: Stats }) {
   return (
     <div className="space-y-5">
       {empty && (
-        <div className="rounded-2xl border border-emerald/25 bg-emerald/5 p-4 text-sm text-ink/70">
+        <div className="rounded-2xl border border-emerald/25 bg-emerald/10 p-4 text-sm text-ink/70">
           Nothing recorded yet.{" "}
-          <Link href="/" className="font-semibold text-emerald-deep underline underline-offset-2">
+          <Link href="/" className="font-semibold text-emerald-bright underline underline-offset-2">
             Recite a surah
           </Link>{" "}
           and your minutes, verses, streak and mistakes start showing up here.
@@ -232,11 +232,11 @@ function Overview({ stats }: { stats: Stats }) {
         sub={`${stats.totalSessions} recitations · ${fmtMin(stats.totalSeconds)} minutes · ${stats.totalVerses} verses`}
       >
         <div className="grid grid-cols-2 gap-3 text-center text-sm sm:grid-cols-5">
-          <Mini value={stats.totals.correct} label="correct words" tone="#0f766e" />
-          <Mini value={stats.totals.wrong} label="wrong" tone="#dc2626" />
-          <Mini value={stats.totals.missing} label="skipped" tone="#d97706" />
-          <Mini value={stats.totals.extra} label="added" tone="#d97706" />
-          <Mini value={stats.totals.peeks} label="peeks" tone="#a9842f" />
+          <Mini value={stats.totals.correct} label="correct words" tone="#4fd8a8" />
+          <Mini value={stats.totals.wrong} label="wrong" tone="#f87171" />
+          <Mini value={stats.totals.missing} label="skipped" tone="#fbbf24" />
+          <Mini value={stats.totals.extra} label="added" tone="#fbbf24" />
+          <Mini value={stats.totals.peeks} label="peeks" tone="#d4b46a" />
         </div>
       </Card>
 
@@ -255,9 +255,9 @@ function fmtMin(seconds: number): string {
 
 function Tile({ value, unit, label, hint }: { value: string; unit: string; label: string; hint?: string }) {
   return (
-    <div className="rounded-2xl border border-gold/25 bg-white/80 p-3 shadow-soft">
+    <div className="rounded-2xl border border-gold/25 bg-surface/90 p-3 shadow-soft">
       <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-bold text-emerald-deep">{value}</span>
+        <span className="text-2xl font-bold text-emerald-bright">{value}</span>
         <span className="text-xs text-ink/50">{unit}</span>
       </div>
       <div className="text-xs text-ink/60">{label}</div>
@@ -268,7 +268,7 @@ function Tile({ value, unit, label, hint }: { value: string; unit: string; label
 
 function Mini({ value, label, tone }: { value: number; label: string; tone: string }) {
   return (
-    <div className="rounded-xl border border-ink/10 bg-white p-2">
+    <div className="rounded-xl border border-white/10 bg-surface-2 p-2">
       <div className="text-lg font-bold" style={{ color: tone }}>
         {value}
       </div>
@@ -279,7 +279,7 @@ function Mini({ value, label, tone }: { value: number; label: string; tone: stri
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-gold/25 bg-white/70 p-4 shadow-soft backdrop-blur-sm sm:p-5">
+    <section className="rounded-2xl border border-gold/25 bg-surface/90 p-4 shadow-soft backdrop-blur-sm sm:p-5">
       <div className="mb-3 flex items-center gap-2">
         <span className="h-5 w-1.5 rounded-full bg-gold" />
         <div>

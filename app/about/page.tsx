@@ -95,8 +95,8 @@ function List({ items }: { items: Source[] }) {
   return (
     <ul className="space-y-2">
       {items.map((s) => (
-        <li key={s.name} className="rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm">
-          <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-deep underline underline-offset-2">
+        <li key={s.name} className="rounded-xl border border-white/10 bg-surface-2 px-3 py-2 text-sm">
+          <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-bright underline underline-offset-2">
             {s.name}
           </a>
           <p className="text-ink/75">{s.what}</p>
@@ -118,7 +118,7 @@ export default function AboutPage() {
         </p>
       </header>
 
-      <section className="rounded-2xl border border-gold/25 bg-white/70 p-4 shadow-soft sm:p-5">
+      <section className="rounded-2xl border border-gold/25 bg-surface/90 p-4 shadow-soft sm:p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">Honest limits</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink/75">
           <li>Speech recognition can misread classical Arabic. A word marked wrong may be the recogniser, not you.</li>
@@ -128,12 +128,12 @@ export default function AboutPage() {
         </ul>
       </section>
 
-      <section className="rounded-2xl border border-gold/25 bg-white/70 p-4 shadow-soft sm:p-5">
+      <section className="rounded-2xl border border-gold/25 bg-surface/90 p-4 shadow-soft sm:p-5">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/70">Quran text, translation & audio</h2>
         <List items={DATA} />
       </section>
 
-      <section className="rounded-2xl border border-gold/25 bg-white/70 p-4 shadow-soft sm:p-5">
+      <section className="rounded-2xl border border-gold/25 bg-surface/90 p-4 shadow-soft sm:p-5">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/70">Speech & AI models</h2>
         <List items={MODELS} />
         <p className="mt-2 text-xs text-ink/50">
@@ -141,7 +141,7 @@ export default function AboutPage() {
         </p>
       </section>
 
-      <section className="rounded-2xl border border-gold/25 bg-white/70 p-4 shadow-soft sm:p-5">
+      <section className="rounded-2xl border border-gold/25 bg-surface/90 p-4 shadow-soft sm:p-5">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/70">Open-source libraries</h2>
         <List items={LIBS} />
       </section>

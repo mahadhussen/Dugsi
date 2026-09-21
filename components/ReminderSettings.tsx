@@ -55,7 +55,7 @@ export default function ReminderSettings() {
 
   return (
     <div className="space-y-3">
-      <label className="flex items-center justify-between gap-3 rounded-xl border border-ink/10 bg-white p-3 text-sm">
+      <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-surface-2 p-3 text-sm">
         <span>
           <span className="block font-semibold text-ink">Daily reminder</span>
           <span className="block text-xs text-ink/55">A nudge at your chosen time to keep the streak alive.</span>
@@ -63,14 +63,14 @@ export default function ReminderSettings() {
         <input type="checkbox" checked={settings.reminderEnabled} onChange={() => void toggleEnabled()} className="h-5 w-5 accent-emerald" />
       </label>
 
-      <div className={`space-y-3 rounded-xl border border-ink/10 bg-white p-3 text-sm ${settings.reminderEnabled ? "" : "opacity-60"}`}>
+      <div className={`space-y-3 rounded-xl border border-white/10 bg-surface-2 p-3 text-sm ${settings.reminderEnabled ? "" : "opacity-60"}`}>
         <div className="flex items-center justify-between gap-3">
           <span className="text-ink/80">Time</span>
           <input
             type="time"
             value={settings.reminderTime}
             onChange={(e) => updateSettings({ reminderTime: e.target.value }, userId)}
-            className="rounded-lg border border-gold/30 bg-white px-2 py-1 text-sm outline-none focus:border-emerald"
+            className="rounded-lg border border-gold/30 bg-surface-2 px-2 py-1 text-sm outline-none focus:border-emerald"
           />
         </div>
         <div>
@@ -84,7 +84,7 @@ export default function ReminderSettings() {
                   key={d}
                   onClick={() => toggleDay(d)}
                   className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition ${
-                    on ? "bg-emerald text-white ring-emerald" : "bg-white text-ink/70 ring-ink/15 hover:bg-ink/5"
+                    on ? "bg-emerald text-white ring-emerald" : "bg-surface-2 text-ink/70 ring-white/15 hover:bg-white/5"
                   }`}
                 >
                   {label}
@@ -94,7 +94,7 @@ export default function ReminderSettings() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => void test()} className="rounded-lg border border-ink/15 px-3 py-1.5 text-xs font-medium text-ink/80 hover:bg-ink/5">
+          <button onClick={() => void test()} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-ink/80 hover:bg-white/5">
             Send a test notification
           </button>
           <button onClick={downloadIcs} className="rounded-lg bg-emerald px-3 py-1.5 text-xs font-semibold text-white shadow-soft">

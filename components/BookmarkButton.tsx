@@ -16,7 +16,7 @@ export default function BookmarkButton({ surah, verse }: { surah: number; verse:
       aria-label={on ? "Remove bookmark" : "Bookmark this verse"}
       title={on ? "Bookmarked" : "Bookmark"}
       className={`ml-0.5 inline-grid h-7 w-7 place-items-center rounded-full align-middle transition ${
-        on ? "text-gold-deep" : "text-ink/30 hover:bg-gold/10 hover:text-gold-deep"
+        on ? "text-gold-deep" : "text-paper-ink/35 hover:bg-gold/15 hover:text-gold-deep"
       }`}
     >
       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill={on ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" aria-hidden>

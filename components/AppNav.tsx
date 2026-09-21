@@ -46,7 +46,7 @@ export default function AppNav() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-emerald-dark/95 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-shell/90 backdrop-blur">
         <div className="relative mx-auto flex max-w-3xl items-center gap-2 px-3 py-2.5">
           <button
             onClick={() => setOpen(true)}
@@ -65,14 +65,14 @@ export default function AppNav() {
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex bg-ink/40 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex bg-black/60 backdrop-blur-sm"
           onClick={() => setOpen(false)}
         >
           <nav
             className="flex h-full w-72 max-w-[80%] flex-col bg-parchment shadow-soft"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-gold/20 bg-emerald-dark px-5 py-4">
+            <div className="flex items-center justify-between border-b border-gold/20 bg-shell px-5 py-4">
               <span className="text-lg font-bold text-white">Dugsi</span>
               <button
                 onClick={() => setOpen(false)}
@@ -90,18 +90,18 @@ export default function AppNav() {
                     <Link
                       href={l.href}
                       className={`flex items-center gap-3 rounded-xl px-3 py-3 transition ${
-                        on ? "bg-emerald/10 ring-1 ring-emerald/25" : "hover:bg-emerald/5"
+                        on ? "bg-emerald/15 ring-1 ring-emerald/30" : "hover:bg-white/5"
                       }`}
                     >
                       <span
                         className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
-                          on ? "bg-emerald text-white" : "bg-gold/15 text-emerald"
+                          on ? "bg-emerald text-white" : "bg-white/5 text-emerald-bright"
                         }`}
                       >
                         <Icon name={l.icon} className="h-4 w-4" />
                       </span>
                       <span className="min-w-0">
-                        <span className={`block text-sm font-semibold ${on ? "text-emerald-deep" : "text-ink"}`}>
+                        <span className={`block text-sm font-semibold ${on ? "text-emerald-bright" : "text-ink"}`}>
                           {l.label}
                         </span>
                         <span className="block truncate text-xs text-ink/50">{l.sub}</span>

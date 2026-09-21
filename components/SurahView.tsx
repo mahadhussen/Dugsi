@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { Ayah } from "@/lib/quran/types";
+import { surahMeta } from "@/lib/quran";
 import { primaryRuleColor } from "@/lib/tajweed/rules";
 import type { WordStatus } from "@/lib/align";
 import PlayButton from "./PlayButton";
@@ -30,6 +31,11 @@ interface Props {
   onReveal?: (refIndex: number) => void;
   /** Show verse bookmark toggles. */
   bookmarks?: boolean;
+  /** Translation / transliteration under each verse. */
+  showTranslation?: boolean;
+  showTranslit?: boolean;
+  /** Surah banner + basmala at the top of the page (off when showing a range). */
+  header?: boolean;
 }
 
 /** Fraction of words hidden at each Hifz level. */
@@ -71,11 +77,12 @@ interface VerseProps {
   revealed?: Set<number>;
   onReveal?: (refIndex: number) => void;
   bookmarks: boolean;
+  showTranslation: boolean;
+  showTranslit: boolean;
 }
 
 const VerseBlock = memo(function VerseBlock({
   ayah,
-  index,
   surahNumber,
   baseRefIndex,
   statuses,
@@ -87,6 +94,8 @@ const VerseBlock = memo(function VerseBlock({
   revealed,
   onReveal,
   bookmarks,
+  showTranslation,
+  showTranslit,
 }: VerseProps) {
   const hasFeedback = !!statuses;
   const len = ayah.words.length;
@@ -110,9 +119,14 @@ const VerseBlock = memo(function VerseBlock({
     }
   }
 
+  // Memorising: the transliteration would give the words away, and the
+  // translation is a strong hint — hide them as the level rises.
+  const translit = showTranslit && maskLevel === 0 ? ayah.translit : undefined;
+  const translation = showTranslation && maskLevel < 2 ? ayah.translation : undefined;
+
   return (
-    <div className={`ayah-block py-5 ${index > 0 ? "border-t border-gold/15" : ""}`}>
-      <p className="ayah text-3xl sm:text-[2.1rem]">
+    <div className="ayah-block py-1">
+      <p className="ayah">
         {needWords ? (
           ayah.words.map((word, i) => {
             const idx = baseRefIndex + i;
@@ -120,8 +134,7 @@ const VerseBlock = memo(function VerseBlock({
             const madd = maddVerdicts?.[idx];
             // Memorisation: hide the word unless tapped open or recited correctly.
             const said = status === "correct" || status === "close";
-            const masked =
-              maskLevel > 0 && isMaskedSlot(idx, maskLevel) && !revealed?.has(idx) && !said;
+            const masked = maskLevel > 0 && isMaskedSlot(idx, maskLevel) && !revealed?.has(idx) && !said;
             if (masked) {
               return (
                 <span
@@ -136,8 +149,7 @@ const VerseBlock = memo(function VerseBlock({
                 </span>
               );
             }
-            const colorClass =
-              !hasFeedback && showTajweed ? primaryRuleColor(word.rules ?? []) : null;
+            const colorClass = !hasFeedback && showTajweed ? primaryRuleColor(word.rules ?? []) : null;
             const statusBg = status ? statusClass[status] : "";
             const active = activeIndex === idx ? "word-active" : "";
             return (
@@ -154,22 +166,24 @@ const VerseBlock = memo(function VerseBlock({
         ) : (
           <span>{ayah.words.map((w) => w.uthmani).join(" ")} </span>
         )}
-        <span className="ayah-medallion mx-1 align-middle">{toArabicNumeral(ayah.number)}</span>
-        <PlayButton surah={surahNumber} ayah={ayah.number} />
-        {bookmarks && <BookmarkButton surah={surahNumber} verse={ayah.number} />}
+        <span className="ayah-medallion mx-1">{toArabicNumeral(ayah.number)}</span>
       </p>
-      {/* Memorising: the transliteration would give the words away, and the
-          translation is a strong hint — hide them as the level rises. */}
-      {ayah.translit && maskLevel === 0 && (
-        <p className="mt-2 text-sm italic text-emerald/80" dir="ltr">
-          {ayah.translit}
-        </p>
-      )}
-      {ayah.translation && maskLevel < 2 && (
-        <p className="text-sm text-ink/60" dir="ltr">
-          {ayah.translation}
-        </p>
-      )}
+      {/* A quiet tools line: listen, bookmark, and the translation if shown. */}
+      <div className="mb-3 flex items-start gap-2 text-[13px] leading-relaxed text-paper-ink/70" dir="ltr">
+        <span className="verse-tools mt-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-full bg-paper-deep/60 px-1 text-paper-ink/70">
+          <PlayButton surah={surahNumber} ayah={ayah.number} />
+          {bookmarks && <BookmarkButton surah={surahNumber} verse={ayah.number} />}
+        </span>
+        <span className="min-w-0 flex-1">
+          {translit && <span className="block italic text-paper-ink/60">{translit}</span>}
+          {translation && (
+            <span className="block">
+              <span className="mr-1 text-[10px] font-semibold text-gold-deep/80">{ayah.number}</span>
+              {translation}
+            </span>
+          )}
+        </span>
+      </div>
     </div>
   );
 }, versesEqual);
@@ -179,25 +193,46 @@ function versesEqual(prev: VerseProps, next: VerseProps): boolean {
   if (prev.tajweedEveryWord !== next.tajweedEveryWord) return false;
   if (prev.maskLevel !== next.maskLevel) return false;
   if (prev.bookmarks !== next.bookmarks) return false;
-  if (prev.ayah !== next.ayah || prev.baseRefIndex !== next.baseRefIndex || prev.index !== next.index)
-    return false;
+  if (prev.showTranslation !== next.showTranslation || prev.showTranslit !== next.showTranslit) return false;
+  if (prev.ayah !== next.ayah || prev.baseRefIndex !== next.baseRefIndex || prev.index !== next.index) return false;
 
   const base = next.baseRefIndex;
   const len = next.ayah.words.length;
-  const prevActiveHere =
-    prev.activeIndex !== undefined && prev.activeIndex >= base && prev.activeIndex < base + len;
-  const nextActiveHere =
-    next.activeIndex !== undefined && next.activeIndex >= base && next.activeIndex < base + len;
+  const prevActiveHere = prev.activeIndex !== undefined && prev.activeIndex >= base && prev.activeIndex < base + len;
+  const nextActiveHere = next.activeIndex !== undefined && next.activeIndex >= base && next.activeIndex < base + len;
   if ((prevActiveHere || nextActiveHere) && prev.activeIndex !== next.activeIndex) return false;
 
   for (let i = 0; i < len; i++) {
     const idx = base + i;
     if (prev.statuses?.[idx] !== next.statuses?.[idx]) return false;
     if (prev.maddVerdicts?.[idx] !== next.maddVerdicts?.[idx]) return false;
-    if (next.maskLevel > 0 && (prev.revealed?.has(idx) ?? false) !== (next.revealed?.has(idx) ?? false))
-      return false;
+    if (next.maskLevel > 0 && (prev.revealed?.has(idx) ?? false) !== (next.revealed?.has(idx) ?? false)) return false;
   }
   return true;
+}
+
+/** The ornamental surah banner and, where the mushaf prints it, the basmala. */
+export function SurahHeader({ surahNumber }: { surahNumber: number }) {
+  const meta = surahMeta(surahNumber);
+  if (!meta) return null;
+  // Al-Fatiha's first verse *is* the basmala; At-Tawbah has none.
+  const basmala = surahNumber !== 1 && surahNumber !== 9;
+  return (
+    <div className="mb-3 text-center">
+      <div className="surah-banner mx-auto flex max-w-sm items-center justify-between gap-3 px-5 py-2">
+        <span className="text-[10px] uppercase tracking-[0.2em] text-gold-deep/80">{meta.type === "meccan" ? "Makkiyyah" : "Madaniyyah"}</span>
+        <span className="font-quran text-2xl text-paper-ink" dir="rtl">
+          سُورَةُ {meta.nameArabic}
+        </span>
+        <span className="text-[10px] uppercase tracking-[0.2em] text-gold-deep/80">{meta.ayahCount} āyāt</span>
+      </div>
+      {basmala && (
+        <p className="basmala mt-3" dir="rtl">
+          بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default function SurahView({
@@ -213,6 +248,9 @@ export default function SurahView({
   revealed: revealedProp,
   onReveal: onRevealProp,
   bookmarks = false,
+  showTranslation = true,
+  showTranslit = false,
+  header = true,
 }: Props) {
   const wordOffsets = useMemo(() => {
     const o: number[] = [];
@@ -244,6 +282,7 @@ export default function SurahView({
   const verseEls = useRef<(HTMLDivElement | null)[]>([]);
   const lastActiveVerse = useRef(-1);
   const virtualized = ayat.length > 20;
+  const showHeader = header && ayat.length > 0 && ayat[0].number === 1;
 
   // Follow the reciter, book-style: keep the verse being recited centred (a touch
   // above centre, so the next verse peeks in and you can read on without ever
@@ -289,17 +328,23 @@ export default function SurahView({
       revealed={revealed}
       onReveal={reveal}
       bookmarks={bookmarks}
+      showTranslation={showTranslation}
+      showTranslit={showTranslit}
     />
   );
 
   // Short surahs (e.g. Al-Fatiha): render plainly — no need to virtualise.
   if (!virtualized) {
     return (
-      <div>
+      <div className="mushaf px-5 py-6 sm:px-8 sm:py-8">
+        {showHeader && <SurahHeader surahNumber={surahNumber} />}
         {ayat.map((a, i) => (
-          <div key={a.number} ref={(el) => {
-            verseEls.current[i] = el;
-          }}>
+          <div
+            key={a.number}
+            ref={(el) => {
+              verseEls.current[i] = el;
+            }}
+          >
             {renderVerse(i)}
           </div>
         ))}
@@ -308,19 +353,20 @@ export default function SurahView({
   }
 
   return (
-    <Virtuoso
-      ref={virtuosoRef}
-      useWindowScroll
-      totalCount={ayat.length}
-      overscan={400}
-      increaseViewportBy={250}
-      initialTopMostItemIndex={
-        initialTopVerse && initialTopVerse > 1
-          ? { index: initialTopVerse - 1, align: "start" }
-          : 0
-      }
-      rangeChanged={(r) => onTopVerseChange?.(ayat[r.startIndex]?.number ?? 1)}
-      itemContent={(i) => renderVerse(i)}
-    />
+    <div className="mushaf px-5 py-6 sm:px-8 sm:py-8">
+      <Virtuoso
+        ref={virtuosoRef}
+        useWindowScroll
+        totalCount={ayat.length}
+        overscan={400}
+        increaseViewportBy={250}
+        components={showHeader ? { Header: () => <SurahHeader surahNumber={surahNumber} /> } : undefined}
+        initialTopMostItemIndex={
+          initialTopVerse && initialTopVerse > 1 ? { index: initialTopVerse - 1, align: "start" } : 0
+        }
+        rangeChanged={(r) => onTopVerseChange?.(ayat[r.startIndex]?.number ?? 1)}
+        itemContent={(i) => renderVerse(i)}
+      />
+    </div>
   );
 }

@@ -76,7 +76,7 @@ export default function AdhanPlayer() {
   const current = getAdhan(id);
 
   return (
-    <div className="rounded-2xl border border-gold/25 bg-white/80 p-5 shadow-soft">
+    <div className="rounded-2xl border border-gold/25 bg-surface/90 p-5 shadow-soft">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-ink/45">Böneutropare · adhan</p>
@@ -113,7 +113,7 @@ export default function AdhanPlayer() {
             className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${
               a.id === id
                 ? "bg-emerald text-white ring-emerald"
-                : "bg-white text-ink/70 ring-gold/30 hover:ring-emerald/40"
+                : "bg-surface-2 text-ink/70 ring-gold/30 hover:ring-emerald/40"
             }`}
           >
             {a.name}

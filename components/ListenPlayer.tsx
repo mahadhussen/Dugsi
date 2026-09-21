@@ -215,7 +215,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: P
   const progress = ayahCount > 1 ? ((verse - 1) / (ayahCount - 1)) * 100 : 0;
 
   return (
-    <div className="rounded-2xl border border-emerald/20 bg-emerald-dark px-5 py-4 text-white shadow-soft">
+    <div className="rounded-2xl border border-emerald/25 bg-surface-2 px-5 py-4 text-white shadow-soft">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-gold-soft/80">Listen to the Quran</p>
@@ -271,10 +271,10 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: P
         <button
           onClick={togglePlay}
           aria-label={intendPlay ? "Pause" : "Play"}
-          className="grid h-14 w-14 place-items-center rounded-full bg-gold text-emerald-dark shadow-soft transition hover:brightness-105 active:scale-95"
+          className="grid h-14 w-14 place-items-center rounded-full bg-gradient-to-b from-emerald-bright to-emerald text-shell shadow-soft transition hover:brightness-105 active:scale-95"
         >
           {status === "loading" && intendPlay ? (
-            <span className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-dark/40 border-t-emerald-dark" />
+            <span className="h-6 w-6 animate-spin rounded-full border-2 border-shell/40 border-t-shell" />
           ) : intendPlay ? (
             <svg viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor" aria-hidden>
               <rect x="6" y="5" width="4" height="14" rx="1" />

@@ -21,6 +21,9 @@ export interface Settings {
   quranModel: boolean;
   /** Stop the recording by itself after a long silence at the end. */
   autoStop: boolean;
+  /** Show the translation / transliteration under each verse of the mushaf. */
+  showTranslation: boolean;
+  showTranslit: boolean;
   reminderEnabled: boolean;
   /** "HH:MM" local time. */
   reminderTime: string;
@@ -37,6 +40,8 @@ export const DEFAULT_SETTINGS: Settings = {
   liveMistakes: true,
   quranModel: true,
   autoStop: false,
+  showTranslation: true,
+  showTranslit: false,
   reminderEnabled: false,
   reminderTime: "20:00",
   reminderDays: [],
@@ -69,6 +74,8 @@ function sanitize(x: Partial<Settings> | null | undefined): Settings {
     liveMistakes: s.liveMistakes !== false,
     quranModel: s.quranModel !== false,
     autoStop: !!s.autoStop,
+    showTranslation: s.showTranslation !== false,
+    showTranslit: !!s.showTranslit,
     reminderEnabled: !!s.reminderEnabled,
     reminderTime: /^\d{2}:\d{2}$/.test(String(s.reminderTime)) ? String(s.reminderTime) : "20:00",
     reminderDays: Array.isArray(s.reminderDays) ? s.reminderDays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) : [],

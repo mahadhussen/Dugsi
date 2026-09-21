@@ -40,7 +40,7 @@ export default function UpdateChecker() {
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-3">
+    <div className="fixed inset-x-0 bottom-20 z-50 flex justify-center p-3">
       <button
         onClick={update}
         className="rounded-full bg-emerald px-5 py-2.5 text-sm font-semibold text-white shadow-soft animate-in"

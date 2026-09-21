@@ -50,10 +50,10 @@ export default function VerseRange({
     onChange({ from: f, to: t });
   };
 
-  const input = "w-16 rounded-lg border border-gold/30 bg-white px-2 py-1 text-center text-sm outline-none focus:border-emerald";
+  const input = "w-16 rounded-lg border border-gold/30 bg-surface-2 px-2 py-1 text-center text-sm outline-none focus:border-emerald";
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-gold/20 bg-white/60 px-3 py-2 text-sm shadow-soft">
+    <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-gold/20 bg-surface/80 px-3 py-2 text-sm shadow-soft">
       <span className="text-xs font-semibold uppercase tracking-wide text-ink/45">Practise verses</span>
       <input
         type="number"
@@ -86,10 +86,10 @@ export default function VerseRange({
       </button>
       {range && (
         <>
-          <button onClick={() => step(-1)} aria-label="Previous range" className="rounded-lg border border-ink/10 px-2 py-1 text-xs text-ink/70 hover:bg-ink/5">
+          <button onClick={() => step(-1)} aria-label="Previous range" className="rounded-lg border border-white/10 px-2 py-1 text-xs text-ink/70 hover:bg-white/5">
             ◀
           </button>
-          <button onClick={() => step(1)} aria-label="Next range" className="rounded-lg border border-ink/10 px-2 py-1 text-xs text-ink/70 hover:bg-ink/5">
+          <button onClick={() => step(1)} aria-label="Next range" className="rounded-lg border border-white/10 px-2 py-1 text-xs text-ink/70 hover:bg-white/5">
             ▶
           </button>
           <button onClick={() => onChange(null)} className="text-xs text-ink/60 underline underline-offset-2 hover:text-ink">
