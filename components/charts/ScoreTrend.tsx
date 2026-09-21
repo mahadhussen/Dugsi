@@ -23,11 +23,11 @@ export default function ScoreTrend({ points }: { points: { score: number; create
     <div>
       <svg viewBox={`0 0 ${w} ${h}`} className="block h-24 w-full" role="img" aria-label="Score trend">
         {[90, 60].map((g) => (
-          <line key={g} x1={padX} x2={w - padX} y1={y(g)} y2={y(g)} stroke="#e9efec" strokeOpacity="0.08" strokeDasharray="2 3" />
+          <line key={g} x1={padX} x2={w - padX} y1={y(g)} y2={y(g)} stroke="var(--chart-text)" strokeOpacity="0.08" strokeDasharray="2 3" />
         ))}
-        <path d={path} fill="none" stroke="#4fd8a8" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={path} fill="none" stroke="var(--good)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
-          <circle key={i} cx={x(i)} cy={y(p.score)} r={i === n - 1 ? 4 : 3} fill={i === n - 1 ? "#4fd8a8" : "#131a17"} stroke="#4fd8a8" strokeWidth="1.5">
+          <circle key={i} cx={x(i)} cy={y(p.score)} r={i === n - 1 ? 4 : 3} fill={i === n - 1 ? "var(--good)" : "rgb(var(--c-surface))"} stroke="var(--good)" strokeWidth="1.5">
             <title>
               {`${surahMeta(p.surah)?.transliteration ?? "Surah " + p.surah} · ${p.score} · ${new Date(p.created_at).toLocaleDateString()}`}
             </title>
@@ -37,7 +37,7 @@ export default function ScoreTrend({ points }: { points: { score: number; create
       <p className="mt-1 text-xs text-ink/55">
         Last {n} recitations · latest <strong className="text-ink">{last}</strong>
         {delta !== 0 && (
-          <span className={delta > 0 ? "text-emerald-bright" : "text-amber-300"}>
+          <span className={delta > 0 ? "text-emerald-bright" : "text-amber-600"}>
             {" "}
             ({delta > 0 ? "+" : ""}
             {delta} since the first shown)

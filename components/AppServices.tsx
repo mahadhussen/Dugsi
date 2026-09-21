@@ -27,6 +27,11 @@ export default function AppServices() {
     void ensureServiceWorker();
   }, []);
 
+  // Theme: applied to <html> so every token flips (see globals.css).
+  useEffect(() => {
+    document.documentElement.dataset.theme = settings.theme;
+  }, [settings.theme]);
+
   useEffect(() => {
     armReminder(settings);
     return () => armReminder({ ...settings, reminderEnabled: false });

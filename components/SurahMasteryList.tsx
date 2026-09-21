@@ -28,7 +28,7 @@ export default function SurahMasteryList({ bySurah, limit = 8 }: { bySurah: Sura
       {bySurah.length > limit && (
         <button
           onClick={() => setShowAll((v) => !v)}
-          className="mt-3 w-full rounded-lg border border-white/10 py-1.5 text-xs font-medium text-ink/60 transition hover:bg-white/5"
+          className="mt-3 w-full rounded-lg border border-ink/10 py-1.5 text-xs font-medium text-ink/60 transition hover:bg-ink/5"
         >
           {showAll ? "Show less" : `Show all ${bySurah.length}`}
         </button>
@@ -58,7 +58,7 @@ function SurahMastery({ stat, open, onToggle }: { stat: SurahStat; open: boolean
           </span>
           <span className="flex items-center gap-2 text-xs text-ink/45">
             {reviewable && (
-              <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 font-medium text-amber-300">{stat.mistakes.length} to review</span>
+              <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 font-medium text-amber-600">{stat.mistakes.length} to review</span>
             )}
             <span>{formatWhen(stat.lastPracticed)}</span>
             <span className="font-semibold" style={{ color }}>
@@ -67,7 +67,7 @@ function SurahMastery({ stat, open, onToggle }: { stat: SurahStat; open: boolean
             {reviewable && <span className={`transition ${open ? "rotate-180" : ""}`}>▾</span>}
           </span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-white/10">
+        <div className="h-2 overflow-hidden rounded-full bg-ink/10">
           <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(4, Math.min(100, stat.bestScore))}%`, backgroundColor: color }} />
         </div>
       </button>
@@ -86,10 +86,10 @@ function SurahMastery({ stat, open, onToggle }: { stat: SurahStat; open: boolean
 }
 
 export function barColor(score: number): string {
-  if (score >= MEMORISED_THRESHOLD) return "#4fd8a8"; // memorised — teal
+  if (score >= MEMORISED_THRESHOLD) return "var(--good)"; // memorised — teal
   if (score >= 70) return "#22c55e"; // strong — green
-  if (score >= 50) return "#fbbf24"; // learning — amber
-  return "#6b7280"; // new — grey
+  if (score >= 50) return "var(--warn)"; // learning — amber
+  return "var(--muted)"; // new — grey
 }
 
 export function formatWhen(iso: string): string {

@@ -71,7 +71,7 @@ export default function ProgressDashboard() {
         </p>
       </header>
 
-      <nav className="flex gap-1 overflow-x-auto rounded-full border border-gold/25 bg-surface/90 p-1 text-sm shadow-soft">
+      <nav className="flex gap-1 overflow-x-auto rounded-full border border-ink/10 bg-surface p-1 text-sm shadow-soft">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -106,6 +106,25 @@ export default function ProgressDashboard() {
           </Card>
           <Card title="Study reminders">
             <ReminderSettings />
+          </Card>
+          <Card title="Appearance">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span>
+                <span className="block font-semibold text-ink">Theme</span>
+                <span className="block text-xs text-ink/55">Light reads like a printed mushaf; dark is easier at night.</span>
+              </span>
+              <div className="inline-flex rounded-full border border-ink/15 p-0.5 text-xs">
+                {(["light", "dark"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => updateSettings({ theme: t }, user?.id ?? null)}
+                    className={`rounded-full px-3 py-1 font-semibold capitalize ${settings.theme === t ? "bg-emerald text-white" : "text-ink/60"}`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
           </Card>
           <Card title="Reciting">
             <div className="space-y-4">
@@ -164,7 +183,7 @@ export default function ProgressDashboard() {
             {bookmarks.map((b) => {
               const meta = surahMeta(b.surah);
               return (
-                <li key={`${b.surah}:${b.verse}`} className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm ring-1 ring-white/5">
+                <li key={`${b.surah}:${b.verse}`} className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm ring-1 ring-ink/5">
                   <Link href={`/?surah=${b.surah}&verse=${b.verse}`} className="min-w-0 truncate text-ink hover:underline">
                     {meta?.transliteration ?? `Surah ${b.surah}`} · verse {b.verse}
                     <span className="ayah ml-2 text-lg text-emerald" dir="rtl">
@@ -173,7 +192,7 @@ export default function ProgressDashboard() {
                   </Link>
                   <button
                     onClick={() => toggleBookmark(b.surah, b.verse, user?.id ?? null)}
-                    className="shrink-0 text-xs text-ink/40 hover:text-red-400"
+                    className="shrink-0 text-xs text-ink/40 hover:text-red-500"
                     aria-label="Remove bookmark"
                   >
                     remove
@@ -232,11 +251,11 @@ function Overview({ stats }: { stats: Stats }) {
         sub={`${stats.totalSessions} recitations · ${fmtMin(stats.totalSeconds)} minutes · ${stats.totalVerses} verses`}
       >
         <div className="grid grid-cols-2 gap-3 text-center text-sm sm:grid-cols-5">
-          <Mini value={stats.totals.correct} label="correct words" tone="#4fd8a8" />
-          <Mini value={stats.totals.wrong} label="wrong" tone="#f87171" />
-          <Mini value={stats.totals.missing} label="skipped" tone="#fbbf24" />
-          <Mini value={stats.totals.extra} label="added" tone="#fbbf24" />
-          <Mini value={stats.totals.peeks} label="peeks" tone="#d4b46a" />
+          <Mini value={stats.totals.correct} label="correct words" tone="var(--good)" />
+          <Mini value={stats.totals.wrong} label="wrong" tone="var(--bad)" />
+          <Mini value={stats.totals.missing} label="skipped" tone="var(--warn)" />
+          <Mini value={stats.totals.extra} label="added" tone="var(--warn)" />
+          <Mini value={stats.totals.peeks} label="peeks" tone="#a9842f" />
         </div>
       </Card>
 
@@ -255,7 +274,7 @@ function fmtMin(seconds: number): string {
 
 function Tile({ value, unit, label, hint }: { value: string; unit: string; label: string; hint?: string }) {
   return (
-    <div className="rounded-2xl border border-gold/25 bg-surface/90 p-3 shadow-soft">
+    <div className="rounded-2xl border border-ink/10 bg-surface p-3 shadow-soft">
       <div className="flex items-baseline gap-1">
         <span className="text-2xl font-bold text-emerald-bright">{value}</span>
         <span className="text-xs text-ink/50">{unit}</span>
@@ -268,7 +287,7 @@ function Tile({ value, unit, label, hint }: { value: string; unit: string; label
 
 function Mini({ value, label, tone }: { value: number; label: string; tone: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-surface-2 p-2">
+    <div className="rounded-xl border border-ink/10 bg-surface-2 p-2">
       <div className="text-lg font-bold" style={{ color: tone }}>
         {value}
       </div>
@@ -279,7 +298,7 @@ function Mini({ value, label, tone }: { value: number; label: string; tone: stri
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-gold/25 bg-surface/90 p-4 shadow-soft backdrop-blur-sm sm:p-5">
+    <section className="rounded-2xl border border-ink/10 bg-surface p-4 shadow-soft backdrop-blur-sm sm:p-5">
       <div className="mb-3 flex items-center gap-2">
         <span className="h-5 w-1.5 rounded-full bg-gold" />
         <div>

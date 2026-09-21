@@ -751,7 +751,7 @@ export default function Reciter({
         statuses={showingLive ? liveStatuses : scored ? statuses : undefined}
         maddVerdicts={scored ? maddVerdicts : undefined}
         activeIndex={liveMode ? livePointer : undefined}
-        showTajweed={!showingLive && !scored}
+        showTajweed={!showingLive && !scored && settings.showTajweed}
         maskLevel={hifz}
         initialTopVerse={initialTopVerse}
         onTopVerseChange={handleTopVerseChange}
@@ -767,6 +767,7 @@ export default function Reciter({
       reveal,
       settings.showTranslation,
       settings.showTranslit,
+      settings.showTajweed,
       ayat,
       surahNumber,
       showingLive,
@@ -785,7 +786,7 @@ export default function Reciter({
   if (phase === "unsupported") {
     return (
       <div>
-        <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
+        <div className="rounded-2xl border border-amber-400/30 bg-amber-400/15 p-4 text-sm text-amber-700">
           Your browser doesn&apos;t support on-device recitation yet. Open Dugsi in{" "}
           <strong>Google Chrome</strong> (or Safari on iPhone) to use voice feedback — you can still
           read the surah and tajweed guide below.
@@ -835,11 +836,16 @@ export default function Reciter({
             label="Latin"
             onClick={() => updateSettings({ showTranslit: !settings.showTranslit }, userId)}
           />
+          <Toggle
+            on={settings.showTajweed}
+            label="Tajweed"
+            onClick={() => updateSettings({ showTajweed: !settings.showTajweed }, userId)}
+          />
         </div>
       </div>
 
       {error && (
-        <div className="animate-in rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>
+        <div className="animate-in rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-600">{error}</div>
       )}
 
       {feedback && phase === "done" && (
@@ -862,7 +868,7 @@ export default function Reciter({
 
       {/* Control dock — pinned above the tab bar while the page scrolls */}
       <div className="sticky bottom-[4.4rem] z-30">
-        <div className="rounded-2xl border border-white/10 bg-shell/85 p-3 shadow-soft backdrop-blur-md">
+        <div className="rounded-2xl border border-ink/10 bg-surface/95 p-3 shadow-[0_-4px_24px_rgba(0,0,0,0.12)] backdrop-blur-md">
           {phase === "recording" && (
             <div className="mb-2 px-1 text-center">
               <p className="ayah truncate text-xl text-ink/80" dir="rtl">
@@ -898,7 +904,7 @@ export default function Reciter({
                 aria-label="Start reciting"
               >
                 <span className="absolute inset-0 rounded-full bg-emerald/15 transition group-hover:bg-emerald/25" />
-                <span className="relative grid h-14 w-14 place-items-center rounded-full bg-gradient-to-b from-emerald-bright to-emerald text-shell shadow-soft ring-4 ring-emerald/20 transition group-active:scale-95">
+                <span className="relative grid h-14 w-14 place-items-center rounded-full bg-emerald text-white shadow-soft ring-4 ring-emerald/20 transition group-active:scale-95">
                   {phase === "processing" ? (
                     <span className="h-7 w-7 animate-spin rounded-full border-2 border-shell/40 border-t-shell" />
                   ) : (
@@ -911,7 +917,7 @@ export default function Reciter({
             {/* Status */}
             <div className="min-w-0 flex-1 text-right text-xs text-ink/60">
               {phase === "recording" ? (
-                <span className="inline-flex items-center gap-1.5 font-medium text-red-400">
+                <span className="inline-flex items-center gap-1.5 font-medium text-red-500">
                   <span className="rec-dot h-2 w-2 rounded-full bg-red-500" />
                   {formatTime(seconds)}
                 </span>
@@ -936,7 +942,7 @@ function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: (
       onClick={onClick}
       aria-pressed={on}
       className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 transition ${
-        on ? "bg-emerald/20 text-emerald-bright ring-emerald/40" : "text-ink/50 ring-white/15 hover:text-ink"
+        on ? "bg-emerald/20 text-emerald-bright ring-emerald/40" : "text-ink/50 ring-ink/15 hover:text-ink"
       }`}
     >
       {label}
@@ -1004,9 +1010,9 @@ function LiveTally({
       <span className="font-semibold text-emerald-bright">✓ {correct}</span>
       {detecting ? (
         <>
-          <span className={wrong > 0 ? "font-semibold text-red-400" : "text-ink/40"}>✗ {wrong} wrong</span>
-          <span className={missing > 0 ? "font-semibold text-amber-300" : "text-ink/40"}>↷ {missing} skipped</span>
-          <span className={extra > 0 ? "font-semibold text-amber-300" : "text-ink/40"}>+ {extra} added</span>
+          <span className={wrong > 0 ? "font-semibold text-red-500" : "text-ink/40"}>✗ {wrong} wrong</span>
+          <span className={missing > 0 ? "font-semibold text-amber-600" : "text-ink/40"}>↷ {missing} skipped</span>
+          <span className={extra > 0 ? "font-semibold text-amber-600" : "text-ink/40"}>+ {extra} added</span>
         </>
       ) : (
         <span className="text-ink/40">Recite at your own pace.</span>
@@ -1032,7 +1038,7 @@ function HifzToggle({
       <button
         onClick={() => onSelect((level + 1) % 4)}
         className={`rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition ${
-          level > 0 ? "bg-gold/20 text-gold-soft ring-gold/40" : "text-ink/60 ring-white/15 hover:text-ink"
+          level > 0 ? "bg-gold/20 text-gold-soft ring-gold/40" : "text-ink/60 ring-ink/15 hover:text-ink"
         }`}
         title="Memorisation: hide words and reveal them as you recite"
       >
@@ -1073,7 +1079,7 @@ function ResultsPanel({
   // marks — that would tell a correct reciter she failed. Show an honest state.
   if (!feedback.reliable) {
     return (
-      <div className="animate-in rounded-2xl border border-amber-400/30 bg-amber-400/10 p-6 shadow-soft">
+      <div className="animate-in rounded-2xl border border-amber-400/30 bg-amber-400/15 p-6 shadow-soft">
         <h2 className="text-lg font-bold text-ink">We could not hear you clearly enough</h2>
         <p className="mt-2 text-sm text-ink/70">
           To avoid marking your recitation wrong by mistake, we are not scoring this attempt. Try
@@ -1099,7 +1105,7 @@ function ResultsPanel({
   }
 
   return (
-    <div className="animate-in rounded-2xl border border-emerald/25 bg-surface/90 p-6 shadow-soft">
+    <div className="animate-in rounded-2xl border border-emerald/25 bg-surface p-6 shadow-soft">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <ScoreRing score={feedback.score} />
@@ -1112,7 +1118,7 @@ function ResultsPanel({
           <HearYourselfButton recordingUrl={recordingUrl} />
           <button
             onClick={onReset}
-            className="rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-ink/80 transition hover:bg-white/5"
+            className="rounded-lg border border-ink/15 px-4 py-2 text-sm font-medium text-ink/80 transition hover:bg-ink/5"
           >
             Clear
           </button>
@@ -1136,18 +1142,18 @@ function ResultsPanel({
       )}
 
       {rushed.length > 0 && (
-        <div className="mt-4 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-200">
+        <div className="mt-4 rounded-xl bg-amber-400/15 p-3 text-sm text-amber-700">
           <strong>Tajweed tip:</strong> {rushed.length} elongation{rushed.length > 1 ? "s" : ""}{" "}
           looked rushed (marked ⏱ below). Hold the madd letters longer — especially the 6-count madd
           in <span className="font-arabic">ٱلضَّآلِّينَ</span>.
-          <span className="block text-xs text-amber-200/80">
+          <span className="block text-xs text-amber-700/80">
             Timing estimate from word-level timestamps — treat it as a hint.
           </span>
         </div>
       )}
 
       {hesitations.length > 0 && (
-        <div className="mt-4 rounded-xl border border-white/10 bg-surface/90 p-3 text-sm">
+        <div className="mt-4 rounded-xl border border-ink/10 bg-surface p-3 text-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-ink/45">
             Hesitations ({hesitations.length})
           </p>
@@ -1156,7 +1162,7 @@ function ResultsPanel({
           </p>
           <ul className="mt-2 flex flex-wrap gap-2">
             {hesitations.slice(0, 12).map((h, i) => (
-              <li key={i} className="rounded-lg bg-surface-2 px-2.5 py-1 ring-1 ring-white/5">
+              <li key={i} className="rounded-lg bg-surface-2 px-2.5 py-1 ring-1 ring-ink/5">
                 <span className="ayah text-lg" dir="rtl">
                   {h.word}
                 </span>
@@ -1188,14 +1194,14 @@ function ResultsPanel({
 }
 
 function ScoreRing({ score }: { score: number }) {
-  const color = score >= 85 ? "#4fd8a8" : score >= 60 ? "#fbbf24" : "#f87171";
+  const color = score >= 85 ? "var(--good)" : score >= 60 ? "var(--warn)" : "var(--bad)";
   const r = 26;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - Math.max(0, Math.min(100, score)) / 100);
   return (
     <div className="relative h-[68px] w-[68px] shrink-0">
       <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90">
-        <circle cx="32" cy="32" r={r} fill="none" stroke="#2a3530" strokeWidth="6" />
+        <circle cx="32" cy="32" r={r} fill="none" stroke="var(--track)" strokeWidth="6" />
         <circle
           cx="32"
           cy="32"
@@ -1216,9 +1222,9 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: "good" | "bad" | "warn" }) {
-  const color = tone === "good" ? "#4fd8a8" : tone === "bad" ? "#f87171" : "#fbbf24";
+  const color = tone === "good" ? "var(--good)" : tone === "bad" ? "var(--bad)" : "var(--warn)";
   return (
-    <div className="rounded-xl border border-white/10 bg-surface-2 p-3 text-center sm:text-left">
+    <div className="rounded-xl border border-ink/10 bg-surface-2 p-3 text-center sm:text-left">
       <div className="text-2xl font-bold" style={{ color }}>
         {value}
       </div>

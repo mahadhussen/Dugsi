@@ -1,17 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SURAHS } from "@/lib/quran";
 
 export default function SurahPicker({
   current,
   onSelect,
+  hideTrigger = false,
 }: {
   current: number;
   onSelect: (id: number) => void;
+  /** Only the modal; opened by the top bar's search button. */
+  hideTrigger?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener("dugsi:open-picker", onOpen);
+    return () => window.removeEventListener("dugsi:open-picker", onOpen);
+  }, []);
   const cur = SURAHS.find((s) => s.id === current) ?? SURAHS[0];
 
   const filtered = useMemo(() => {
@@ -32,9 +40,10 @@ export default function SurahPicker({
 
   return (
     <>
+      {!hideTrigger && (
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-gold/30 bg-surface/90 px-4 py-3 text-left shadow-soft transition hover:border-emerald/40"
+        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-ink/10 bg-surface px-4 py-3 text-left shadow-soft transition hover:border-emerald/40"
       >
         <span>
           <span className="text-xs text-ink/50">Surah {cur.id} · {cur.ayahCount} verses</span>
@@ -47,23 +56,24 @@ export default function SurahPicker({
           <span className="text-ink/40">▾</span>
         </span>
       </button>
+      )}
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={close}
         >
           <div
             className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-parchment shadow-soft sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 border-b border-gold/20 p-3">
+            <div className="flex items-center gap-2 border-b border-ink/10 p-3">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search surah (name or number)…"
                 autoFocus
-                className="w-full rounded-lg border border-gold/30 bg-surface-2 px-3 py-2 text-sm outline-none focus:border-emerald"
+                className="w-full rounded-lg border border-ink/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-emerald"
               />
               <button onClick={close} className="px-2 text-sm text-ink/60 hover:text-ink">
                 Close

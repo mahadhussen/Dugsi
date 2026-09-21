@@ -2,27 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- Theme tokens (RGB triplets so Tailwind can apply opacity) ---- */
 :root {
   --font-arabic: "Amiri", "Scheherazade New", serif;
   --font-quran: "Amiri Quran", "Amiri", "Scheherazade New", serif;
-  --paper: #f6efdf;
-  --paper-ink: #1c1a14;
+
+  /* light: a printed mushaf */
+  --c-ink: 20 20 22;
+  --c-shell: 244 244 245;
+  --c-surface: 255 255 255;
+  --c-surface-2: 250 250 250;
+  --c-paper: 255 255 255;
+  --c-paper-deep: 240 240 240;
+  --c-paper-ink: 17 17 17;
+  --c-gold-soft: 169 132 47;
+  --c-emerald-bright: 15 122 92;
+  --c-shadow: 0 0 0;
+
+  --good: #1a9c6b;
+  --bad: #e53935;
+  --warn: #d98a00;
+  --muted: #8a8a8a;
+  --track: #e6e6e6;
+  --chart-text: #444;
+  --chart-0: #ececec;
+  --chart-1: #bfe3d5;
+  --chart-2: #7fcaa9;
+  --chart-3: #37aa7e;
+  --chart-4: #0f7a5c;
+}
+:root[data-theme="dark"] {
+  --c-ink: 233 239 236;
+  --c-shell: 11 16 14;
+  --c-surface: 19 26 23;
+  --c-surface-2: 26 35 32;
+  --c-paper: 20 25 24;
+  --c-paper-deep: 32 40 37;
+  --c-paper-ink: 236 236 230;
+  --c-gold-soft: 230 207 143;
+  --c-emerald-bright: 79 216 168;
+  --c-shadow: 0 0 0;
+
+  --good: #4fd8a8;
+  --bad: #f87171;
+  --warn: #fbbf24;
+  --muted: #7b8580;
+  --track: #2a3530;
+  --chart-text: #cfd6d2;
+  --chart-0: #1f2a26;
+  --chart-1: #175a48;
+  --chart-2: #178a68;
+  --chart-3: #1bb388;
+  --chart-4: #4fd8a8;
 }
 
 html {
   -webkit-text-size-adjust: 100%;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
   color-scheme: dark;
 }
 
 body {
-  color: #e9efec;
+  color: rgb(var(--c-ink));
   min-height: 100vh;
-  background-color: #0b100e;
-  /* deep green-black with a faint glow, like a lit mushaf on a dark table */
-  background-image:
-    radial-gradient(900px 500px at 50% -10%, rgba(21, 159, 120, 0.18), transparent 70%),
-    radial-gradient(700px 400px at 100% 0%, rgba(207, 174, 94, 0.08), transparent 70%);
-  background-attachment: fixed;
+  background-color: rgb(var(--c-shell));
 }
 
 /* ---- Arabic ayah typography ---- */
@@ -34,137 +79,86 @@ body {
 
 /* ---- The mushaf page ---- */
 .mushaf {
-  background-color: var(--paper);
-  color: var(--paper-ink);
-  background-image:
-    radial-gradient(1200px 600px at 50% 0%, rgba(255, 255, 255, 0.55), transparent 60%),
-    repeating-linear-gradient(0deg, rgba(120, 90, 30, 0.025) 0 1px, transparent 1px 7px);
-  border-radius: 1.1rem;
-  box-shadow:
-    0 24px 60px -24px rgba(0, 0, 0, 0.8),
-    inset 0 0 0 1px rgba(169, 132, 47, 0.35);
-  position: relative;
-}
-.mushaf::before {
-  /* double gold rule, like a printed frame */
-  content: "";
-  position: absolute;
-  inset: 8px;
-  border: 1px solid rgba(169, 132, 47, 0.45);
-  border-radius: 0.8rem;
-  pointer-events: none;
+  background-color: rgb(var(--c-paper));
+  color: rgb(var(--c-paper-ink));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgb(var(--c-shadow) / 0.06), 0 0 0 1px rgb(var(--c-paper-ink) / 0.06);
 }
 .mushaf .ayah {
   font-family: var(--font-quran);
-  font-size: 1.9rem;
-  line-height: 2.35;
+  font-size: 1.95rem;
+  line-height: 2.4;
   text-align: justify;
   text-align-last: right;
-  color: var(--paper-ink);
-  text-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.4);
+  color: rgb(var(--c-paper-ink));
+  word-spacing: 0.08em;
 }
 @media (min-width: 640px) {
   .mushaf .ayah {
-    font-size: 2.15rem;
+    font-size: 2.25rem;
   }
-}
-.mushaf .word:hover {
-  background-color: rgba(21, 159, 120, 0.1);
-}
-/* surah banner and basmala */
-.surah-banner {
-  border: 1px solid rgba(169, 132, 47, 0.6);
-  background:
-    linear-gradient(90deg, rgba(207, 174, 94, 0.18), rgba(207, 174, 94, 0.05) 30%, rgba(207, 174, 94, 0.05) 70%, rgba(207, 174, 94, 0.18)),
-    var(--paper);
-  border-radius: 999px;
-  box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4px rgba(169, 132, 47, 0.45);
 }
 .basmala {
   font-family: var(--font-quran);
-  font-size: 2rem;
-  color: #3b2f12;
+  /* the single basmala ligature is wide — scale it to the page */
+  font-size: min(2.3rem, 5.8vw);
+  line-height: 1.8;
+  color: rgb(var(--c-paper-ink));
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .word {
-  transition: color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
-  border-radius: 0.4rem;
-  padding: 0.05rem 0.2rem;
+  transition: color 0.2s ease, background-color 0.2s ease;
+  border-radius: 0.3rem;
 }
-.word:hover {
-  background-color: rgba(15, 118, 110, 0.06);
+.mushaf .word:hover {
+  background-color: rgb(var(--c-paper-ink) / 0.05);
 }
 
+/* Recitation marks are colours of the letters themselves, like a teacher's pen. */
 .word-correct {
-  background-color: rgba(16, 185, 129, 0.18);
-  box-shadow: inset 0 -2px 0 rgba(5, 150, 105, 0.5);
+  color: var(--good);
 }
 .word-close {
-  background-color: rgba(234, 179, 8, 0.2);
-  box-shadow: inset 0 -2px 0 rgba(202, 138, 4, 0.5);
+  color: var(--warn);
 }
 .word-wrong {
-  background-color: rgba(239, 68, 68, 0.16);
-  box-shadow: inset 0 -2px 0 rgba(220, 38, 38, 0.5);
+  color: var(--bad);
 }
 .word-missing {
-  background-color: rgba(148, 163, 184, 0.28);
-  text-decoration: underline dotted rgba(100, 116, 139, 0.8);
+  color: var(--muted);
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 0.35em;
 }
 /* the next word to recite, while following live */
 .word-active {
-  background-color: rgba(201, 162, 75, 0.28);
-  box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.6);
+  background-color: rgba(21, 159, 120, 0.14);
+  box-shadow: 0 0 0 2px rgba(21, 159, 120, 0.35);
   animation: pulse-active 1.1s ease-in-out infinite;
 }
 @keyframes pulse-active {
   0%,
   100% {
-    box-shadow: 0 0 0 2px rgba(201, 162, 75, 0.55);
+    box-shadow: 0 0 0 2px rgba(21, 159, 120, 0.35);
   }
   50% {
-    box-shadow: 0 0 0 4px rgba(201, 162, 75, 0.25);
+    box-shadow: 0 0 0 4px rgba(21, 159, 120, 0.15);
   }
 }
 
-/* ---- Hifz (memorisation): hidden word ---- */
+/* ---- Hifz (memorisation): hidden words leave an empty ruled line ---- */
 .word-mask {
   color: transparent;
-  background-color: rgba(15, 23, 42, 0.1);
-  background-image: repeating-linear-gradient(
-    45deg,
-    rgba(15, 23, 42, 0.05) 0,
-    rgba(15, 23, 42, 0.05) 6px,
-    transparent 6px,
-    transparent 12px
-  );
-  border-radius: 0.4rem;
+  text-decoration: underline solid rgb(var(--c-paper-ink) / 0.14);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.55em;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
-  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
 }
 .word-mask:hover {
-  background-color: rgba(15, 118, 110, 0.12);
-}
-
-/* ---- ornamental ayah medallion ---- */
-.ayah-medallion {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  font-family: var(--font-arabic);
-  font-size: 0.95rem;
-  line-height: 1;
-  color: #7a5c14;
-  background:
-    radial-gradient(circle at center, var(--paper) 58%, transparent 59%),
-    conic-gradient(from 0deg, #e3c987, #b8902f, #e3c987, #b8902f, #e3c987, #b8902f, #e3c987, #b8902f, #e3c987);
-  border-radius: 9999px;
-  box-shadow: 0 0 0 1px rgba(169, 132, 47, 0.5), 0 1px 4px rgba(169, 132, 47, 0.4);
-  vertical-align: middle;
+  text-decoration-color: rgba(21, 159, 120, 0.5);
 }
 
 /* ---- recording pulse ring ---- */

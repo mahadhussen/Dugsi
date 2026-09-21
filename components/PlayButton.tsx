@@ -62,7 +62,7 @@ export default function PlayButton({ surah, ayah }: { surah: number; ayah: numbe
       title={error ? "Couldn't load audio" : playing ? "Pause" : "Listen"}
       className={`inline-grid h-7 w-7 place-items-center rounded-full align-middle transition ${
         error
-          ? "text-red-400"
+          ? "text-red-500"
           : playing
             ? "bg-emerald text-white"
             : "text-emerald hover:bg-emerald/10"

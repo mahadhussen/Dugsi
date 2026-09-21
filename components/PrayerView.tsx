@@ -57,14 +57,14 @@ export default function PrayerView() {
           <p className="text-xl font-semibold">
             {np.slot.label} · {formatTime(np.slot.time)}
           </p>
-          <p className="mt-2 inline-block rounded-full bg-white/10 px-4 py-1.5 text-sm text-gold-soft ring-1 ring-white/15">
+          <p className="mt-2 inline-block rounded-full bg-ink/10 px-4 py-1.5 text-sm text-gold-soft ring-1 ring-ink/15">
             om {formatCountdown(np.msUntil)}
           </p>
         </div>
       </section>
 
       {/* Today's times */}
-      <section className="overflow-hidden rounded-2xl border border-gold/25 bg-surface/90 shadow-soft">
+      <section className="overflow-hidden rounded-2xl border border-ink/10 bg-surface shadow-soft">
         <ul className="divide-y divide-gold/15">
           {slots.map((s) => (
             <TimeRow key={s.key} slot={s} isNext={!np.tomorrow && s.key === np.slot.key} />

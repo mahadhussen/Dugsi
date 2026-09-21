@@ -35,10 +35,10 @@ export default function WeekBars({ days, goalMinutes, now = new Date() }: { days
         const hgt = Math.max(it.minutes > 0 ? 3 : 0, scale(it.minutes));
         return (
           <g key={i}>
-            <rect x={x} y={base - hgt} width={bw} height={hgt} rx={3} fill={it.minutes >= goalMinutes ? "#4fd8a8" : "#178a68"}>
+            <rect x={x} y={base - hgt} width={bw} height={hgt} rx={3} fill={it.minutes >= goalMinutes ? "var(--good)" : "var(--chart-2)"}>
               <title>{`${it.label}: ${it.minutes.toFixed(1)} min`}</title>
             </rect>
-            <text x={x + bw / 2} y={h - 3} fontSize="9" textAnchor="middle" fill="#e9efec" opacity={it.today ? 0.9 : 0.5} fontWeight={it.today ? 700 : 400}>
+            <text x={x + bw / 2} y={h - 3} fontSize="9" textAnchor="middle" fill="var(--chart-text)" opacity={it.today ? 0.9 : 0.5} fontWeight={it.today ? 700 : 400}>
               {it.label}
             </text>
           </g>

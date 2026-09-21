@@ -31,7 +31,7 @@ export default function ReciterPicker() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-gold/30 bg-surface/90 px-4 py-3 text-left shadow-soft transition hover:border-emerald/40"
+        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-ink/15 bg-surface px-4 py-3 text-left shadow-soft transition hover:border-emerald/40"
       >
         <span className="min-w-0">
           <span className="text-xs text-ink/50">Reciter · Sheikh</span>
@@ -54,13 +54,13 @@ export default function ReciterPicker() {
             className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-parchment shadow-soft sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2 border-b border-gold/20 p-3">
+            <div className="flex items-center gap-2 border-b border-ink/10 p-3">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search Sheikh…"
                 autoFocus
-                className="w-full rounded-lg border border-gold/30 bg-surface-2 px-3 py-2 text-sm outline-none focus:border-emerald"
+                className="w-full rounded-lg border border-ink/15 bg-surface-2 px-3 py-2 text-sm outline-none focus:border-emerald"
               />
               <button onClick={close} className="px-2 text-sm text-ink/60 hover:text-ink">
                 Close

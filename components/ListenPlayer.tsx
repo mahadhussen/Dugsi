@@ -215,7 +215,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: P
   const progress = ayahCount > 1 ? ((verse - 1) / (ayahCount - 1)) * 100 : 0;
 
   return (
-    <div className="rounded-2xl border border-emerald/25 bg-surface-2 px-5 py-4 text-white shadow-soft">
+    <div className="rounded-2xl border border-emerald/25 bg-emerald-dark px-5 py-4 text-white shadow-soft">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-gold-soft/80">Listen to the Quran</p>
@@ -239,7 +239,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: P
           aria-pressed={repeat}
           title={repeat ? "Repeating this surah" : "Repeat this surah"}
           className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ring-1 transition ${
-            repeat ? "bg-gold/20 text-gold-soft ring-gold/40" : "text-white/60 ring-white/15 hover:text-white"
+            repeat ? "bg-gold/20 text-gold-soft ring-gold/40" : "text-white/60 ring-ink/15 hover:text-white"
           }`}
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
@@ -261,7 +261,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: P
         <button
           onClick={goPrev}
           aria-label="Previous verse"
-          className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white"
+          className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition hover:bg-ink/10 hover:text-white"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
             <path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z" />
@@ -271,7 +271,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: P
         <button
           onClick={togglePlay}
           aria-label={intendPlay ? "Pause" : "Play"}
-          className="grid h-14 w-14 place-items-center rounded-full bg-gradient-to-b from-emerald-bright to-emerald text-shell shadow-soft transition hover:brightness-105 active:scale-95"
+          className="grid h-14 w-14 place-items-center rounded-full bg-gradient-to-b from-emerald-bright to-emerald text-white shadow-soft transition hover:brightness-105 active:scale-95"
         >
           {status === "loading" && intendPlay ? (
             <span className="h-6 w-6 animate-spin rounded-full border-2 border-shell/40 border-t-shell" />
@@ -290,7 +290,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: P
         <button
           onClick={goNext}
           aria-label="Next verse"
-          className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white"
+          className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition hover:bg-ink/10 hover:text-white"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
             <path d="M16 6h2v12h-2V6zM6 6l8.5 6L6 18V6z" />
@@ -305,7 +305,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: P
             key={v}
             onClick={() => setRate(v)}
             className={`rounded-full px-2 py-0.5 font-medium ring-1 transition ${
-              rate === v ? "bg-gold/25 text-gold-soft ring-gold/40" : "ring-white/15 hover:text-white"
+              rate === v ? "bg-gold/25 text-gold-soft ring-gold/40" : "ring-ink/15 hover:text-white"
             }`}
           >
             {v}×

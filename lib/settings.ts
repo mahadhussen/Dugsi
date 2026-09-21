@@ -24,6 +24,10 @@ export interface Settings {
   /** Show the translation / transliteration under each verse of the mushaf. */
   showTranslation: boolean;
   showTranslit: boolean;
+  /** Light (printed mushaf) or dark. */
+  theme: "light" | "dark";
+  /** Colour tajweed rules on the page (off = plain black text, like the printed mushaf). */
+  showTajweed: boolean;
   reminderEnabled: boolean;
   /** "HH:MM" local time. */
   reminderTime: string;
@@ -40,8 +44,10 @@ export const DEFAULT_SETTINGS: Settings = {
   liveMistakes: true,
   quranModel: true,
   autoStop: false,
-  showTranslation: true,
+  showTranslation: false,
   showTranslit: false,
+  theme: "light",
+  showTajweed: false,
   reminderEnabled: false,
   reminderTime: "20:00",
   reminderDays: [],
@@ -74,8 +80,10 @@ function sanitize(x: Partial<Settings> | null | undefined): Settings {
     liveMistakes: s.liveMistakes !== false,
     quranModel: s.quranModel !== false,
     autoStop: !!s.autoStop,
-    showTranslation: s.showTranslation !== false,
+    showTranslation: !!s.showTranslation,
     showTranslit: !!s.showTranslit,
+    theme: s.theme === "dark" ? "dark" : "light",
+    showTajweed: !!s.showTajweed,
     reminderEnabled: !!s.reminderEnabled,
     reminderTime: /^\d{2}:\d{2}$/.test(String(s.reminderTime)) ? String(s.reminderTime) : "20:00",
     reminderDays: Array.isArray(s.reminderDays) ? s.reminderDays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) : [],

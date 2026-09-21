@@ -82,7 +82,7 @@ export default function RecordingsPanel() {
             <button
               key={v}
               onClick={() => changeRate(v)}
-              className={`rounded-full px-2 py-0.5 font-medium ring-1 ${rate === v ? "bg-ink text-shell ring-ink" : "ring-white/15 hover:bg-white/5"}`}
+              className={`rounded-full px-2 py-0.5 font-medium ring-1 ${rate === v ? "bg-ink text-white ring-ink" : "ring-ink/15 hover:bg-ink/5"}`}
             >
               {v}×
             </button>
@@ -94,7 +94,7 @@ export default function RecordingsPanel() {
           const meta = surahMeta(r.surah);
           const words = Object.keys(r.times).length;
           return (
-            <li key={r.surah} className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2 ring-1 ring-white/5">
+            <li key={r.surah} className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2 ring-1 ring-ink/5">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-ink">{meta?.transliteration ?? `Surah ${r.surah}`}</div>
                 <div className="text-xs text-ink/50">
@@ -106,7 +106,7 @@ export default function RecordingsPanel() {
                 <button
                   onClick={() => play(r)}
                   className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition ${
-                    playing === r.surah ? "bg-ink text-shell ring-ink" : "text-ink/80 ring-white/20 hover:bg-white/5"
+                    playing === r.surah ? "bg-ink text-white ring-ink" : "text-ink/80 ring-ink/20 hover:bg-ink/5"
                   }`}
                 >
                   {playing === r.surah ? "■ Stop" : "▶ Play"}
@@ -114,10 +114,10 @@ export default function RecordingsPanel() {
                 <Link href={`/?surah=${r.surah}`} className="hidden rounded-full px-2.5 py-1 text-xs font-semibold text-emerald ring-1 ring-emerald/30 sm:inline">
                   Recite
                 </Link>
-                <button onClick={() => download(r)} aria-label="Download" title="Download" className="rounded-full px-2 py-1 text-xs text-ink/60 ring-1 ring-white/15 hover:bg-white/5">
+                <button onClick={() => download(r)} aria-label="Download" title="Download" className="rounded-full px-2 py-1 text-xs text-ink/60 ring-1 ring-ink/15 hover:bg-ink/5">
                   ⤓
                 </button>
-                <button onClick={() => void remove(r)} aria-label="Delete" title="Delete" className="rounded-full px-2 py-1 text-xs text-red-400 ring-1 ring-red-500/30 hover:bg-red-500/100/10">
+                <button onClick={() => void remove(r)} aria-label="Delete" title="Delete" className="rounded-full px-2 py-1 text-xs text-red-500 ring-1 ring-red-500/30 hover:bg-red-500/100/10">
                   ✕
                 </button>
               </div>

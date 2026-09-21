@@ -34,7 +34,7 @@ export default function GoalsPanel({ stats, editable = true }: { stats: Stats; e
         const pct = Math.min(100, (g.done / target) * 100);
         const met = g.done >= target;
         return (
-          <li key={g.key} className="rounded-xl border border-white/10 bg-surface-2 p-3">
+          <li key={g.key} className="rounded-xl border border-ink/10 bg-surface-2 p-3">
             <div className="flex items-center justify-between gap-2 text-sm">
               <span className="text-ink/80">
                 {g.label} <span className="text-xs text-ink/45">· {g.period}</span>
@@ -52,8 +52,8 @@ export default function GoalsPanel({ stats, editable = true }: { stats: Stats; e
                 )}
               </span>
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(2, pct)}%`, backgroundColor: met ? "#4fd8a8" : "#cfae5e" }} />
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-ink/10">
+              <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(2, pct)}%`, backgroundColor: met ? "var(--good)" : "#cfae5e" }} />
             </div>
           </li>
         );
@@ -68,7 +68,7 @@ function Step({ label, onClick, disabled }: { label: string; onClick: () => void
       onClick={onClick}
       disabled={disabled}
       aria-label={label === "+" ? "Increase goal" : "Decrease goal"}
-      className="grid h-6 w-6 place-items-center rounded-full border border-white/15 text-xs text-ink/70 transition hover:bg-white/5 disabled:opacity-30"
+      className="grid h-6 w-6 place-items-center rounded-full border border-ink/15 text-xs text-ink/70 transition hover:bg-ink/5 disabled:opacity-30"
     >
       {label}
     </button>

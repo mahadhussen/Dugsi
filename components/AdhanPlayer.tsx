@@ -76,7 +76,7 @@ export default function AdhanPlayer() {
   const current = getAdhan(id);
 
   return (
-    <div className="rounded-2xl border border-gold/25 bg-surface/90 p-5 shadow-soft">
+    <div className="rounded-2xl border border-ink/10 bg-surface p-5 shadow-soft">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs uppercase tracking-wide text-ink/45">Böneutropare · adhan</p>

@@ -5,7 +5,7 @@ import { dayKey } from "@/lib/uid";
 
 const WEEKS = 16;
 // One hue, light → dark (sequential): minutes recited that day.
-const STEPS = ["#1f2a26", "#175a48", "#178a68", "#1bb388", "#4fd8a8"];
+const STEPS = ["var(--chart-0)", "var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)"];
 
 function level(seconds: number, sessions: number): number {
   if (sessions === 0) return 0;
@@ -50,7 +50,7 @@ export default function StreakCalendar({ days, now = new Date() }: { days: Recor
     <div className="overflow-x-auto">
       <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="block" role="img" aria-label="Recitation activity, last 16 weeks">
         {monthLabels.map((m) => (
-          <text key={m.col + m.label} x={m.col * (size + gap)} y={10} fontSize="9" fill="#e9efec" opacity="0.55">
+          <text key={m.col + m.label} x={m.col * (size + gap)} y={10} fontSize="9" fill="var(--chart-text)" opacity="0.55">
             {m.label}
           </text>
         ))}

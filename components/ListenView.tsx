@@ -6,6 +6,7 @@ import ReciterPicker from "./ReciterPicker";
 import ListenPlayer from "./ListenPlayer";
 import SurahView from "./SurahView";
 import { loadSurah, surahMeta, type Surah } from "@/lib/quran";
+import { useSettings } from "@/lib/settings";
 
 /** The "just listen" experience: pick a surah and a Sheikh, then play through
  *  the whole Quran verse by verse while reading along. No microphone. */
@@ -14,6 +15,18 @@ export default function ListenView() {
   const [surah, setSurah] = useState<Surah | null>(null);
   const [loading, setLoading] = useState(true);
   const [pos, setPos] = useState<{ verse: number; word: number } | null>(null);
+  const settings = useSettings();
+
+  // Top bar prev/next and deep links from the progress page.
+  useEffect(() => {
+    const go = (e: Event) => {
+      const id = (e as CustomEvent<number>).detail;
+      if (typeof id === "number" && id >= 1 && id <= 114) selectSurah(id);
+    };
+    window.addEventListener("dugsi:goto-surah", go as EventListener);
+    return () => window.removeEventListener("dugsi:goto-surah", go as EventListener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surahId]);
 
   const meta = surahMeta(surahId)!;
 
@@ -55,10 +68,8 @@ export default function ListenView() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <SurahPicker current={surahId} onSelect={selectSurah} />
-        <ReciterPicker />
-      </div>
+      <SurahPicker current={surahId} onSelect={selectSurah} hideTrigger />
+      <ReciterPicker />
 
       {/* Hands-free player: plays the whole surah, then flows into the next. */}
       <ListenPlayer surahId={surahId} onSurahChange={selectSurah} onWordChange={onWordChange} />
@@ -74,7 +85,14 @@ export default function ListenView() {
           <span className="h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
         </div>
       ) : (
-        <SurahView ayat={surah.ayat} surahNumber={surahId} showTajweed activeIndex={activeIndex} bookmarks />
+        <SurahView
+          ayat={surah.ayat}
+          surahNumber={surahId}
+          showTajweed={settings.showTajweed}
+          activeIndex={activeIndex}
+          showTranslation={settings.showTranslation}
+          showTranslit={settings.showTranslit}
+        />
       )}
     </div>
   );

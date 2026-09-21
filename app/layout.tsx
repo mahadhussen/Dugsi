@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b100e",
+  themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
 };
@@ -42,6 +42,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${amiri.variable} ${amiriQuran.variable}`}>
       <head>
+        {/* Apply the saved theme before first paint (no flash). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'try{var s=JSON.parse(localStorage.getItem("dugsi:settings:v1")||"{}");if(s.theme==="dark")document.documentElement.dataset.theme="dark";}catch(e){}',
+          }}
+        />
         <link rel="manifest" href={`${BASE}/manifest.webmanifest`} />
         <link rel="apple-touch-icon" href={`${BASE}/icons/icon-192.png`} />
       </head>

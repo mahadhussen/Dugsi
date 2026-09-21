@@ -1,7 +1,10 @@
 import type { Config } from "tailwindcss";
 
-// Design tokens. The app shell is dark (Tarteel-like); the mushaf itself is a
-// cream "paper" page so the Quran text reads like a printed page.
+// Design tokens come from CSS variables (see app/globals.css) so the whole app
+// can switch between the light mushaf theme (default, like a printed page) and
+// a dark theme without touching a single class name.
+const v = (name: string) => `rgb(var(${name}) / <alpha-value>)`;
+
 const config: Config = {
   content: ["./app/**/*.{js,ts,jsx,tsx,mdx}", "./components/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
@@ -11,33 +14,29 @@ const config: Config = {
         quran: ["var(--font-quran)", "var(--font-arabic)", "Amiri", "serif"],
       },
       colors: {
-        // Foreground on the dark shell (was the dark "ink" on parchment).
-        ink: "#e9efec",
-        // Shell + surfaces.
-        shell: "#0b100e",
-        surface: "#131a17",
-        "surface-2": "#1a2320",
-        parchment: "#131a17",
-        // The mushaf paper and its ink.
-        paper: "#f6efdf",
-        "paper-deep": "#eadfc6",
-        "paper-ink": "#1c1a14",
+        ink: v("--c-ink"),
+        shell: v("--c-shell"),
+        surface: v("--c-surface"),
+        "surface-2": v("--c-surface-2"),
+        parchment: v("--c-surface"),
+        paper: v("--c-paper"),
+        "paper-deep": v("--c-paper-deep"),
+        "paper-ink": v("--c-paper-ink"),
         gold: {
           DEFAULT: "#cfae5e",
-          soft: "#e6cf8f",
+          soft: v("--c-gold-soft"),
           deep: "#a9842f",
         },
         emerald: {
           DEFAULT: "#159f78",
-          bright: "#4fd8a8",
+          bright: v("--c-emerald-bright"),
           deep: "#0f7a5c",
           dark: "#0d1613",
         },
       },
       boxShadow: {
-        soft: "0 10px 30px -12px rgba(0, 0, 0, 0.6)",
-        glow: "0 0 0 6px rgba(79, 216, 168, 0.18)",
-        paper: "0 20px 60px -20px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(169,132,47,0.25)",
+        soft: "0 10px 30px -12px rgb(var(--c-shadow) / 0.35)",
+        glow: "0 0 0 6px rgba(21, 159, 120, 0.18)",
       },
       keyframes: {
         ring: {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import Reciter from "./Reciter";
 import SurahPicker from "./SurahPicker";
 import VerseRange, { type Range } from "./VerseRange";
@@ -137,24 +136,19 @@ export default function QuranTrainer() {
   }, [surah, range]);
 
   return (
-    <div className="space-y-6">
-      {/* Surah picker (all 114) */}
-      <SurahPicker current={surahId} onSelect={selectSurah} />
+    <div className="space-y-3">
+      {/* Surah picker modal — opened from the top bar's search button */}
+      <SurahPicker current={surahId} onSelect={selectSurah} hideTrigger />
 
       {isLong && (
         <VerseRange ayahCount={meta.ayahCount} range={range} onChange={(r) => goTo({ surah: surahId, from: r?.from, to: r?.to })} />
       )}
 
-      <p className="text-center text-sm text-ink/60">
-        {range
-          ? `Practising verses ${range.from}–${range.to} · only these are scored · tap ▶ to hear a qari.`
-          : isLong
-            ? "Scroll to read · recite any part (only that part is scored) · tap ▶ to hear a qari."
-            : "Recite aloud, or tap ▶ to hear a qari."}{" "}
-        <Link href="/listen" className="underline underline-offset-2 hover:text-ink">
-          Just listen instead →
-        </Link>
-      </p>
+      {range && (
+        <p className="text-center text-xs text-ink/55">
+          Practising verses {range.from}–{range.to} · only these are scored.
+        </p>
+      )}
 
       {resumeVerse > 1 && !startVerse && (
         <p className="text-center text-xs text-ink/55">

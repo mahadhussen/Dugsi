@@ -22,7 +22,7 @@ export default function Error({ reset }: { error: Error & { digest?: string }; r
         </button>
         <button
           onClick={() => location.reload()}
-          className="rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-ink/80 transition hover:bg-white/5"
+          className="rounded-lg border border-ink/15 px-4 py-2 text-sm font-medium text-ink/80 transition hover:bg-ink/5"
         >
           Reload
         </button>
