@@ -34,8 +34,12 @@ reading-progress marker.
    flags rushed ones (⏱) — e.g. the 6-count madd in *aḍ-ḍāāāllīn*.
 4. **Tajweed guide.** The surah is rendered with colour-coded tajweed rules
    (madd, sun/moon letters, leen, lām of Allah, tafkhīm, …) to learn as you read.
-5. **Listen to the whole Quran, in your Sheikh's voice.** Pick from a range of
-   beloved qaris (Alafasy, Al-Husary, Abdul Basit, Al-Minshawi, As-Sudais, …)
+5. **Listen to the whole Quran, in your Sheikh's voice.** A reciter library
+   of 40+ qaris, all Hafs ʿan ʿĀṣim, from Alafasy, Al-Husary, Abdul Basit and
+   Al-Minshawi (murattal, mujawwad and teaching recordings) to the imams of the
+   two Holy Mosques, with search, style and country filters, favourites,
+   recently used, a quality badge from the recording bitrate, a "word
+   highlighting" badge, and portraits from Wikipedia where available. Pick one
    and press play: Dugsi recites the surah verse by verse and flows straight
    into the next one, so you can listen to the entire Quran hands-free. It hooks
    into the phone's Media Session, so the lock-screen and headphone controls

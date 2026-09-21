@@ -48,6 +48,12 @@ const DATA: Source[] = [
     url: "https://everyayah.com",
   },
   {
+    name: "Wikipedia / Wikimedia Commons",
+    what: "Reciter portraits in the reciter library are the thumbnails of each Sheikh's English Wikipedia article, fetched in your browser when the list opens.",
+    licence: "Each image carries its own free licence (CC BY-SA or public domain); the portrait links to the article, where the file's author and licence are listed",
+    url: "https://commons.wikimedia.org",
+  },
+  {
     name: "quran-align by Collin Fair",
     what: "Word-level timestamps inside the EveryAyah recordings (Alafasy, Al-Husary Muallim, Ash-Shuraim, Al-Minshawi) — powers word highlighting while listening and 'hear the qari say just this word'.",
     licence: "Creative Commons Attribution 4.0",
