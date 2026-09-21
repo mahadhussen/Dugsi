@@ -44,6 +44,8 @@ export default function Home() {
           <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Badge>100% free</Badge>
             <Badge>No ads, ever</Badge>
+            <Badge>Live mistake detection</Badge>
+            <Badge>Memorise · peek · goals</Badge>
             <Badge>Optional account to sync</Badge>
           </div>
         </div>

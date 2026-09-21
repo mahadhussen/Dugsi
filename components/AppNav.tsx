@@ -8,6 +8,7 @@ import AccountButton from "./AccountButton";
 const LINKS = [
   { href: "/", label: "Recitera", sub: "Läs upp & få feedback", icon: "mic" },
   { href: "/listen", label: "Lyssna", sub: "Hela Koranen, valfri Sheikh", icon: "play" },
+  { href: "/progress", label: "Framsteg", sub: "Statistik, mål, misstag, inspelningar", icon: "chart" },
   { href: "/prayer", label: "Bönetider", sub: "Göteborg · adhan", icon: "clock" },
 ] as const;
 
@@ -16,6 +17,7 @@ function Icon({ name, className }: { name: string; className?: string }) {
     mic: <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zm-7 9a7 7 0 0 0 6 6.92V21H8v2h8v-2h-3v-2.08A7 7 0 0 0 19 12h-2a5 5 0 0 1-10 0H5z" />,
     play: <path d="M8 5v14l11-7z" />,
     clock: <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 10V6h-2v8h6v-2h-4z" />,
+    chart: <path d="M4 20h16v2H2V2h2v18zm3-2V9h3v9H7zm5 0V4h3v14h-3zm5 0v-6h3v6h-3z" />,
     menu: <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />,
   };
   return (

@@ -1,0 +1,14 @@
+{
+  "name": "Dugsi — Recite & Learn the Quran",
+  "short_name": "Dugsi",
+  "description": "Free Quran recitation trainer with live word-by-word feedback, memorisation tools and progress tracking.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf6ec",
+  "theme_color": "#08332f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

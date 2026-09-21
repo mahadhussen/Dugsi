@@ -5,6 +5,10 @@
 // the old behaviour: furthest verse in this device's localStorage, no history.
 
 import { getSupabase } from "./client";
+import { readHistory, recordSession, syncHistory, type SessionRow, type StoredMistake } from "@/lib/history";
+import { dayKey } from "@/lib/uid";
+
+export type { SessionRow, StoredMistake } from "@/lib/history";
 
 const localKey = (surah: number) => `dugsi:progress:${surah}`;
 
@@ -80,13 +84,6 @@ export function resetFurthest(userId: string | null, surah: number): void {
   clearLocal(surah);
 }
 
-/** A single mistaken word, kept compact: reference index + what was heard
- *  (null = the word was skipped). The correct text/verse is re-derived from the
- *  surah at review time, so we don't duplicate the Quran text into every row. */
-export interface StoredMistake {
-  i: number;
-  h: string | null;
-}
 
 export interface SessionRecord {
   surah: number;
@@ -94,29 +91,20 @@ export interface SessionRecord {
   correct: number;
   wrong: number;
   missing: number;
+  extra?: number;
+  seconds?: number;
+  verses?: number;
+  from_verse?: number;
+  to_verse?: number;
+  peeks?: number;
+  hifz?: number;
   mistakes: StoredMistake[];
 }
 
-/** Record a finished recitation (signed-in only) and notify any listeners. */
+/** Record a finished recitation — locally for everyone, and to the account when
+ *  signed in. Listeners get a `dugsi:session` event once it is stored. */
 export function logSession(userId: string | null, s: SessionRecord): void {
-  const supabase = getSupabase();
-  if (!userId || !supabase) return;
-  const notify = () => {
-    if (typeof window !== "undefined") window.dispatchEvent(new Event("dugsi:session"));
-  };
-  const { mistakes, ...base } = s;
-  void supabase
-    .from("sessions")
-    .insert({ user_id: userId, ...base, mistakes })
-    .then(({ error }) => {
-      if (!error) return notify();
-      // The `mistakes` column may not exist yet (migration not run). Fall back to
-      // logging the session without it so progress tracking still works.
-      void supabase
-        .from("sessions")
-        .insert({ user_id: userId, ...base })
-        .then(notify);
-    });
+  recordSession(userId, s);
 }
 
 /** Per-surah memorisation/mastery, derived from recitation history. */
@@ -130,12 +118,36 @@ export interface SurahStat {
   lastPracticed: string;
   /** Words missed across recent attempts (deduped), to review and learn from. */
   mistakes: StoredMistake[];
+  /** Distinct verses this reader has recited with a score at/above the
+   *  memorised threshold (from sessions that recorded a verse span). */
+  memorisedVerses: number;
+}
+
+/** One calendar day of activity (for the streak calendar). */
+export interface DayStat {
+  day: string; // YYYY-MM-DD (local)
+  sessions: number;
+  seconds: number;
+  verses: number;
+  bestScore: number;
+}
+
+/** A word this reader keeps stumbling on, across every session. */
+export interface WordMistake {
+  surah: number;
+  i: number;
+  count: number;
+  /** Most recent thing heard (null = skipped). */
+  lastHeard: string | null;
+  lastAt: string;
 }
 
 export interface Stats {
   totalSessions: number;
   /** Consecutive days (including today) with at least one session. */
   streak: number;
+  /** Longest streak ever. */
+  bestStreak: number;
   /** Sessions recorded today (for the daily goal). */
   todayCount: number;
   averageScore: number;
@@ -144,39 +156,51 @@ export interface Stats {
   recent: { surah: number; score: number; created_at: string }[];
   /** One entry per practised surah, most recently practised first. */
   bySurah: SurahStat[];
+  /** Time recited. */
+  totalSeconds: number;
+  todaySeconds: number;
+  weekSeconds: number;
+  /** Verses recited (sum over sessions; a verse recited twice counts twice). */
+  totalVerses: number;
+  todayVerses: number;
+  weekVerses: number;
+  /** Sessions this week (last 7 days including today). */
+  weekCount: number;
+  /** Words in total marked correct / wrong / skipped / added. */
+  totals: { correct: number; wrong: number; missing: number; extra: number; peeks: number };
+  /** Activity per local day, keyed YYYY-MM-DD. */
+  days: Record<string, DayStat>;
+  /** Score of the last sessions, oldest first (for the trend line). */
+  trend: { score: number; created_at: string; surah: number }[];
+  /** Most-missed words across all surahs, most frequent first. */
+  wordMistakes: WordMistake[];
+  /** Verses newly memorised (score ≥ threshold) in the last 30 days. */
+  monthMemorised: number;
 }
 
 /** A best score at or above this counts a surah as "memorised". */
 export const MEMORISED_THRESHOLD = 90;
 
-export async function loadStats(userId: string): Promise<Stats | null> {
-  const supabase = getSupabase();
-  if (!supabase) return null;
-  // Try to fetch the stored mistakes; if that column doesn't exist yet, retry
-  // without it so stats still load.
-  let res = await supabase
-    .from("sessions")
-    .select("surah, score, created_at, mistakes")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(500);
-  if (res.error) {
-    res = (await supabase
-      .from("sessions")
-      .select("surah, score, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(500)) as typeof res;
+/**
+ * Load stats for this reader. Reads the local history (which is the merged
+ * view when signed in); with a user id it first syncs with the account.
+ */
+export async function loadStats(userId: string | null): Promise<Stats | null> {
+  let rows: SessionRow[] = readHistory();
+  if (userId && getSupabase()) {
+    try {
+      rows = await syncHistory(userId);
+    } catch {
+      /* offline — local view */
+    }
   }
-  if (res.error || !res.data) return null;
-  return computeStats(res.data as SessionRow[], new Date());
+  return computeStats(rows, new Date());
 }
 
-export interface SessionRow {
-  surah: number;
-  score: number;
-  created_at: string;
-  mistakes?: StoredMistake[] | null;
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
 }
 
 /**
@@ -199,14 +223,72 @@ export function computeStats(data: SessionRow[], now: Date): Stats {
     cursor.setDate(cursor.getDate() - 1);
   }
 
+  // Longest streak ever: walk the sorted distinct days.
+  const dayTimes = Array.from(new Set(data.map((r) => startOfDay(new Date(r.created_at)).getTime()))).sort(
+    (a, b) => a - b,
+  );
+  let bestStreak = 0;
+  let run = 0;
+  for (let k = 0; k < dayTimes.length; k++) {
+    if (k > 0 && Math.round((dayTimes[k] - dayTimes[k - 1]) / 86_400_000) === 1) run++;
+    else run = 1;
+    bestStreak = Math.max(bestStreak, run);
+  }
+
   // Aggregate per surah (data is newest-first, so the first row seen per surah
   // is its most recent attempt).
   const map = new Map<number, SurahStat>();
   // Track which reference words are already collected per surah (dedupe), keeping
   // the most recent "heard" for each. Capped so a surah can't store unboundedly.
   const seen = new Map<number, Set<number>>();
+  const memorisedVerses = new Map<number, Set<number>>();
   const MISTAKE_CAP = 40;
+  const wordMap = new Map<string, WordMistake>();
+  const dayMap: Record<string, DayStat> = {};
+  const totals = { correct: 0, wrong: 0, missing: 0, extra: 0, peeks: 0 };
+  let totalSeconds = 0;
+  let todaySeconds = 0;
+  let weekSeconds = 0;
+  let totalVerses = 0;
+  let todayVerses = 0;
+  let weekVerses = 0;
+  let weekCount = 0;
+  let monthMemorised = 0;
+  const todayStr = now.toDateString();
+  const weekStart = startOfDay(now).getTime() - 6 * 86_400_000;
+  const monthStart = startOfDay(now).getTime() - 29 * 86_400_000;
+  const monthMemorisedSet = new Set<string>();
+
   for (const r of data) {
+    const when = new Date(r.created_at);
+    const secs = Math.max(0, r.seconds ?? 0);
+    const verses = Math.max(0, r.verses ?? 0);
+    const isToday = when.toDateString() === todayStr;
+    const inWeek = when.getTime() >= weekStart;
+    totalSeconds += secs;
+    totalVerses += verses;
+    if (isToday) {
+      todaySeconds += secs;
+      todayVerses += verses;
+    }
+    if (inWeek) {
+      weekSeconds += secs;
+      weekVerses += verses;
+      weekCount++;
+    }
+    totals.correct += r.correct ?? 0;
+    totals.wrong += r.wrong ?? 0;
+    totals.missing += r.missing ?? 0;
+    totals.extra += r.extra ?? 0;
+    totals.peeks += r.peeks ?? 0;
+
+    const dk = dayKey(when);
+    const d = (dayMap[dk] ??= { day: dk, sessions: 0, seconds: 0, verses: 0, bestScore: 0 });
+    d.sessions++;
+    d.seconds += secs;
+    d.verses += verses;
+    d.bestScore = Math.max(d.bestScore, r.score ?? 0);
+
     let cur = map.get(r.surah);
     if (!cur) {
       cur = {
@@ -216,36 +298,76 @@ export function computeStats(data: SessionRow[], now: Date): Stats {
         lastScore: r.score ?? 0,
         lastPracticed: r.created_at,
         mistakes: [],
+        memorisedVerses: 0,
       };
       map.set(r.surah, cur);
       seen.set(r.surah, new Set());
+      memorisedVerses.set(r.surah, new Set());
     } else {
       cur.attempts++;
       cur.bestScore = Math.max(cur.bestScore, r.score ?? 0);
     }
+    if ((r.score ?? 0) >= MEMORISED_THRESHOLD && r.from_verse && r.to_verse && r.to_verse >= r.from_verse) {
+      const set = memorisedVerses.get(r.surah)!;
+      const lo = r.from_verse;
+      const hi = Math.min(r.to_verse, lo + 400);
+      for (let v = lo; v <= hi; v++) {
+        set.add(v);
+        if (when.getTime() >= monthStart) monthMemorisedSet.add(`${r.surah}:${v}`);
+      }
+    }
     const seenSet = seen.get(r.surah)!;
     for (const m of r.mistakes ?? []) {
-      if (cur.mistakes.length >= MISTAKE_CAP) break;
-      if (m && typeof m.i === "number" && !seenSet.has(m.i)) {
+      if (!m || typeof m.i !== "number") continue;
+      if (cur.mistakes.length < MISTAKE_CAP && !seenSet.has(m.i)) {
         seenSet.add(m.i);
         cur.mistakes.push({ i: m.i, h: m.h ?? null });
       }
+      const key = `${r.surah}:${m.i}`;
+      const w = wordMap.get(key);
+      if (w) w.count++;
+      else wordMap.set(key, { surah: r.surah, i: m.i, count: 1, lastHeard: m.h ?? null, lastAt: r.created_at });
     }
   }
+  for (const [surah, set] of memorisedVerses) {
+    const st = map.get(surah);
+    if (st) st.memorisedVerses = set.size;
+  }
+  monthMemorised = monthMemorisedSet.size;
+
   const bySurah = Array.from(map.values()).sort(
     (a, b) => new Date(b.lastPracticed).getTime() - new Date(a.lastPracticed).getTime(),
   );
   const memorisedCount = bySurah.filter((s) => s.bestScore >= MEMORISED_THRESHOLD).length;
-  const todayStr = now.toDateString();
   const todayCount = data.filter((r) => new Date(r.created_at).toDateString() === todayStr).length;
+  const wordMistakes = Array.from(wordMap.values())
+    .sort((a, b) => b.count - a.count || new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime())
+    .slice(0, 150);
+  const trend = data
+    .slice(0, 30)
+    .map((r) => ({ score: r.score ?? 0, created_at: r.created_at, surah: r.surah }))
+    .reverse();
 
   return {
     totalSessions: total,
     streak,
+    bestStreak,
     todayCount,
     averageScore,
     memorisedCount,
     recent: data.slice(0, 8),
     bySurah,
+    totalSeconds,
+    todaySeconds,
+    weekSeconds,
+    totalVerses,
+    todayVerses,
+    weekVerses,
+    weekCount,
+    totals,
+    days: dayMap,
+    trend,
+    wordMistakes,
+    monthMemorised,
   };
 }

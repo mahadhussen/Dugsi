@@ -141,3 +141,33 @@ export async function loadRecording(surah: number): Promise<StoredRecording | nu
     return null;
   }
 }
+
+/** Every recording kept on this device, newest first. */
+export async function listRecordings(): Promise<StoredRecording[]> {
+  if (!available()) return [];
+  try {
+    const db = await openDb();
+    const all = await getAll(db);
+    db.close();
+    return all.sort((a, b) => b.createdAt - a.createdAt);
+  } catch {
+    return [];
+  }
+}
+
+/** Remove one surah's recording from this device. */
+export async function deleteRecording(surah: number): Promise<void> {
+  if (!available()) return;
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).delete(surah);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+    db.close();
+  } catch {
+    /* ignore */
+  }
+}

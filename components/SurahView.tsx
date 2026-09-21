@@ -6,6 +6,7 @@ import type { Ayah } from "@/lib/quran/types";
 import { primaryRuleColor } from "@/lib/tajweed/rules";
 import type { WordStatus } from "@/lib/align";
 import PlayButton from "./PlayButton";
+import BookmarkButton from "./BookmarkButton";
 
 interface Props {
   ayat: Ayah[];
@@ -23,6 +24,12 @@ interface Props {
   initialTopVerse?: number;
   /** Reports the 1-based verse nearest the top as the reader scrolls. */
   onTopVerseChange?: (verse: number) => void;
+  /** Controlled set of hidden words the reader has opened (memorisation).
+   *  When omitted the view keeps its own. */
+  revealed?: Set<number>;
+  onReveal?: (refIndex: number) => void;
+  /** Show verse bookmark toggles. */
+  bookmarks?: boolean;
 }
 
 /** Fraction of words hidden at each Hifz level. */
@@ -31,7 +38,7 @@ function hideThreshold(level: number): number {
 }
 
 /** Deterministic per-word masking so the hidden set is stable across renders. */
-function isMaskedSlot(refIndex: number, level: number): boolean {
+export function isMaskedSlot(refIndex: number, level: number): boolean {
   if (level <= 0) return false;
   const h = Math.imul(refIndex + 1, 2654435761) >>> 0;
   return h % 100 < hideThreshold(level);
@@ -63,6 +70,7 @@ interface VerseProps {
   maskLevel: number;
   revealed?: Set<number>;
   onReveal?: (refIndex: number) => void;
+  bookmarks: boolean;
 }
 
 const VerseBlock = memo(function VerseBlock({
@@ -78,6 +86,7 @@ const VerseBlock = memo(function VerseBlock({
   maskLevel,
   revealed,
   onReveal,
+  bookmarks,
 }: VerseProps) {
   const hasFeedback = !!statuses;
   const len = ayah.words.length;
@@ -147,13 +156,16 @@ const VerseBlock = memo(function VerseBlock({
         )}
         <span className="ayah-medallion mx-1 align-middle">{toArabicNumeral(ayah.number)}</span>
         <PlayButton surah={surahNumber} ayah={ayah.number} />
+        {bookmarks && <BookmarkButton surah={surahNumber} verse={ayah.number} />}
       </p>
-      {ayah.translit && (
+      {/* Memorising: the transliteration would give the words away, and the
+          translation is a strong hint — hide them as the level rises. */}
+      {ayah.translit && maskLevel === 0 && (
         <p className="mt-2 text-sm italic text-emerald/80" dir="ltr">
           {ayah.translit}
         </p>
       )}
-      {ayah.translation && (
+      {ayah.translation && maskLevel < 2 && (
         <p className="text-sm text-ink/60" dir="ltr">
           {ayah.translation}
         </p>
@@ -166,6 +178,7 @@ function versesEqual(prev: VerseProps, next: VerseProps): boolean {
   if (prev.showTajweed !== next.showTajweed) return false;
   if (prev.tajweedEveryWord !== next.tajweedEveryWord) return false;
   if (prev.maskLevel !== next.maskLevel) return false;
+  if (prev.bookmarks !== next.bookmarks) return false;
   if (prev.ayah !== next.ayah || prev.baseRefIndex !== next.baseRefIndex || prev.index !== next.index)
     return false;
 
@@ -197,6 +210,9 @@ export default function SurahView({
   maskLevel = 0,
   initialTopVerse,
   onTopVerseChange,
+  revealed: revealedProp,
+  onReveal: onRevealProp,
+  bookmarks = false,
 }: Props) {
   const wordOffsets = useMemo(() => {
     const o: number[] = [];
@@ -209,17 +225,20 @@ export default function SurahView({
   }, [ayat]);
 
   // Words the reader has tapped open (in addition to ones revealed by reciting).
-  const [revealed, setRevealed] = useState<Set<number>>(() => new Set());
+  // Controlled by the parent when it needs to peek programmatically.
+  const [ownRevealed, setOwnRevealed] = useState<Set<number>>(() => new Set());
   useEffect(() => {
-    setRevealed(new Set());
+    setOwnRevealed(new Set());
   }, [ayat, maskLevel]);
-  const reveal = useCallback((refIndex: number) => {
-    setRevealed((prev) => {
+  const ownReveal = useCallback((refIndex: number) => {
+    setOwnRevealed((prev) => {
       const next = new Set(prev);
       next.add(refIndex);
       return next;
     });
   }, []);
+  const revealed = revealedProp ?? ownRevealed;
+  const reveal = onRevealProp ?? ownReveal;
 
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const verseEls = useRef<(HTMLDivElement | null)[]>([]);
@@ -269,6 +288,7 @@ export default function SurahView({
       maskLevel={maskLevel}
       revealed={revealed}
       onReveal={reveal}
+      bookmarks={bookmarks}
     />
   );
 

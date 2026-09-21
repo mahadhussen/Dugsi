@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import SurahView from "./SurahView";
+import SurahView, { isMaskedSlot } from "./SurahView";
 import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
 import { transcribeWithWhisper, isWhisperSupported, webgpuAvailable } from "@/lib/speech/whisperLocal";
 import { analyzeRecitation, type RecitationFeedback } from "@/lib/analyze";
 import type { WordStatus } from "@/lib/align";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
 import { tokenize, normalizeWord } from "@/lib/arabic";
-import { trackLive } from "@/lib/live";
+import { trackLive, mergeLiveStatuses } from "@/lib/live";
+import { useSettings } from "@/lib/settings";
 import { pickBestAlternative } from "@/lib/speech/pickBest";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
@@ -79,13 +80,19 @@ export default function Reciter({
   ayat,
   surahNumber,
   trackProgress = false,
+  startVerse,
 }: {
   ayat: Ayah[];
   surahNumber: number;
   trackProgress?: boolean;
+  /** Scroll to this 1-based verse first (e.g. a bookmark or a mistake to practise). */
+  startVerse?: number;
 }) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  const settings = useSettings();
+  const liveMistakesRef = useRef(settings.liveMistakes);
+  liveMistakesRef.current = settings.liveMistakes;
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<RecitationFeedback | null>(null);
@@ -96,7 +103,25 @@ export default function Reciter({
   const [modelPercent, setModelPercent] = useState(0);
   const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
   const [livePointer, setLivePointer] = useState(0);
+  const [liveExtras, setLiveExtras] = useState(0); // added words heard so far (live)
+  const extrasRef = useRef(0);
   const [hifz, setHifz] = useState(0); // 0 = off, 1 easy, 2 medium, 3 hide all
+  // Memorisation: hidden words the reader opened (by tap or the Peek buttons),
+  // and how many times they peeked this attempt.
+  const [revealed, setRevealed] = useState<Set<number>>(() => new Set());
+  const peeksRef = useRef(0);
+  const reveal = useCallback((refIndex: number) => {
+    setRevealed((prev) => {
+      if (prev.has(refIndex)) return prev;
+      const next = new Set(prev);
+      next.add(refIndex);
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    setRevealed(new Set());
+    peeksRef.current = 0;
+  }, [ayat, hifz]);
   const [engineTick, setEngineTick] = useState(0); // re-render the status line after re-enable
   // The user's own recording (always kept) + word timestamps when Whisper ran.
   const [recording, setRecording] = useState<{ url: string; words: TimedWord[] } | null>(null);
@@ -227,13 +252,18 @@ export default function Reciter({
         lastTrack = now;
         const tokens = tokenize(text);
         if (tokens.length <= processedTokens) return; // interim revision — wait for growth
-        const { statuses, pointer } = trackLive(
+        const { statuses, pointer, extras } = trackLive(
           expectedNorm,
           tokens.slice(processedTokens),
           trackPointer,
+          { mistakes: liveMistakesRef.current },
         );
         processedTokens = tokens.length;
         trackPointer = Math.max(trackPointer, pointer);
+        if (extras > 0) {
+          extrasRef.current += extras;
+          setLiveExtras(extrasRef.current);
+        }
         // Stamp ONLY words that actually matched this tick (never pointer nudges
         // past unheard words — those stamps would point at the wrong audio).
         // A batch of matches is spread between the previous stamp and now, since
@@ -243,6 +273,9 @@ export default function Reciter({
           const fresh: number[] = [];
           for (const key in statuses) {
             const idx = Number(key);
+            // Only words actually heard carry a timestamp — a word flagged as
+            // skipped or substituted was never (correctly) said at this moment.
+            if (statuses[idx] !== "correct" && statuses[idx] !== "close") continue;
             if (firstLiveMatchRef.current === undefined || idx < firstLiveMatchRef.current) {
               firstLiveMatchRef.current = idx;
             }
@@ -258,22 +291,11 @@ export default function Reciter({
           }
         }
 
-        // Merge forward-only and sticky: once a word is green it stays green, and
-        // the cursor never moves backward. This makes the marking consistent and
-        // smooth instead of flickering as the recogniser revises interim results.
-        setLiveStatuses((prev) => {
-          let out = prev;
-          for (const key in statuses) {
-            const idx = Number(key);
-            const next = statuses[idx];
-            const cur = prev[idx];
-            if (cur === undefined || (cur === "close" && next === "correct")) {
-              if (out === prev) out = { ...prev };
-              out[idx] = next;
-            }
-          }
-          return out;
-        });
+        // Merge sticky: once a word is green it stays green, a word flagged
+        // red recovers when re-read, and the cursor never moves backward. This
+        // keeps the marking consistent and smooth instead of flickering as the
+        // recogniser revises interim results.
+        setLiveStatuses((prev) => mergeLiveStatuses(prev, statuses));
         setLivePointer((prev) => (pointer > prev ? pointer : prev));
         if (trackProgress) {
           const verse = flatWords[Math.min(flatWords.length - 1, pointer)]?.ayah;
@@ -439,6 +461,10 @@ export default function Reciter({
     setFeedback(null);
     setLiveStatuses({});
     setLivePointer(0);
+    setLiveExtras(0);
+    extrasRef.current = 0;
+    setRevealed(new Set()); // hide the words again for a fresh attempt
+    peeksRef.current = 0;
     clearRecording();
     liveResultShownRef.current = false;
     loggedRef.current = false;
@@ -455,6 +481,10 @@ export default function Reciter({
   // Scrolling/active-follow are handled by the virtualised list itself.
   const [initialTopVerse, setInitialTopVerse] = useState(0);
   useEffect(() => {
+    if (startVerse && startVerse > 0) {
+      setInitialTopVerse(startVerse);
+      return;
+    }
     if (!trackProgress) {
       setInitialTopVerse(0);
       return;
@@ -464,7 +494,7 @@ export default function Reciter({
     return () => {
       cancelled = true;
     };
-  }, [trackProgress, surahNumber, userId]);
+  }, [trackProgress, surahNumber, userId, startVerse]);
   const handleTopVerseChange = useCallback(
     (verse: number) => {
       if (trackProgress) saveFurthest(userId, surahNumber, verse);
@@ -562,16 +592,30 @@ export default function Reciter({
         .filter((w) => w.status === "wrong" || w.status === "missing")
         .slice(0, 40)
         .map((w) => ({ i: w.refIndex, h: w.heard }));
+      // Which verses the attempt covered (for verse goals and per-verse mastery).
+      const versesHit = new Set<number>();
+      for (const w of feedback.alignment.words) {
+        const v = flatWords[w.refIndex]?.ayah;
+        if (v) versesHit.add(v);
+      }
+      const verseList = Array.from(versesHit);
       logSession(userId, {
         surah: surahNumber,
         score: feedback.score,
         correct: countStatus(feedback, "correct"),
         wrong: countStatus(feedback, "wrong"),
         missing: countStatus(feedback, "missing"),
+        extra: feedback.alignment.extras.length,
+        seconds: secondsRef.current,
+        verses: verseList.length,
+        from_verse: verseList.length ? Math.min(...verseList) : undefined,
+        to_verse: verseList.length ? Math.max(...verseList) : undefined,
+        peeks: peeksRef.current,
+        hifz,
         mistakes: missed,
       });
     }
-  }, [phase, feedback, userId, surahNumber]);
+  }, [phase, feedback, userId, surahNumber, flatWords, hifz]);
 
   // Live word-by-word following now runs in both engines (Fast directly, High
   // accuracy via a concurrent browser recogniser). Keep the live marks visible
@@ -580,6 +624,52 @@ export default function Reciter({
   const showingLive = (phase === "recording" || phase === "processing") && !feedback;
   // A scored verdict is only shown when we heard clearly enough (confidence gate).
   const scored = !!feedback && feedback.reliable;
+
+  // Live tally for the HUD while reciting.
+  const liveCounts = useMemo(() => {
+    const c = { correct: 0, missing: 0, wrong: 0 };
+    for (const k in liveStatuses) {
+      const st = liveStatuses[k];
+      if (st === "correct" || st === "close") c.correct++;
+      else if (st === "missing") c.missing++;
+      else if (st === "wrong") c.wrong++;
+    }
+    return c;
+  }, [liveStatuses]);
+
+  // Memorisation peeking: open the next hidden word (or its whole verse) from
+  // where the reciter is. Counted per attempt, so the summary can be honest
+  // about how much help was used.
+  const nextHidden = (): number | null => {
+    if (hifz <= 0) return null;
+    const from = phase === "recording" ? livePointer : 0;
+    const visible = showingLive ? liveStatuses : scored ? statuses : undefined;
+    for (let idx = from; idx < flatWords.length; idx++) {
+      const st = visible?.[idx];
+      if (st === "correct" || st === "close") continue;
+      if (isMaskedSlot(idx, hifz) && !revealed.has(idx)) return idx;
+    }
+    return null;
+  };
+  const peekWord = () => {
+    const idx = nextHidden();
+    if (idx === null) return;
+    peeksRef.current++;
+    reveal(idx);
+  };
+  const peekVerse = () => {
+    const idx = nextHidden();
+    if (idx === null) return;
+    peeksRef.current++;
+    const verse = flatWords[idx].ayah;
+    setRevealed((prev) => {
+      const next = new Set(prev);
+      flatWords.forEach((fw, i) => {
+        if (fw.ayah === verse) next.add(i);
+      });
+      return next;
+    });
+  };
 
   // Memoise the surah so the (frequent) live-transcript text updates don't
   // re-invoke it — it only rebuilds when statuses / cursor / target actually change.
@@ -595,9 +685,14 @@ export default function Reciter({
         maskLevel={hifz}
         initialTopVerse={initialTopVerse}
         onTopVerseChange={handleTopVerseChange}
+        revealed={revealed}
+        onReveal={reveal}
+        bookmarks
       />
     ),
     [
+      revealed,
+      reveal,
       ayat,
       surahNumber,
       showingLive,
@@ -640,7 +735,7 @@ export default function Reciter({
         }}
       />
 
-      <HifzToggle level={hifz} onSelect={setHifz} />
+      <HifzToggle level={hifz} onSelect={setHifz} onPeekWord={peekWord} onPeekVerse={peekVerse} />
 
       {/* Recorder */}
       <div className="flex flex-col items-center gap-4">
@@ -690,7 +785,13 @@ export default function Reciter({
             <p className="ayah text-2xl text-ink/80" dir="rtl">
               {liveText || "…"}
             </p>
-            <p className="mt-1 text-xs text-ink/40">Recite at your own pace.</p>
+            <LiveTally
+              correct={liveCounts.correct}
+              missing={liveCounts.missing}
+              wrong={liveCounts.wrong}
+              extra={liveExtras}
+              detecting={settings.liveMistakes}
+            />
           </div>
         )}
       </div>
@@ -753,7 +854,47 @@ function EngineStatus({
   );
 }
 
-function HifzToggle({ level, onSelect }: { level: number; onSelect: (l: number) => void }) {
+/** The running tally shown under the live transcript while reciting. */
+function LiveTally({
+  correct,
+  missing,
+  wrong,
+  extra,
+  detecting,
+}: {
+  correct: number;
+  missing: number;
+  wrong: number;
+  extra: number;
+  detecting: boolean;
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
+      <span className="font-semibold text-emerald-deep">✓ {correct}</span>
+      {detecting ? (
+        <>
+          <span className={wrong > 0 ? "font-semibold text-red-600" : "text-ink/40"}>✗ {wrong} wrong</span>
+          <span className={missing > 0 ? "font-semibold text-amber-700" : "text-ink/40"}>↷ {missing} skipped</span>
+          <span className={extra > 0 ? "font-semibold text-amber-700" : "text-ink/40"}>+ {extra} added</span>
+        </>
+      ) : (
+        <span className="text-ink/40">Recite at your own pace.</span>
+      )}
+    </div>
+  );
+}
+
+function HifzToggle({
+  level,
+  onSelect,
+  onPeekWord,
+  onPeekVerse,
+}: {
+  level: number;
+  onSelect: (l: number) => void;
+  onPeekWord: () => void;
+  onPeekVerse: () => void;
+}) {
   const options: { value: number; label: string }[] = [
     { value: 0, label: "Off" },
     { value: 1, label: "Easy" },
@@ -779,10 +920,26 @@ function HifzToggle({ level, onSelect }: { level: number; onSelect: (l: number) 
         </div>
       </div>
       {level > 0 && (
-        <p className="max-w-md text-center text-xs text-ink/50">
-          Hidden words reveal as you recite them correctly — or tap a word to peek. Hit the mic and
-          recite from memory.
-        </p>
+        <>
+          <div className="mt-1 flex items-center gap-2">
+            <button
+              onClick={onPeekWord}
+              className="rounded-full border border-gold/40 bg-white/80 px-3 py-1 text-xs font-semibold text-gold-deep shadow-soft transition hover:bg-gold/10 active:scale-95"
+            >
+              👁 Peek next word
+            </button>
+            <button
+              onClick={onPeekVerse}
+              className="rounded-full border border-gold/40 bg-white/80 px-3 py-1 text-xs font-semibold text-gold-deep shadow-soft transition hover:bg-gold/10 active:scale-95"
+            >
+              Peek verse
+            </button>
+          </div>
+          <p className="max-w-md text-center text-xs text-ink/50">
+            Hidden words reveal as you recite them correctly. Stuck? Peek at the next word or verse
+            (peeks are counted), or tap any hidden word. Hit the mic and recite from memory.
+          </p>
+        </>
       )}
     </div>
   );
@@ -861,11 +1018,21 @@ function ResultsPanel({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+      <div className="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <Stat label="Correct words" value={countStatus(feedback, "correct")} tone="good" />
         <Stat label="Needs work" value={countStatus(feedback, "wrong")} tone="bad" />
         <Stat label="Skipped" value={countStatus(feedback, "missing")} tone="warn" />
+        <Stat label="Added words" value={feedback.alignment.extras.length} tone="warn" />
       </div>
+
+      {feedback.alignment.extras.length > 0 && (
+        <p className="mt-2 text-xs text-ink/50">
+          Words heard that are not in the text:{" "}
+          <span className="font-arabic text-sm text-ink/70" dir="rtl">
+            {feedback.alignment.extras.slice(0, 12).join(" · ")}
+          </span>
+        </p>
+      )}
 
       {rushed.length > 0 && (
         <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
