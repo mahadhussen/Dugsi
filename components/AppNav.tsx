@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/listen", label: "Lyssna", sub: "Hela Koranen, valfri Sheikh", icon: "play" },
   { href: "/progress", label: "Framsteg", sub: "Statistik, mål, misstag, inspelningar", icon: "chart" },
   { href: "/prayer", label: "Bönetider", sub: "Göteborg · adhan", icon: "clock" },
+  { href: "/about", label: "Om & källor", sub: "Licenser, modeller, ärliga gränser", icon: "info" },
 ] as const;
 
 function Icon({ name, className }: { name: string; className?: string }) {
@@ -18,6 +19,7 @@ function Icon({ name, className }: { name: string; className?: string }) {
     play: <path d="M8 5v14l11-7z" />,
     clock: <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 10V6h-2v8h6v-2h-4z" />,
     chart: <path d="M4 20h16v2H2V2h2v18zm3-2V9h3v9H7zm5 0V4h3v14h-3zm5 0v-6h3v6h-3z" />,
+    info: <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />,
     menu: <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />,
   };
   return (

@@ -4,12 +4,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ayahAudioUrl } from "@/lib/audio-quran";
 import { useReciter } from "@/lib/reciter-store";
 import { surahMeta } from "@/lib/quran";
+import { loadTimings, wordAt, type SurahTimings } from "@/lib/quran/timings";
 
 interface Props {
   /** Surah currently shown in the reader. */
   surahId: number;
   /** Keep the reader in sync as playback flows into the next/previous surah. */
   onSurahChange: (id: number) => void;
+  /** Word being recited right now (verse, index in verse), or null. Only for
+   *  Sheikhs with word timings; verse-level otherwise. */
+  onWordChange?: (pos: { verse: number; word: number } | null) => void;
 }
 
 /**
@@ -19,7 +23,7 @@ interface Props {
  * hooks into the phone's Media Session so the lock-screen and headphone
  * controls (play / pause / skip) drive it too.
  */
-export default function ListenPlayer({ surahId, onSurahChange }: Props) {
+export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: Props) {
   const { reciter, reciterId } = useReciter();
   const meta = surahMeta(surahId)!;
   const ayahCount = meta.ayahCount;
@@ -29,6 +33,47 @@ export default function ListenPlayer({ surahId, onSurahChange }: Props) {
   const [intendPlay, setIntendPlay] = useState(false);
   const [repeat, setRepeat] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [rate, setRate] = useState(1);
+  const [timings, setTimings] = useState<SurahTimings | null>(null);
+
+  // Word timings for this Sheikh + surah (quran-align data), for read-along.
+  useEffect(() => {
+    let cancelled = false;
+    setTimings(null);
+    void loadTimings(reciterId, surahId).then((t) => !cancelled && setTimings(t));
+    return () => {
+      cancelled = true;
+    };
+  }, [reciterId, surahId]);
+
+  // Follow the qari word by word while playing (or verse by verse without timings).
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a || !onWordChange) return;
+    if (!intendPlay) {
+      onWordChange(null);
+      return;
+    }
+    let raf = 0;
+    let last = -2;
+    const tick = () => {
+      const times = timings?.[String(verse)];
+      const w = times ? wordAt(times, a.currentTime * 1000) : 0;
+      if (w !== last) {
+        last = w;
+        onWordChange({ verse, word: Math.max(0, w) });
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [intendPlay, verse, timings, onWordChange]);
+
+  // Playback speed (slower to shadow a verse, faster to review).
+  useEffect(() => {
+    const a = audioRef.current;
+    if (a) a.playbackRate = rate;
+  }, [rate, verse, surahId, reciterId]);
 
   // When the surah changes — a manual pick or an auto-advance into the next
   // surah — restart at its first verse. Doing it during render (rather than in an
@@ -253,10 +298,26 @@ export default function ListenPlayer({ surahId, onSurahChange }: Props) {
         </button>
       </div>
 
-      <p className="mt-3 text-center text-[11px] text-white/50">
+      <div className="mt-3 flex items-center justify-center gap-1 text-[11px] text-white/60">
+        <span className="mr-1">Speed</span>
+        {[0.75, 1, 1.25].map((v) => (
+          <button
+            key={v}
+            onClick={() => setRate(v)}
+            className={`rounded-full px-2 py-0.5 font-medium ring-1 transition ${
+              rate === v ? "bg-gold/25 text-gold-soft ring-gold/40" : "ring-white/15 hover:text-white"
+            }`}
+          >
+            {v}×
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-center text-[11px] text-white/50">
         {repeat
           ? "Repeating this surah."
-          : "Plays on through the next surah — listen hands-free, even with the screen off."}
+          : timings
+            ? "Words light up as the Sheikh recites them. Plays on through the next surah."
+            : "Plays on through the next surah — listen hands-free, even with the screen off."}
       </p>
     </div>
   );

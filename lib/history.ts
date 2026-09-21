@@ -42,6 +42,8 @@ export interface SessionRow {
   peeks?: number | null;
   /** Memorisation level used (0 = text visible). */
   hifz?: number | null;
+  /** Long pauses mid-recitation (voice activity detection). */
+  hesitations?: number | null;
   client_id?: string | null;
 }
 
@@ -183,6 +185,7 @@ function fullColumns(r: LocalSession, userId: string) {
     to_verse: r.to_verse ?? null,
     peeks: r.peeks ?? 0,
     hifz: r.hifz ?? 0,
+    hesitations: r.hesitations ?? 0,
   };
 }
 

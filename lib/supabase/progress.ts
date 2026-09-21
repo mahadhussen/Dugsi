@@ -98,6 +98,7 @@ export interface SessionRecord {
   to_verse?: number;
   peeks?: number;
   hifz?: number;
+  hesitations?: number;
   mistakes: StoredMistake[];
 }
 

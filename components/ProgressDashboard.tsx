@@ -108,6 +108,7 @@ export default function ProgressDashboard() {
             <ReminderSettings />
           </Card>
           <Card title="Reciting">
+            <div className="space-y-4">
             <label className="flex items-center justify-between gap-3 text-sm">
               <span>
                 <span className="block font-semibold text-ink">Live mistake marking</span>
@@ -123,6 +124,36 @@ export default function ProgressDashboard() {
                 className="h-5 w-5 accent-emerald"
               />
             </label>
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>
+                <span className="block font-semibold text-ink">Quran-tuned recognition</span>
+                <span className="block text-xs text-ink/55">
+                  Use Tarteel&apos;s open Quran-trained Whisper model for the precise check (about 80 MB, downloaded once).
+                  Falls back to the light general model on phones that can&apos;t run it.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.quranModel}
+                onChange={(e) => updateSettings({ quranModel: e.target.checked }, user?.id ?? null)}
+                className="h-5 w-5 accent-emerald"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>
+                <span className="block font-semibold text-ink">Auto-stop after silence</span>
+                <span className="block text-xs text-ink/55">
+                  Stop the recording by itself after 6 seconds of silence at the end (voice activity detection on your device).
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.autoStop}
+                onChange={(e) => updateSettings({ autoStop: e.target.checked }, user?.id ?? null)}
+                className="h-5 w-5 accent-emerald"
+              />
+            </label>
+            </div>
           </Card>
         </div>
       )}

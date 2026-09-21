@@ -87,6 +87,24 @@ reading-progress marker.
     nothing is counted twice). Recordings stay on the device by design.
 16. **Installable.** A web manifest and a tiny service worker let Dugsi be
     added to the home screen like an app.
+17. **Quran-tuned recognition.** The precise on-device check now prefers
+    Tarteel's open **whisper-base-ar-quran** (Apache-2.0), a Whisper fine-tuned
+    on recitation, through a community ONNX export. It is tried where the
+    device has headroom (WebGPU, or a non-iOS browser) and falls back to
+    whisper-tiny automatically if it can't load. Toggle under *Goals &
+    reminders → Reciting*.
+18. **Hesitation detection + auto-stop.** Silero VAD (MIT) runs on the device
+    while you recite: a pause longer than 2.5 s mid-recitation is noted with
+    the word you were stuck before, and shown after the attempt as your
+    memorisation weak spots. Optional auto-stop ends the recording after 6 s of
+    silence. Loads from a CDN only when reciting; silently absent otherwise.
+19. **Word-by-word qari timings.** Word-level timestamps from quran-align
+    (CC BY 4.0) for Alafasy, Al-Husary (Muallim), Ash-Shuraim and Al-Minshawi:
+    words light up as the Sheikh recites them on the Listen page (with 0.75× /
+    1× / 1.25× speed), and in the mistake review **Correct** plays *just that
+    word* in the qari's voice next to **You**.
+20. **Sources & licences page** (`/about`) crediting every text, audio, model
+    and library source; `THIRD_PARTY.md` has the full review.
 
 The areas each live on their own page — **Recitera** (`/`), **Lyssna**
 (`/listen`), **Framsteg** (`/progress`) and **Bönetider** (`/prayer`) — reached
@@ -149,6 +167,9 @@ components/
   PlayButton.tsx           Per-verse listen button (uses the chosen Sheikh)
   Legend.tsx               Tajweed colour key
 lib/
+  speech/vad.ts            Silero VAD (CDN, on-device): hesitations, auto-stop
+  quran/timings.ts         Word-level qari timings loader (quran-align data)
+  quran/timings/<qari>/    Vendored per-surah timing JSON (CC BY 4.0)
   history.ts               Local-first session history + cloud merge/sync
   settings.ts              Goals, reminder and reciting settings (synced)
   bookmarks.ts             Verse bookmarks (synced, with tombstones)

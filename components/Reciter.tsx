@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SurahView, { isMaskedSlot } from "./SurahView";
 import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
-import { transcribeWithWhisper, isWhisperSupported, webgpuAvailable } from "@/lib/speech/whisperLocal";
+import {
+  transcribeWithWhisper,
+  isWhisperSupported,
+  webgpuAvailable,
+  pickWhisperModel,
+  type WhisperModel,
+} from "@/lib/speech/whisperLocal";
+import { startVad, HESITATION_MS, type VadHandle, type Hesitation } from "@/lib/speech/vad";
 import { analyzeRecitation, type RecitationFeedback } from "@/lib/analyze";
 import type { WordStatus } from "@/lib/align";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
@@ -101,6 +108,16 @@ export default function Reciter({
   const [progress, setProgress] = useState<string | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
   const [modelPercent, setModelPercent] = useState(0);
+  const [modelInUse, setModelInUse] = useState<WhisperModel | null>(null);
+  // Voice activity: long mid-recitation pauses (memorisation weak spots) and
+  // the optional auto-stop. Best-effort — absent when the VAD can't load.
+  const vadRef = useRef<VadHandle | null>(null);
+  const hesitationsRef = useRef<Hesitation[]>([]);
+  const [hesitations, setHesitations] = useState<Hesitation[]>([]);
+  const pointerRef = useRef(0); // latest live pointer, readable from callbacks
+  const autoStopRef = useRef(settings.autoStop);
+  autoStopRef.current = settings.autoStop;
+  const stopRef = useRef<() => void>(() => {});
   const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
   const [livePointer, setLivePointer] = useState(0);
   const [liveExtras, setLiveExtras] = useState(0); // added words heard so far (live)
@@ -161,6 +178,8 @@ export default function Reciter({
 
   // Stop the mic/recorder without processing the result (surah switch, unmount).
   const discardCapture = useCallback(() => {
+    vadRef.current?.stop();
+    vadRef.current = null;
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       discardRef.current = true;
       try {
@@ -297,6 +316,7 @@ export default function Reciter({
         // recogniser revises interim results.
         setLiveStatuses((prev) => mergeLiveStatuses(prev, statuses));
         setLivePointer((prev) => (pointer > prev ? pointer : prev));
+        pointerRef.current = Math.max(pointerRef.current, pointer);
         if (trackProgress) {
           const verse = flatWords[Math.min(flatWords.length - 1, pointer)]?.ayah;
           if (verse) saveFurthest(userId, surahNumber, verse);
@@ -370,6 +390,34 @@ export default function Reciter({
       recorder.start();
       recorderRef.current = recorder;
       recStartRef.current = Date.now();
+      // Silero VAD on the same stream: note long pauses, and (if chosen) stop
+      // by itself after a long silence. Loads from a CDN; silently absent if not.
+      const AUTO_STOP_MS = 6000;
+      void startVad(
+        stream,
+        () => (recStartRef.current > 0 ? (Date.now() - recStartRef.current) / 1000 : 0),
+        {
+          onSilence: (ms, tSec) => {
+            if (ms === HESITATION_MS) {
+              // Only a pause *inside* a recitation counts — not the run-up before
+              // the first word, and not the tail after the last one.
+              if (pointerRef.current > 0 && pointerRef.current < flatWords.length) {
+                const h: Hesitation = { at: tSec - ms / 1000, seconds: ms / 1000, beforeRefIndex: pointerRef.current };
+                hesitationsRef.current = [...hesitationsRef.current, h];
+                setHesitations(hesitationsRef.current);
+              }
+            } else if (ms === AUTO_STOP_MS && autoStopRef.current && pointerRef.current > 0) {
+              stopRef.current();
+            }
+          },
+        },
+        [HESITATION_MS, AUTO_STOP_MS],
+      ).then((handle) => {
+        // If the reciter already stopped while the model was loading, drop it.
+        if (!handle) return;
+        if (recorderRef.current !== recorder || recorder.state === "inactive") handle.stop();
+        else vadRef.current = handle;
+      });
     } catch {
       recorderRef.current = null;
       recStartRef.current = 0;
@@ -406,24 +454,36 @@ export default function Reciter({
       // Breadcrumb: if the tab is memory-killed during this call, the next app
       // start sees it and (after repeats) disables Whisper on this device.
       markWhisperRunning();
-      const result = await transcribeWithWhisper(blob, (p) => {
-        if (p.stage === "loading-model" && typeof p.percent === "number") {
-          setModelStatus("loading");
-          setModelPercent(p.percent);
-          if (!hadLive) setProgress(`Downloading the recitation model… ${p.percent}%`);
-        } else if (p.stage === "transcribing" && !hadLive) {
-          setProgress("Transcribing your recitation…");
-        }
-      });
+      const result = await transcribeWithWhisper(
+        blob,
+        (p) => {
+          if (p.model) setModelInUse(p.model);
+          if (p.stage === "loading-model" && typeof p.percent === "number") {
+            setModelStatus("loading");
+            setModelPercent(p.percent);
+            if (!hadLive) setProgress(`Downloading the ${p.model?.id === "quran" ? "Quran-tuned" : "recitation"} model… ${p.percent}%`);
+          } else if (p.stage === "transcribing" && !hadLive) {
+            setProgress("Transcribing your recitation…");
+          }
+        },
+        pickWhisperModel(settings.quranModel),
+      );
       markWhisperFinished();
       setModelStatus("ready");
+      setModelInUse(result.model);
       // Upgrade the kept recording with word-level timings so the per-verse "You"
       // playback can line up with each mistake.
       if (result.words?.length) {
         setRecording((prev) => (prev ? { ...prev, words: result.words } : prev));
       }
       if (result.text.trim()) {
-        const fb = analyzeRecitation(ayat, result.text, result.words, "on-device Whisper", firstLiveMatchRef.current);
+        const fb = analyzeRecitation(
+          ayat,
+          result.text,
+          result.words,
+          result.model.id === "quran" ? "on-device Whisper, Quran-tuned" : "on-device Whisper",
+          firstLiveMatchRef.current,
+        );
         setFeedback(fb);
         setPhase("done");
         // Re-save with precise Whisper word times layered over the live-derived
@@ -465,6 +525,9 @@ export default function Reciter({
     extrasRef.current = 0;
     setRevealed(new Set()); // hide the words again for a fresh attempt
     peeksRef.current = 0;
+    hesitationsRef.current = [];
+    setHesitations([]);
+    pointerRef.current = 0;
     clearRecording();
     liveResultShownRef.current = false;
     loggedRef.current = false;
@@ -504,6 +567,8 @@ export default function Reciter({
 
   const stop = () => {
     stopTimer();
+    vadRef.current?.stop();
+    vadRef.current = null;
     recognizerRef.current?.cancel(); // stop the live recogniser
     setLiveClips(liveClipTimes(liveTimesRef.current)); // for per-word "You" playback
     // Show the instant result from the live transcript right away, so finishing
@@ -526,6 +591,8 @@ export default function Reciter({
       setPhase("error");
     }
   };
+
+  stopRef.current = stop;
 
   const reset = () => {
     setFeedback(null);
@@ -575,6 +642,7 @@ export default function Reciter({
           translit: fw?.word.translit,
           heard: w.heard,
           verse: fw?.ayah ?? 1,
+          indexInAyah: fw?.indexInAyah,
           skipped,
           time: clipForMistake(times, w.refIndex, skipped),
         };
@@ -612,6 +680,7 @@ export default function Reciter({
         to_verse: verseList.length ? Math.max(...verseList) : undefined,
         peeks: peeksRef.current,
         hifz,
+        hesitations: hesitationsRef.current.length,
         mistakes: missed,
       });
     }
@@ -728,6 +797,7 @@ export default function Reciter({
       <EngineStatus
         modelStatus={modelStatus}
         modelPercent={modelPercent}
+        model={modelInUse ?? (typeof window !== "undefined" ? pickWhisperModel(settings.quranModel) : null)}
         engineTick={engineTick}
         onReEnable={() => {
           reEnableWhisper();
@@ -809,6 +879,11 @@ export default function Reciter({
           mistakes={mistakes}
           surahNumber={surahNumber}
           recordingUrl={recording?.url}
+          hesitations={hesitations.map((h) => ({
+            ...h,
+            word: flatWords[h.beforeRefIndex]?.word.uthmani ?? "",
+            verse: flatWords[h.beforeRefIndex]?.ayah ?? 0,
+          }))}
         />
       )}
 
@@ -822,11 +897,13 @@ export default function Reciter({
 function EngineStatus({
   modelStatus,
   modelPercent,
+  model,
   engineTick,
   onReEnable,
 }: {
   modelStatus: ModelStatus;
   modelPercent: number;
+  model: WhisperModel | null;
   engineTick: number;
   onReEnable: () => void;
 }) {
@@ -839,7 +916,9 @@ function EngineStatus({
       {modelStatus === "loading" ? (
         `Preparing the precise on device check… ${modelPercent}%`
       ) : capable ? (
-        "Live word marking (via your browser), plus a precise check that runs on your device."
+        model?.id === "quran"
+          ? "Live word marking (via your browser), plus a precise Quran-tuned check that runs on your device."
+          : "Live word marking (via your browser), plus a precise check that runs on your device."
       ) : disabled ? (
         <>
           Live word marking via your browser. The on device check is off after a crash here.{" "}
@@ -959,12 +1038,14 @@ function ResultsPanel({
   mistakes,
   surahNumber,
   recordingUrl,
+  hesitations,
 }: {
   feedback: RecitationFeedback;
   onReset: () => void;
   mistakes: Mistake[];
   surahNumber: number;
   recordingUrl?: string;
+  hesitations: (Hesitation & { word: string; verse: number })[];
 }) {
   const rushed = feedback.timing.checks.filter((c) => c.verdict === "rushed");
 
@@ -1042,6 +1123,29 @@ function ResultsPanel({
           <span className="block text-xs text-amber-700/80">
             Timing estimate from word-level timestamps — treat it as a hint.
           </span>
+        </div>
+      )}
+
+      {hesitations.length > 0 && (
+        <div className="mt-4 rounded-xl border border-ink/10 bg-white/70 p-3 text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink/45">
+            Hesitations ({hesitations.length})
+          </p>
+          <p className="mt-1 text-xs text-ink/55">
+            You paused for a while before these words — the places memory is still thin.
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {hesitations.slice(0, 12).map((h, i) => (
+              <li key={i} className="rounded-lg bg-white px-2.5 py-1 ring-1 ring-ink/5">
+                <span className="ayah text-lg" dir="rtl">
+                  {h.word}
+                </span>
+                <span className="ml-2 text-xs text-ink/45">
+                  verse {h.verse} · {h.seconds.toFixed(1)} s
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

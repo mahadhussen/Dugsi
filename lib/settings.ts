@@ -17,6 +17,10 @@ export interface Settings {
   monthlyMemorise: number;
   /** Paint skipped / substituted words red while reciting (live mistake detection). */
   liveMistakes: boolean;
+  /** Prefer Tarteel's Quran-tuned Whisper for the precise check (falls back automatically). */
+  quranModel: boolean;
+  /** Stop the recording by itself after a long silence at the end. */
+  autoStop: boolean;
   reminderEnabled: boolean;
   /** "HH:MM" local time. */
   reminderTime: string;
@@ -31,6 +35,8 @@ export const DEFAULT_SETTINGS: Settings = {
   weeklyVerses: 20,
   monthlyMemorise: 10,
   liveMistakes: true,
+  quranModel: true,
+  autoStop: false,
   reminderEnabled: false,
   reminderTime: "20:00",
   reminderDays: [],
@@ -61,6 +67,8 @@ function sanitize(x: Partial<Settings> | null | undefined): Settings {
     weeklyVerses: num(s.weeklyVerses, 20, 1, 2000),
     monthlyMemorise: num(s.monthlyMemorise, 10, 1, 1000),
     liveMistakes: s.liveMistakes !== false,
+    quranModel: s.quranModel !== false,
+    autoStop: !!s.autoStop,
     reminderEnabled: !!s.reminderEnabled,
     reminderTime: /^\d{2}:\d{2}$/.test(String(s.reminderTime)) ? String(s.reminderTime) : "20:00",
     reminderDays: Array.isArray(s.reminderDays) ? s.reminderDays.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) : [],

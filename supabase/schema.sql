@@ -58,6 +58,7 @@ alter table public.sessions add column if not exists from_verse int;
 alter table public.sessions add column if not exists to_verse   int;
 alter table public.sessions add column if not exists peeks      int not null default 0;
 alter table public.sessions add column if not exists hifz       int not null default 0;
+alter table public.sessions add column if not exists hesitations int not null default 0;
 
 create unique index if not exists sessions_user_client_idx
   on public.sessions (user_id, client_id)

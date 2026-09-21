@@ -45,6 +45,7 @@ export default function SurahMistakes({
                 translit: fw.word.translit,
                 heard: m.h,
                 verse: fw.ayah,
+                indexInAyah: fw.indexInAyah,
                 skipped: m.h === null,
                 time: clipForMistake(times, m.i, m.h === null),
               }

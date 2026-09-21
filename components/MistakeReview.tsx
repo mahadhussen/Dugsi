@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ayahAudioUrl } from "@/lib/audio-quran";
 import { useReciter } from "@/lib/reciter-store";
 import type { TimeRange } from "@/lib/review";
+import { loadTimings, type SurahTimings } from "@/lib/quran/timings";
 
 export interface Mistake {
   refIndex: number;
@@ -13,6 +14,8 @@ export interface Mistake {
   /** What the reciter said (Arabic), or null if skipped. */
   heard: string | null;
   verse: number;
+  /** Position of the word inside its verse (for the qari's word clip). */
+  indexInAyah?: number;
   skipped: boolean;
   /** Where in the recording the reciter said it (High-accuracy mode only). */
   time?: TimeRange;
@@ -117,10 +120,22 @@ export default function MistakeReview({
   surahNumber: number;
   recordingUrl?: string;
 }) {
+  const { reciterId } = useReciter();
+  const [timings, setTimings] = useState<SurahTimings | null>(null);
   useEffect(() => () => stopCurrent(), []);
+  // Word-level times inside the qari's recording (when this Sheikh has them),
+  // so "Correct" can play just the word instead of the whole verse.
+  useEffect(() => {
+    let cancelled = false;
+    void loadTimings(reciterId, surahNumber).then((t) => !cancelled && setTimings(t));
+    return () => {
+      cancelled = true;
+    };
+  }, [reciterId, surahNumber]);
   if (mistakes.length === 0) return null;
 
   const hasYou = mistakes.some((m) => m.time);
+  const hasWordClips = !!timings;
 
   return (
     <div className="mt-5 rounded-xl border border-ink/10 bg-white/70 p-4">
@@ -129,11 +144,16 @@ export default function MistakeReview({
       </p>
       <ul className="space-y-2.5">
         {mistakes.map((m) => (
-          <MistakeRow key={m.refIndex} m={m} surahNumber={surahNumber} recordingUrl={recordingUrl} />
+          <MistakeRow key={m.refIndex} m={m} surahNumber={surahNumber} recordingUrl={recordingUrl} timings={timings} />
         ))}
       </ul>
       <p className="mt-3 text-xs text-ink/40">
-        Tap <strong>Correct</strong> to hear the qari recite that whole verse
+        Tap <strong>Correct</strong> to hear the qari say {hasWordClips ? "just that word" : "that whole verse"}
+        {hasWordClips ? (
+          <>
+            , <strong>Verse</strong> for the whole verse
+          </>
+        ) : null}
         {hasYou ? (
           <>
             {" "}and <strong>You</strong> to hear yourself say just that word
@@ -152,14 +172,18 @@ function MistakeRow({
   m,
   surahNumber,
   recordingUrl,
+  timings,
 }: {
   m: Mistake;
   surahNumber: number;
   recordingUrl?: string;
+  timings: SurahTimings | null;
 }) {
   const { reciterId } = useReciter();
-  const [playing, setPlaying] = useState<"you" | "correct" | null>(null);
+  const [playing, setPlaying] = useState<"you" | "correct" | "verse" | null>(null);
   const localRef = useRef<HTMLAudioElement | null>(null);
+  const wordTime =
+    timings && m.indexInAyah !== undefined ? timings[String(m.verse)]?.[m.indexInAyah] : undefined;
 
   const playYou = () => {
     if (!recordingUrl || !m.time) return;
@@ -194,8 +218,8 @@ function MistakeRow({
     })();
   };
 
-  const playCorrect = () => {
-    if (playing === "correct") {
+  const playVerse = () => {
+    if (playing === "verse") {
       stopCurrent();
       setPlaying(null);
       return;
@@ -206,8 +230,41 @@ function MistakeRow({
     a.onpause = () => setPlaying(null);
     a.onerror = () => setPlaying(null);
     current = a;
-    setPlaying("correct");
+    setPlaying("verse");
     void a.play().catch(() => setPlaying(null));
+  };
+
+  // Just this word in the qari's voice (word timings from quran-align), so the
+  // comparison with "You" is one word against one word.
+  const playCorrect = () => {
+    if (!wordTime) return playVerse();
+    if (playing === "correct") {
+      stopCurrent();
+      setPlaying(null);
+      return;
+    }
+    stopCurrent();
+    const a = new Audio(ayahAudioUrl(surahNumber, m.verse, reciterId));
+    const PAD = 0.12;
+    const from = Math.max(0, wordTime[0] / 1000 - PAD);
+    const to = wordTime[1] / 1000 + PAD;
+    current = a;
+    setPlaying("correct");
+    a.onerror = () => setPlaying(null);
+    void (async () => {
+      try {
+        await seekTo(a, from);
+        if (current !== a) return;
+        a.ontimeupdate = () => {
+          if (a.currentTime >= to) a.pause();
+        };
+        a.onpause = () => setPlaying(null);
+        a.onended = () => setPlaying(null);
+        await a.play();
+      } catch {
+        setPlaying(null);
+      }
+    })();
   };
 
   return (
@@ -238,6 +295,7 @@ function MistakeRow({
             </span>
           ))}
         <AudioChip label="Correct" active={playing === "correct"} tone="emerald" onClick={playCorrect} />
+        {wordTime && <AudioChip label="Verse" active={playing === "verse"} tone="emerald" onClick={playVerse} />}
       </div>
     </li>
   );
