@@ -1,4 +1,5 @@
 import PrayerView from "@/components/PrayerView";
+import PageHeader from "@/components/PageHeader";
 
 export const metadata = {
   title: "Prayer times Gothenburg & adhan — Dugsi",
@@ -8,12 +9,11 @@ export const metadata = {
 
 export default function PrayerPage() {
   return (
-    <main className="mx-auto max-w-3xl px-4 pb-24 pt-6">
-      <header className="mb-6 text-center">
-        <h1 className="text-2xl font-bold text-ink">Prayer times</h1>
-        <p className="mx-auto mt-1 max-w-md text-sm text-ink/60">Gothenburg · countdown to the next prayer, and the adhan to listen to.</p>
-      </header>
-      <PrayerView />
-    </main>
+    <>
+      <PageHeader title="Prayer times" sub="Gothenburg" />
+      <main className="mx-auto max-w-3xl px-4 pb-24 pt-4">
+        <PrayerView />
+      </main>
+    </>
   );
 }

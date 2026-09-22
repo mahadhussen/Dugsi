@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BUILD_VERSION } from "@/lib/version";
+import PageHeader from "@/components/PageHeader";
 
 export const metadata = {
   title: "Dugsi — About, sources & licences",
@@ -128,16 +129,15 @@ function List({ items }: { items: Source[] }) {
 
 export default function AboutPage() {
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-4 pb-16 pt-6">
-      <header className="text-center">
-        <h1 className="text-2xl font-bold text-ink">About Dugsi</h1>
-        <p className="mx-auto mt-1 max-w-md text-sm text-ink/60">
-          Free, no ads, no tracking. Everything runs in your browser; only your progress syncs if you sign in.
-        </p>
-      </header>
+    <>
+    <PageHeader title="About Dugsi" back={{ href: "/", label: "Home" }} />
+    <main className="mx-auto max-w-3xl space-y-6 px-4 pb-16 pt-4">
+      <p className="text-center text-base font-semibold text-ink/60">
+        Free, no ads, no tracking. Everything runs in your browser; only your progress syncs if you sign in.
+      </p>
 
-      <section className="rounded-2xl border border-ink/10 bg-surface p-4 shadow-soft sm:p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">Honest limits</h2>
+      <section className="card p-4 sm:p-5">
+        <h2 className="text-lg font-extrabold text-ink">Honest limits</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink/75">
           <li>Speech recognition can misread classical Arabic. A word marked wrong may be the recogniser, not you.</li>
           <li>The live word marking uses your browser&apos;s speech service; in Chrome that service sends audio to Google to turn it into text. The precise check and the voice activity detection run fully on your device.</li>
@@ -146,31 +146,32 @@ export default function AboutPage() {
         </ul>
       </section>
 
-      <section className="rounded-2xl border border-ink/10 bg-surface p-4 shadow-soft sm:p-5">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/70">Quran text, translation & audio</h2>
+      <section className="card p-4 sm:p-5">
+        <h2 className="mb-2 text-lg font-extrabold text-ink">Quran text, translation & audio</h2>
         <List items={DATA} />
       </section>
 
-      <section className="rounded-2xl border border-ink/10 bg-surface p-4 shadow-soft sm:p-5">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/70">Speech & AI models</h2>
+      <section className="card p-4 sm:p-5">
+        <h2 className="mb-2 text-lg font-extrabold text-ink">Speech & AI models</h2>
         <List items={MODELS} />
         <p className="mt-2 text-xs text-ink/50">
           Models download from Hugging Face / jsDelivr on first use and are cached by your browser. Your audio is never uploaded.
         </p>
       </section>
 
-      <section className="rounded-2xl border border-ink/10 bg-surface p-4 shadow-soft sm:p-5">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/70">Open-source libraries</h2>
+      <section className="card p-4 sm:p-5">
+        <h2 className="mb-2 text-lg font-extrabold text-ink">Open-source libraries</h2>
         <List items={LIBS} />
       </section>
 
       <p className="text-center text-xs text-ink/45">
         Dugsi is not affiliated with Tanzil, Tarteel, EveryAyah or any of the projects above.{" "}
         <Link href="/" className="underline underline-offset-2">
-          Back to reciting
+          Back to the start
         </Link>{" "}
         · Version {BUILD_VERSION}
       </p>
     </main>
+    </>
   );
 }

@@ -15,13 +15,15 @@ import { useReciter } from "@/lib/reciter-store";
 import { noteRecentReciter, toggleFavouriteReciter, useReciterPrefs } from "@/lib/reciter-prefs";
 import { hasWordTimings } from "@/lib/quran/timings";
 import ReciterAvatar from "./ReciterAvatar";
+import Sheet from "./Sheet";
 
 type StyleFilter = "all" | ReciterStyle;
 
 /** Choose which Sheikh (qari) to listen to. The choice is shared everywhere
- *  audio plays and remembered across visits. Opens a browsable library with
- *  search, style and country filters, favourites and recently used. */
-export default function ReciterPicker({ hideTrigger = false }: { hideTrigger?: boolean }) {
+ *  audio plays and remembered across visits. A browsable library with search,
+ *  style and country filters, favourites and recently used. Opened by the
+ *  `dugsi:open-reciters` event. */
+export default function ReciterPicker() {
   const { reciter, setReciterId } = useReciter();
   const prefs = useReciterPrefs();
   const [open, setOpen] = useState(false);
@@ -35,18 +37,6 @@ export default function ReciterPicker({ hideTrigger = false }: { hideTrigger?: b
     window.addEventListener("dugsi:open-reciters", onOpen);
     return () => window.removeEventListener("dugsi:open-reciters", onOpen);
   }, []);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
-    window.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
   const countries = useMemo(() => reciterCountries(), []);
   const filtered = useMemo(() => {
     const t = query.trim().toLowerCase();
@@ -81,53 +71,17 @@ export default function ReciterPicker({ hideTrigger = false }: { hideTrigger?: b
 
   return (
     <>
-      {!hideTrigger && (
-        <button
-          onClick={() => setOpen(true)}
-          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-ink/10 bg-surface px-4 py-3 text-left shadow-soft transition hover:border-emerald/40"
-        >
-          <span className="flex min-w-0 items-center gap-3">
-            <ReciterAvatar reciter={reciter} size={44} />
-            <span className="min-w-0">
-              <span className="text-xs text-ink/50">Reciter · Sheikh</span>
-              <span className="block truncate text-lg font-semibold text-ink">{reciter.name}</span>
-              <span className="block truncate text-xs text-ink/50">
-                {STYLE_LABEL[reciter.style]} · {reciter.country}
-                {hasWordTimings(reciter.id) ? " · word highlighting" : ""}
-              </span>
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-2">
-            <span className="ayah hidden max-w-[10rem] truncate text-xl text-emerald sm:block" dir="rtl">
-              {reciter.arabicName}
-            </span>
-            <span className="text-ink/40">▾</span>
-          </span>
-        </button>
-      )}
-
       {open && (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={close}>
-          <div
-            className="flex h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-surface shadow-soft sm:h-[85vh] sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-label="Choose a reciter"
-          >
+        <Sheet title="Choose a Sheikh" onClose={close}>
             {/* Header: search */}
-            <div className="border-b border-ink/10 p-3">
-              <div className="flex items-center gap-2">
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search by name, country or style…"
-                  autoFocus
-                  className="w-full rounded-lg border border-ink/15 bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-emerald"
-                />
-                <button onClick={close} className="px-2 text-sm text-ink/60 hover:text-ink">
-                  Close
-                </button>
-              </div>
+            <div className="border-b-2 border-ink/10 p-3">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Name, country or style…"
+                autoFocus
+                className="h-12 w-full rounded-xl border-2 border-ink/15 bg-surface px-4 text-base font-semibold text-ink outline-none focus:border-emerald"
+              />
               {/* Filters */}
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <Chip on={onlyFav} onClick={() => setOnlyFav((v) => !v)} label={`★ Favourites${prefs.favourites.length ? ` (${prefs.favourites.length})` : ""}`} />
@@ -167,7 +121,7 @@ export default function ReciterPicker({ hideTrigger = false }: { hideTrigger?: b
                 </Section>
               )}
               {filtered.length === 0 && (
-                <div className="p-6 text-center text-sm text-ink/50">
+                <div className="p-6 text-center text-base font-semibold text-ink/50">
                   No reciter matches.
                   {filtering && (
                     <button
@@ -177,20 +131,19 @@ export default function ReciterPicker({ hideTrigger = false }: { hideTrigger?: b
                         setCountry("all");
                         setOnlyFav(false);
                       }}
-                      className="ml-2 font-semibold text-emerald-bright underline underline-offset-2"
+                      className="ml-2 font-bold text-emerald-bright underline underline-offset-2"
                     >
                       Clear filters
                     </button>
                   )}
                 </div>
               )}
-              <p className="px-4 pb-4 pt-2 text-[11px] text-ink/40">
+              <p className="px-4 pb-4 pt-2 text-xs font-semibold text-ink/40">
                 {RECITERS.length} reciters, all Hafs ʿan ʿĀṣim, streamed from everyayah.com. Portraits come from Wikipedia where
-                available. If a Sheikh will not play, the archive may be down for that recording; pick another.
+                available. If a Sheikh will not play, pick another.
               </p>
             </div>
-          </div>
-        </div>
+        </Sheet>
       )}
     </>
   );
@@ -200,7 +153,7 @@ function Chip({ on, onClick, label }: { on: boolean; onClick: () => void; label:
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition ${
+      className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-bold ring-2 transition ${
         on ? "bg-emerald text-white ring-emerald" : "bg-surface text-ink/70 ring-ink/15 hover:bg-ink/5"
       }`}
     >
@@ -212,7 +165,7 @@ function Chip({ on, onClick, label }: { on: boolean; onClick: () => void; label:
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="sticky top-0 z-10 bg-surface/95 px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wide text-ink/45 backdrop-blur">
+      <p className="sticky top-0 z-10 bg-surface/95 px-4 pb-1 pt-3 text-xs font-extrabold uppercase tracking-wide text-ink/50 backdrop-blur">
         {title}
       </p>
       <ul>{children}</ul>
@@ -224,21 +177,21 @@ function Row({ r, current, fav, onPick }: { r: Reciter; current: boolean; fav: b
   const q = reciterQuality(r);
   const wiki = reciterWikipediaUrl(r);
   return (
-    <li className={`flex items-center gap-3 px-4 py-2.5 transition hover:bg-emerald/10 ${current ? "bg-emerald/10" : ""}`}>
+    <li className={`flex items-center gap-3 border-b border-ink/5 px-4 py-3 transition hover:bg-emerald/10 ${current ? "bg-emerald/10" : ""}`}>
       {wiki ? (
         <a href={wiki} target="_blank" rel="noopener noreferrer" title="About this reciter (Wikipedia)" className="shrink-0">
-          <ReciterAvatar reciter={r} size={48} />
+          <ReciterAvatar reciter={r} size={56} />
         </a>
       ) : (
-        <ReciterAvatar reciter={r} size={48} />
+        <ReciterAvatar reciter={r} size={56} />
       )}
       <button onClick={() => onPick(r.id)} className="min-w-0 flex-1 text-left">
         <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-ink">{r.name}</span>
-          {current && <span className="shrink-0 rounded-full bg-emerald px-1.5 py-0.5 text-[10px] font-semibold text-white">Chosen</span>}
+          <span className="truncate text-lg font-bold text-ink">{r.name}</span>
+          {current && <span className="shrink-0 rounded-full bg-emerald px-2 py-0.5 text-xs font-bold text-white">Chosen</span>}
         </span>
-        {r.note && <span className="block truncate text-xs text-ink/55">{r.note}</span>}
-        <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-ink/50">
+        {r.note && <span className="block truncate text-sm font-semibold text-ink/55">{r.note}</span>}
+        <span className="mt-1 flex flex-wrap items-center gap-1 text-xs font-semibold text-ink/50">
           <Badge>{STYLE_LABEL[r.style]}</Badge>
           <Badge>{r.country}</Badge>
           <Badge tone={q === "high" ? "good" : q === "standard" ? "neutral" : "muted"}>
@@ -247,14 +200,14 @@ function Row({ r, current, fav, onPick }: { r: Reciter; current: boolean; fav: b
           {hasWordTimings(r.id) && <Badge tone="good">Word highlighting</Badge>}
         </span>
       </button>
-      <span className="ayah hidden shrink-0 text-lg text-emerald sm:block" dir="rtl">
+      <span className="ayah hidden shrink-0 text-xl text-emerald-bright sm:block" dir="rtl">
         {r.arabicName}
       </span>
       <button
         onClick={() => toggleFavouriteReciter(r.id)}
         aria-pressed={fav}
         aria-label={fav ? "Remove from favourites" : "Add to favourites"}
-        className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-lg transition ${fav ? "text-gold-deep" : "text-ink/25 hover:text-gold-deep"}`}
+        className={`grid h-12 w-12 shrink-0 place-items-center rounded-full text-2xl transition ${fav ? "text-gold-deep" : "text-ink/25 hover:text-gold-deep"}`}
       >
         {fav ? "★" : "☆"}
       </button>
@@ -265,6 +218,6 @@ function Row({ r, current, fav, onPick }: { r: Reciter; current: boolean; fav: b
 function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "good" | "neutral" | "muted" }) {
   const cls =
     tone === "good" ? "bg-emerald/10 text-emerald-bright" : tone === "muted" ? "bg-ink/5 text-ink/45" : "bg-ink/5 text-ink/60";
-  return <span className={`rounded-full px-1.5 py-0.5 ${cls}`}>{children}</span>;
+  return <span className={`rounded-full px-2 py-0.5 ${cls}`}>{children}</span>;
 }
 

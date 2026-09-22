@@ -15,13 +15,14 @@ import ReminderSettings from "./ReminderSettings";
 import MistakesPanel from "./MistakesPanel";
 import RecordingsPanel from "./RecordingsPanel";
 import SurahMasteryList from "./SurahMasteryList";
+import AccountButton from "./AccountButton";
 
 type Tab = "overview" | "mistakes" | "recordings" | "goals";
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "mistakes", label: "Mistakes" },
   { id: "recordings", label: "Recordings" },
-  { id: "goals", label: "Goals & reminders" },
+  { id: "goals", label: "Settings" },
 ];
 
 function readTab(): Tab {
@@ -61,23 +62,22 @@ export default function ProgressDashboard() {
   return (
     <div className="space-y-5">
       <header className="text-center">
-        <h1 className="text-2xl font-bold text-ink">Your progress</h1>
-        <p className="mx-auto mt-1 max-w-md text-sm text-ink/60">
+        <p className="mx-auto max-w-md text-sm font-semibold text-ink/60">
           {user
             ? "Synced with your account across devices."
             : configured
-              ? "Saved on this device. Sign in (top right) to sync across devices."
+              ? "Saved on this device. Sign in under Settings to keep it on every device."
               : "Saved on this device."}
         </p>
       </header>
 
-      <nav className="flex gap-1 overflow-x-auto rounded-full border border-ink/10 bg-surface p-1 text-sm shadow-soft">
+      <nav className="grid grid-cols-2 gap-1 rounded-2xl border-2 border-ink/10 bg-surface p-1 text-base sm:grid-cols-4">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => pick(t.id)}
-            className={`whitespace-nowrap rounded-full px-3.5 py-1.5 font-medium transition ${
-              tab === t.id ? "bg-emerald text-white shadow" : "text-ink/70 hover:text-ink"
+            className={`whitespace-nowrap rounded-xl px-3 py-2.5 font-extrabold transition ${
+              tab === t.id ? "bg-emerald text-white shadow-soft" : "text-ink/60 hover:text-ink"
             }`}
           >
             {t.label}
@@ -107,18 +107,18 @@ export default function ProgressDashboard() {
           <Card title="Study reminders">
             <ReminderSettings />
           </Card>
-          <Card title="Appearance">
-            <div className="flex items-center justify-between gap-3 text-sm">
+          <Card title="Screen">
+            <div className="flex items-center justify-between gap-3 text-base">
               <span>
-                <span className="block font-semibold text-ink">Theme</span>
-                <span className="block text-xs text-ink/55">Light reads like a printed mushaf; dark is easier at night.</span>
+                <span className="block font-bold text-ink">Light or dark</span>
+                <span className="block text-sm font-semibold text-ink/55">Light reads like a printed mushaf; dark is easier at night.</span>
               </span>
-              <div className="inline-flex rounded-full border border-ink/15 p-0.5 text-xs">
+              <div className="inline-flex rounded-xl border-2 border-ink/15 p-0.5 text-sm">
                 {(["light", "dark"] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => updateSettings({ theme: t }, user?.id ?? null)}
-                    className={`rounded-full px-3 py-1 font-semibold capitalize ${settings.theme === t ? "bg-emerald text-white" : "text-ink/60"}`}
+                    className={`rounded-lg px-4 py-2 font-extrabold capitalize ${settings.theme === t ? "bg-emerald text-white" : "text-ink/60"}`}
                   >
                     {t}
                   </button>
@@ -128,10 +128,10 @@ export default function ProgressDashboard() {
           </Card>
           <Card title="Reciting">
             <div className="space-y-4">
-            <label className="flex items-center justify-between gap-3 text-sm">
+            <label className="flex items-center justify-between gap-3 text-base">
               <span>
-                <span className="block font-semibold text-ink">Live mistake marking</span>
-                <span className="block text-xs text-ink/55">
+                <span className="block font-bold text-ink">Live mistake marking</span>
+                <span className="block text-sm font-semibold text-ink/55">
                   Flag skipped and substituted words in red as you recite. Off = only correct words light up, and
                   mistakes are shown when you stop.
                 </span>
@@ -140,13 +140,13 @@ export default function ProgressDashboard() {
                 type="checkbox"
                 checked={settings.liveMistakes}
                 onChange={(e) => updateSettings({ liveMistakes: e.target.checked }, user?.id ?? null)}
-                className="h-5 w-5 accent-emerald"
+                className="h-7 w-7 shrink-0 accent-emerald"
               />
             </label>
-            <label className="flex items-center justify-between gap-3 text-sm">
+            <label className="flex items-center justify-between gap-3 text-base">
               <span>
-                <span className="block font-semibold text-ink">Quran-tuned recognition</span>
-                <span className="block text-xs text-ink/55">
+                <span className="block font-bold text-ink">Quran-tuned recognition</span>
+                <span className="block text-sm font-semibold text-ink/55">
                   Use Tarteel&apos;s open Quran-trained Whisper model for the precise check (about 80 MB, downloaded once).
                   Falls back to the light general model on phones that can&apos;t run it.
                 </span>
@@ -155,13 +155,13 @@ export default function ProgressDashboard() {
                 type="checkbox"
                 checked={settings.quranModel}
                 onChange={(e) => updateSettings({ quranModel: e.target.checked }, user?.id ?? null)}
-                className="h-5 w-5 accent-emerald"
+                className="h-7 w-7 shrink-0 accent-emerald"
               />
             </label>
-            <label className="flex items-center justify-between gap-3 text-sm">
+            <label className="flex items-center justify-between gap-3 text-base">
               <span>
-                <span className="block font-semibold text-ink">Auto-stop after silence</span>
-                <span className="block text-xs text-ink/55">
+                <span className="block font-bold text-ink">Auto-stop after silence</span>
+                <span className="block text-sm font-semibold text-ink/55">
                   Stop the recording by itself after 6 seconds of silence at the end (voice activity detection on your device).
                 </span>
               </span>
@@ -169,10 +169,18 @@ export default function ProgressDashboard() {
                 type="checkbox"
                 checked={settings.autoStop}
                 onChange={(e) => updateSettings({ autoStop: e.target.checked }, user?.id ?? null)}
-                className="h-5 w-5 accent-emerald"
+                className="h-7 w-7 shrink-0 accent-emerald"
               />
             </label>
             </div>
+          </Card>
+          <Card title="Account" sub="Sign in to keep your progress on every device. Everything works without one too.">
+            <AccountButton inline />
+          </Card>
+          <Card title="About Dugsi">
+            <Link href="/about" className="btn-quiet w-full">
+              Sources, licences and honest limits
+            </Link>
           </Card>
         </div>
       )}
@@ -183,8 +191,8 @@ export default function ProgressDashboard() {
             {bookmarks.map((b) => {
               const meta = surahMeta(b.surah);
               return (
-                <li key={`${b.surah}:${b.verse}`} className="flex items-center justify-between gap-2 rounded-lg bg-surface-2 px-3 py-2 text-sm ring-1 ring-ink/5">
-                  <Link href={`/?surah=${b.surah}&verse=${b.verse}`} className="min-w-0 truncate text-ink hover:underline">
+                <li key={`${b.surah}:${b.verse}`} className="flex items-center justify-between gap-2 rounded-xl bg-surface-2 px-3 py-2.5 text-base font-semibold ring-1 ring-ink/5">
+                  <Link href={`/quran?surah=${b.surah}&verse=${b.verse}`} className="min-w-0 truncate text-ink hover:underline">
                     {meta?.transliteration ?? `Surah ${b.surah}`} · verse {b.verse}
                     <span className="ayah ml-2 text-lg text-emerald" dir="rtl">
                       {meta?.nameArabic}
@@ -213,9 +221,9 @@ function Overview({ stats }: { stats: Stats }) {
   return (
     <div className="space-y-5">
       {empty && (
-        <div className="rounded-2xl border border-emerald/25 bg-emerald/10 p-4 text-sm text-ink/70">
+        <div className="rounded-2xl border-2 border-emerald/25 bg-emerald/10 p-4 text-base font-semibold text-ink/70">
           Nothing recorded yet.{" "}
-          <Link href="/" className="font-semibold text-emerald-bright underline underline-offset-2">
+          <Link href="/quran" className="font-bold text-emerald-bright underline underline-offset-2">
             Recite a surah
           </Link>{" "}
           and your minutes, verses, streak and mistakes start showing up here.
@@ -229,7 +237,7 @@ function Overview({ stats }: { stats: Stats }) {
         <Tile value={`${stats.averageScore}`} unit="avg" label="score" hint={`${stats.memorisedCount} surahs memorised`} />
       </div>
 
-      <Card title="Today's goals" sub="Change them under Goals & reminders.">
+      <Card title="Today's goals" sub="Change them under Settings.">
         <GoalsPanel stats={stats} editable={false} />
       </Card>
 
@@ -274,36 +282,36 @@ function fmtMin(seconds: number): string {
 
 function Tile({ value, unit, label, hint }: { value: string; unit: string; label: string; hint?: string }) {
   return (
-    <div className="rounded-2xl border border-ink/10 bg-surface p-3 shadow-soft">
+    <div className="card p-4">
       <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-bold text-emerald-bright">{value}</span>
-        <span className="text-xs text-ink/50">{unit}</span>
+        <span className="text-3xl font-extrabold text-emerald-bright">{value}</span>
+        <span className="text-sm font-bold text-ink/50">{unit}</span>
       </div>
-      <div className="text-xs text-ink/60">{label}</div>
-      {hint && <div className="mt-0.5 text-[11px] text-ink/40">{hint}</div>}
+      <div className="text-sm font-bold text-ink/60">{label}</div>
+      {hint && <div className="mt-0.5 text-xs font-semibold text-ink/40">{hint}</div>}
     </div>
   );
 }
 
 function Mini({ value, label, tone }: { value: number; label: string; tone: string }) {
   return (
-    <div className="rounded-xl border border-ink/10 bg-surface-2 p-2">
-      <div className="text-lg font-bold" style={{ color: tone }}>
+    <div className="rounded-xl border-2 border-ink/10 bg-surface-2 p-2">
+      <div className="text-2xl font-extrabold" style={{ color: tone }}>
         {value}
       </div>
-      <div className="text-xs text-ink/55">{label}</div>
+      <div className="text-xs font-bold text-ink/55">{label}</div>
     </div>
   );
 }
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-ink/10 bg-surface p-4 shadow-soft backdrop-blur-sm sm:p-5">
+    <section className="card p-4 sm:p-5">
       <div className="mb-3 flex items-center gap-2">
-        <span className="h-5 w-1.5 rounded-full bg-gold" />
+        <span className="h-6 w-1.5 rounded-full bg-gold" />
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/70">{title}</h2>
-          {sub && <p className="text-xs text-ink/50">{sub}</p>}
+          <h2 className="text-lg font-extrabold text-ink">{title}</h2>
+          {sub && <p className="text-sm font-semibold text-ink/50">{sub}</p>}
         </div>
       </div>
       {children}

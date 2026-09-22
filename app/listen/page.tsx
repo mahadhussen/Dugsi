@@ -1,14 +1,15 @@
-import ListenView from "@/components/ListenView";
+"use client";
 
-export const metadata = {
-  title: "Listen to the Quran — Dugsi",
-  description: "Listen to the whole Quran, verse by verse, in the voice of the Sheikh you choose.",
-};
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { setReading } from "@/lib/reading-store";
 
+/** Old link: listening now lives on the Quran page. */
 export default function ListenPage() {
-  return (
-    <main className="mx-auto max-w-3xl px-4 pb-24 pt-3">
-      <ListenView />
-    </main>
-  );
+  const router = useRouter();
+  useEffect(() => {
+    setReading({ mode: "listen" });
+    router.replace("/quran");
+  }, [router]);
+  return null;
 }

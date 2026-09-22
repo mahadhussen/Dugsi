@@ -10,6 +10,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
+        sans: ["var(--font-ui)", "system-ui", "sans-serif"],
         arabic: ["var(--font-arabic)", "Amiri", "Scheherazade New", "serif"],
         quran: ["var(--font-quran)", "var(--font-arabic)", "Amiri", "serif"],
       },
@@ -28,14 +29,14 @@ const config: Config = {
           deep: "#a9842f",
         },
         emerald: {
-          DEFAULT: "#159f78",
+          DEFAULT: "#12735a",
           bright: v("--c-emerald-bright"),
-          deep: "#0f7a5c",
-          dark: "#0d1613",
+          deep: "#0d5a46",
+          dark: "#0f3a2f",
         },
       },
       boxShadow: {
-        soft: "0 10px 30px -12px rgb(var(--c-shadow) / 0.35)",
+        soft: "0 6px 20px -10px rgb(var(--c-shadow) / 0.35)",
         glow: "0 0 0 6px rgba(21, 159, 120, 0.18)",
       },
       keyframes: {

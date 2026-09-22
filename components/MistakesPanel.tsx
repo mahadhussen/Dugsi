@@ -64,7 +64,7 @@ export default function MistakesPanel({ words }: { words: WordMistake[] }) {
         {shown.slice(0, 60).map((w) => {
           const meta = surahMeta(w.surah);
           const long = (meta?.ayahCount ?? 0) > 10;
-          const href = long ? `/?surah=${w.surah}&from=${w.verse}&to=${w.verse}` : `/?surah=${w.surah}`;
+          const href = long ? `/quran?surah=${w.surah}&from=${w.verse}&to=${w.verse}` : `/quran?surah=${w.surah}`;
           return (
             <li key={`${w.surah}:${w.i}`} className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2 ring-1 ring-ink/5">
               <div className="min-w-0">

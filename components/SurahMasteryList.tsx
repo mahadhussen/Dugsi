@@ -75,7 +75,7 @@ function SurahMastery({ stat, open, onToggle }: { stat: SurahStat; open: boolean
         <div>
           <SurahMistakes surahNumber={stat.surah} stored={stat.mistakes} />
           <div className="flex justify-end pt-2">
-            <Link href={`/?surah=${stat.surah}`} className="rounded-lg bg-emerald px-3 py-1.5 text-xs font-semibold text-white shadow-soft">
+            <Link href={`/quran?surah=${stat.surah}`} className="rounded-lg bg-emerald px-3 py-1.5 text-xs font-semibold text-white shadow-soft">
               Practise {name}
             </Link>
           </div>

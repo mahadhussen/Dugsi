@@ -114,7 +114,15 @@ reading-progress marker.
     HAFS Uthmanic typeface so every mark reads as in print. Eight-lobed
     rosette verse markers (tap one to hear the verse), the surah banner and
     the basmala sit where the mushaf prints them; the page number follows in
-    the top bar and `/?page=N` opens any page. Hidden verses in
+    the header and `/quran?page=N` opens any page.
+21. **One simple design.** A warm, old-fashioned book look on every page:
+    cream paper, brown ink, one deep green, big type and big buttons, built
+    so children and elders can follow it. The home page is three steps (pick
+    a surah, pick a Sheikh, then Listen or Recite); the Quran page has one
+    Listen/Recite switch, a docked player or mic, and an Options sheet of
+    plain switches. Recitation colours the letters themselves: green said
+    right, yellow nearly, red wrong, grey skipped; while listening, the word
+    the Sheikh is reciting turns green. Hidden verses in
     memorisation mode become empty ruled lines with only the markers left.
     Recitation marks colour the letters themselves (green right, red wrong).
     A reader top bar shows the chapter and verse with prev/next, search,

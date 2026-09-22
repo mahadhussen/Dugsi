@@ -111,7 +111,7 @@ export default function RecordingsPanel() {
                 >
                   {playing === r.surah ? "■ Stop" : "▶ Play"}
                 </button>
-                <Link href={`/?surah=${r.surah}`} className="hidden rounded-full px-2.5 py-1 text-xs font-semibold text-emerald ring-1 ring-emerald/30 sm:inline">
+                <Link href={`/quran?surah=${r.surah}`} className="hidden rounded-full px-2.5 py-1 text-xs font-semibold text-emerald ring-1 ring-emerald/30 sm:inline">
                   Recite
                 </Link>
                 <button onClick={() => download(r)} aria-label="Download" title="Download" className="rounded-full px-2 py-1 text-xs text-ink/60 ring-1 ring-ink/15 hover:bg-ink/5">

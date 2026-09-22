@@ -14,6 +14,8 @@ interface Props {
   /** Word being recited right now (verse, index in verse), or null. Only for
    *  Sheikhs with word timings; verse-level otherwise. */
   onWordChange?: (pos: { verse: number; word: number } | null) => void;
+  /** Verse to start from (a bookmark or a deep link). */
+  startVerse?: number;
 }
 
 /**
@@ -23,13 +25,13 @@ interface Props {
  * hooks into the phone's Media Session so the lock-screen and headphone
  * controls (play / pause / skip) drive it too.
  */
-export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: Props) {
+export default function ListenPlayer({ surahId, onSurahChange, onWordChange, startVerse }: Props) {
   const { reciter, reciterId } = useReciter();
   const meta = surahMeta(surahId)!;
   const ayahCount = meta.ayahCount;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [verse, setVerse] = useState(1);
+  const [verse, setVerse] = useState(startVerse && startVerse <= ayahCount ? startVerse : 1);
   const [intendPlay, setIntendPlay] = useState(false);
   const [repeat, setRepeat] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -213,112 +215,79 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange }: P
   }, [intendPlay]);
 
   const progress = ayahCount > 1 ? ((verse - 1) / (ayahCount - 1)) * 100 : 0;
+  const rates = [0.75, 1, 1.25];
+  const nextRate = () => setRate((r) => rates[(rates.indexOf(r) + 1) % rates.length]);
 
   return (
-    <div className="rounded-2xl border border-emerald/25 bg-emerald-dark px-5 py-4 text-white shadow-soft">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-gold-soft/80">Listen to the Quran</p>
-          <p className="truncate text-base font-semibold">
-            {meta.transliteration}
-            <span className="text-white/50"> · </span>
-            <span className="text-white/70">
-              {status === "error"
-                ? "Couldn't load audio"
-                : intendPlay
-                  ? `Verse ${verse} of ${ayahCount}`
-                  : `${ayahCount} verses`}
-            </span>
-          </p>
-          <p className="ayah mt-0.5 truncate text-lg text-gold-soft" dir="rtl">
-            {reciter.arabicName}
-          </p>
-        </div>
-        <button
-          onClick={() => setRepeat((r) => !r)}
-          aria-pressed={repeat}
-          title={repeat ? "Repeating this surah" : "Repeat this surah"}
-          className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ring-1 transition ${
-            repeat ? "bg-gold/20 text-gold-soft ring-gold/40" : "text-white/60 ring-ink/15 hover:text-white"
-          }`}
-        >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-            <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Progress line */}
-      <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/15">
-        <div
-          className="h-full rounded-full bg-gold transition-[width] duration-300"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-
-      {/* Transport */}
-      <div className="mt-3 flex items-center justify-center gap-6">
-        <button
-          onClick={goPrev}
-          aria-label="Previous verse"
-          className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition hover:bg-ink/10 hover:text-white"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
-            <path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z" />
-          </svg>
-        </button>
-
-        <button
-          onClick={togglePlay}
-          aria-label={intendPlay ? "Pause" : "Play"}
-          className="grid h-14 w-14 place-items-center rounded-full bg-gradient-to-b from-emerald-bright to-emerald text-white shadow-soft transition hover:brightness-105 active:scale-95"
-        >
-          {status === "loading" && intendPlay ? (
-            <span className="h-6 w-6 animate-spin rounded-full border-2 border-shell/40 border-t-shell" />
-          ) : intendPlay ? (
-            <svg viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor" aria-hidden>
-              <rect x="6" y="5" width="4" height="14" rx="1" />
-              <rect x="14" y="5" width="4" height="14" rx="1" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" className="h-7 w-7" fill="currentColor" aria-hidden>
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
-
-        <button
-          onClick={goNext}
-          aria-label="Next verse"
-          className="grid h-10 w-10 place-items-center rounded-full text-white/80 transition hover:bg-ink/10 hover:text-white"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
-            <path d="M16 6h2v12h-2V6zM6 6l8.5 6L6 18V6z" />
-          </svg>
-        </button>
-      </div>
-
-      <div className="mt-3 flex items-center justify-center gap-1 text-[11px] text-white/60">
-        <span className="mr-1">Speed</span>
-        {[0.75, 1, 1.25].map((v) => (
+    <div className="sticky bottom-[5.6rem] z-30">
+      <div className="card p-3">
+        <div className="flex items-center justify-between gap-2">
           <button
-            key={v}
-            onClick={() => setRate(v)}
-            className={`rounded-full px-2 py-0.5 font-medium ring-1 transition ${
-              rate === v ? "bg-gold/25 text-gold-soft ring-gold/40" : "ring-ink/15 hover:text-white"
+            onClick={() => setRepeat((r) => !r)}
+            aria-pressed={repeat}
+            title={repeat ? "Repeating this surah" : "Repeat this surah"}
+            className={`grid h-12 w-12 shrink-0 place-items-center rounded-full border-2 transition ${
+              repeat ? "border-gold bg-gold/15 text-gold-soft" : "border-ink/15 text-ink/60 hover:border-ink/30"
             }`}
           >
-            {v}×
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor" aria-hidden>
+              <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
+            </svg>
           </button>
-        ))}
+
+          <div className="flex items-center gap-3">
+            <button onClick={goPrev} aria-label="Previous verse" className="icon-btn h-14 w-14">
+              <svg viewBox="0 0 24 24" className="h-8 w-8" fill="currentColor" aria-hidden>
+                <path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z" />
+              </svg>
+            </button>
+            <button
+              onClick={togglePlay}
+              aria-label={intendPlay ? "Pause" : "Play"}
+              className="grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-emerald text-white shadow-soft transition hover:brightness-105 active:scale-95"
+            >
+              {status === "loading" && intendPlay ? (
+                <span className="h-8 w-8 animate-spin rounded-full border-4 border-white/40 border-t-white" />
+              ) : intendPlay ? (
+                <svg viewBox="0 0 24 24" className="h-10 w-10" fill="currentColor" aria-hidden>
+                  <rect x="6" y="5" width="4" height="14" rx="1" />
+                  <rect x="14" y="5" width="4" height="14" rx="1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-10 w-10" fill="currentColor" aria-hidden>
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+            <button onClick={goNext} aria-label="Next verse" className="icon-btn h-14 w-14">
+              <svg viewBox="0 0 24 24" className="h-8 w-8" fill="currentColor" aria-hidden>
+                <path d="M16 6h2v12h-2V6zM6 6l8.5 6L6 18V6z" />
+              </svg>
+            </button>
+          </div>
+
+          <button
+            onClick={nextRate}
+            aria-label={`Speed ${rate}, tap to change`}
+            className={`h-12 w-14 shrink-0 rounded-full border-2 text-sm font-extrabold transition ${
+              rate !== 1 ? "border-gold bg-gold/15 text-gold-soft" : "border-ink/15 text-ink/60 hover:border-ink/30"
+            }`}
+          >
+            {rate}×
+          </button>
+        </div>
+
+        <p className="mt-2 text-center text-sm font-bold text-ink/70">
+          {status === "error"
+            ? "Couldn't load the audio. Try another Sheikh."
+            : intendPlay
+              ? `Verse ${verse} of ${ayahCount}${repeat ? " · repeating" : ""}`
+              : `Tap play to hear ${reciter.name} recite ${meta.transliteration}`}
+        </p>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink/10">
+          <div className="h-full rounded-full bg-emerald transition-[width] duration-300" style={{ width: `${progress}%` }} />
+        </div>
       </div>
-      <p className="mt-2 text-center text-[11px] text-white/50">
-        {repeat
-          ? "Repeating this surah."
-          : timings
-            ? "Words light up as the Sheikh recites them. Plays on through the next surah."
-            : "Plays on through the next surah — listen hands-free, even with the screen off."}
-      </p>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import ProgressDashboard from "@/components/ProgressDashboard";
+import PageHeader from "@/components/PageHeader";
 
 export const metadata = {
   title: "Dugsi — Your progress",
@@ -7,8 +8,11 @@ export const metadata = {
 
 export default function ProgressPage() {
   return (
-    <main className="mx-auto max-w-3xl px-4 pb-16 pt-6">
-      <ProgressDashboard />
-    </main>
+    <>
+      <PageHeader title="Progress" />
+      <main className="mx-auto max-w-3xl px-4 pb-16 pt-4">
+        <ProgressDashboard />
+      </main>
+    </>
   );
 }

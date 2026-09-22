@@ -56,7 +56,8 @@ deliberately *not* added.
 
 Next.js (MIT), React (MIT), Tailwind CSS (MIT), react-virtuoso (MIT),
 @supabase/supabase-js (MIT), adhan (MIT). Amiri font via Google Fonts (SIL OFL 1.1) for
-UI Arabic and as the fallback while the Complex's typeface loads.
+UI Arabic and as the fallback while the Complex's typeface loads; Nunito via Google
+Fonts (SIL OFL 1.1) for the interface.
 
 ## Things we looked at and did not use
 

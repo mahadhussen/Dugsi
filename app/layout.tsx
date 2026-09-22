@@ -1,14 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Amiri, Amiri_Quran } from "next/font/google";
+import { Amiri, Amiri_Quran, Nunito } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import UpdateChecker from "@/components/UpdateChecker";
-import AppNav from "@/components/AppNav";
 import BottomNav from "@/components/BottomNav";
 import { AuthProvider } from "@/lib/supabase/AuthProvider";
 import AppServices from "@/components/AppServices";
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+// A round, friendly face that children and elders read easily.
+const nunito = Nunito({
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  variable: "--font-nunito",
+  display: "swap",
+});
 
 const amiri = Amiri({
   subsets: ["arabic"],
@@ -45,14 +52,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#ffffff",
+  themeColor: "#f5efe2",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${amiri.variable} ${amiriQuran.variable} ${hafs.variable}`}>
+    <html lang="en" className={`${nunito.variable} ${amiri.variable} ${amiriQuran.variable} ${hafs.variable}`}>
       <head>
         {/* Apply the saved theme before first paint (no flash). */}
         <script
@@ -66,8 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <AuthProvider>
-          <AppNav />
-          <div className="pb-20">{children}</div>
+          <div className="pb-24">{children}</div>
           <BottomNav />
           <UpdateChecker />
           <AppServices />
