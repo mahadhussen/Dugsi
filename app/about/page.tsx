@@ -44,8 +44,8 @@ const DATA: Source[] = [
   },
   {
     name: "EveryAyah.com",
-    what: "Verse-by-verse recitation audio for every Sheikh in the Listen page and the ▶ buttons. Streams from their servers at play time.",
-    licence: "Public archive of freely distributed recitations; Dugsi links, it does not copy",
+    what: "Verse-by-verse recitation audio for every Sheikh in the Listen page and the ▶ buttons. Streams from their servers at play time, with the next verse loaded ahead so the recitation never breaks. \"Save this surah to listen without internet\" keeps those files in your own browser\u2019s cache, on your device only.",
+    licence: "Public archive of freely distributed recitations; Dugsi links and your browser caches, nothing is copied or re-hosted",
     url: "https://everyayah.com",
   },
   {

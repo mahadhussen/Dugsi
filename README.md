@@ -44,8 +44,11 @@ reading-progress marker.
    into the next one, so you can listen to the entire Quran hands-free. It hooks
    into the phone's Media Session, so the lock-screen and headphone controls
    (play / pause / skip) work too — handy while driving or with the screen off.
-   Audio streams from the public everyayah.com archive at play time. Your chosen
-   Sheikh is remembered on the device and used everywhere audio plays.
+   Audio streams from the public everyayah.com archive at play time, with the
+   next verse always loaded ahead so nothing breaks between verses or between
+   surahs, and a surah can be saved to the device to play with no network at
+   all. Your chosen Sheikh is remembered on the device and used everywhere
+   audio plays.
 6. **Prayer times for Göteborg + adhan.** A dedicated page shows today's times
    (Fajr, Shuruq, Dhuhr, Asr, Maghrib, Isha) with the next prayer and a live
    countdown, computed **on-device** with the Muslim World League method and the
@@ -124,13 +127,19 @@ reading-progress marker.
     right, yellow nearly, red wrong, grey skipped; while listening, the word
     the Sheikh is reciting turns green. Hidden verses in
     memorisation mode become empty ruled lines with only the markers left.
-    Recitation marks colour the letters themselves (green right, red wrong).
-    A reader top bar shows the chapter and verse with prev/next, search,
-    bookmark and settings; the mic sits in a control dock that stays within
-    reach while the page scrolls. Translation, transliteration and tajweed
-    colouring are one-tap toggles above the page. Light theme by default, dark
-    under *Goals & reminders → Appearance*.
-21. **Sources & licences page** (`/about`) crediting every text, audio, model
+    Translation, transliteration and tajweed colouring are plain switches in
+    the Options sheet. Light theme by default, dark under *Options → Dark
+    screen*.
+22. **Gapless listening, saved for offline.** The recitation is driven by a
+    small engine outside the page (`lib/listen-engine.ts`) that keeps two
+    players: one sounds the current verse while the other quietly loads the
+    next one — across the surah boundary too — so the handover makes no gap.
+    Because the engine lives outside the reader, flowing into the next surah
+    no longer tears the player down mid-verse. *Save this surah to listen
+    without internet* keeps the Sheikh's recording in the browser's own cache
+    (`lib/audio-cache.ts`); a saved surah then plays straight from the device,
+    with nothing re-hosted and nothing bundled into the app.
+23. **Sources & licences page** (`/about`) crediting every text, audio, model
     and library source; `THIRD_PARTY.md` has the full review.
 
 The areas each live on their own page — **Recitera** (`/`), **Lyssna**
@@ -204,6 +213,8 @@ lib/
   live.ts                  Live tracking + mistake detection + sticky merge
   recordings.ts            On-device recordings (IndexedDB), bounded
   audio-quran.ts           Reciter catalogue + per-ayah audio URLs (everyayah.com)
+  listen-engine.ts         Gapless recitation: two players, the next verse always ready
+  audio-cache.ts           Saving a surah to the device, and playing it from there
   reciter-store.ts         Shared, persisted "current Sheikh" choice
   prayer-times.ts          On-device prayer times (adhan lib, MWL + 1/7-night)
   adhan-audio.ts           Adhan recording catalogue

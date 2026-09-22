@@ -89,9 +89,11 @@ export default function QuranReader() {
   // A chosen range is practised like a short surah: whole range visible and scored.
   const trackProgress = isLong && !range && reading.mode === "recite";
 
+  // Load the chosen surah. The text already on screen stays until the new one
+  // is ready: blanking it would unmount the reader mid-recitation, which is
+  // exactly the stutter we removed.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     loadSurah(reading.surah)
       .then((s) => {
         if (!cancelled) {
@@ -120,16 +122,22 @@ export default function QuranReader() {
 
   const ayat = useMemo(() => {
     if (!surah) return null;
-    if (!range) return surah.ayat;
+    // A range belongs to the surah it was chosen for — never to the one still
+    // on screen while the next loads.
+    if (!range || surah.number !== reading.surah) return surah.ayat;
     return surah.ayat.filter((a) => a.number >= range.from && a.number <= range.to);
-  }, [surah, range]);
+  }, [surah, range, reading.surah]);
 
   const selectSurah = (id: number) => {
     if (id === reading.surah) return;
     setReading({ surah: id, verse: undefined });
-    setSurah(null);
     if (typeof window !== "undefined") window.scrollTo({ top: 0 });
   };
+  // The recitation flowing into the next surah moves the reader with it.
+  const followSurah = useCallback((id: number) => {
+    setReading({ surah: id, verse: undefined });
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
   const setMode = (mode: Mode) => setReading({ mode });
   const startOver = () => {
     if (trackProgress) resetFurthest(userId, reading.surah);
@@ -138,6 +146,7 @@ export default function QuranReader() {
   };
 
   const showing = ready && !loading && surah && ayat;
+
 
   return (
     <>
@@ -201,7 +210,7 @@ export default function QuranReader() {
         ) : reading.mode === "recite" ? (
           <Reciter ayat={ayat} surahNumber={reading.surah} trackProgress={trackProgress} startVerse={range ? undefined : reading.verse} />
         ) : (
-          <ListenSection surah={surah} surahId={reading.surah} startVerse={reading.verse} onSurahChange={selectSurah} />
+          <ListenSection surah={surah} surahId={surah.number} startVerse={reading.verse} onSurahChange={followSurah} />
         )}
 
         {settings.showTajweed && showing && (

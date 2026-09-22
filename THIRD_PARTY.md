@@ -32,7 +32,7 @@ deliberately *not* added.
 
 | Source | Used for | Licence | Obligations |
 |---|---|---|---|
-| [EveryAyah.com](https://everyayah.com) | Verse audio for every Sheikh (streamed at play time, never copied) | Free public archive | Attribution |
+| [EveryAyah.com](https://everyayah.com) | Verse audio for every Sheikh (streamed at play time, never copied or re-hosted; a listener may save a surah into their own browser cache for offline listening, as any web page is cached) | Free public archive | Attribution |
 | [cpfair/quran-align](https://github.com/cpfair/quran-align) | Word-level timestamps for Alafasy, Husary Muallim, Shuraim, Minshawi (`lib/quran/timings/`) | CC BY 4.0 | Attribution on `/about`; only ayat whose segmentation matched our text were kept (≈99%). Sudais data in the release is corrupt and was skipped; reciters whose EveryAyah bitrate differs from ours were skipped too, so timings always match the audio we play |
 
 ## Speech and AI models (all run on the device)

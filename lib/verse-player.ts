@@ -3,6 +3,8 @@
 
 import { useSyncExternalStore } from "react";
 import { ayahAudioUrl } from "./audio-quran";
+import { playableUrl } from "./audio-cache";
+import { pause as pauseListening } from "./listen-engine";
 import { getSelectedReciterId } from "./reciter-store";
 
 let audio: HTMLAudioElement | null = null;
@@ -23,12 +25,16 @@ export function stopVerse(): void {
   }
 }
 
-/** Toggle playback of one verse. */
+/** Toggle playback of one verse. Plays from the device when the surah is saved. */
 export function toggleVerse(surah: number, verse: number): void {
   const key = verseKey(surah, verse);
   if (playingKey === key) return stopVerse();
   stopVerse();
-  const a = new Audio(ayahAudioUrl(surah, verse, getSelectedReciterId()));
+  // One verse on its own and a continuous recitation are two different things;
+  // only one of them should be sounding.
+  pauseListening();
+  const url = ayahAudioUrl(surah, verse, getSelectedReciterId());
+  const a = new Audio();
   a.onended = () => {
     if (audio === a) stopVerse();
   };
@@ -38,7 +44,13 @@ export function toggleVerse(surah: number, verse: number): void {
   audio = a;
   playingKey = key;
   notify();
-  void a.play().catch(() => stopVerse());
+  void playableUrl(url).then((src) => {
+    if (audio !== a) return; // stopped, or another verse started, while we looked
+    a.src = src;
+    void a.play().catch(() => {
+      if (audio === a) stopVerse();
+    });
+  });
 }
 
 function subscribe(cb: () => void): () => void {
