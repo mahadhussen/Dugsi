@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { BUILD_VERSION } from "@/lib/version";
 
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 /**
  * Tells the user when a newer build is live (GitHub Pages caches HTML ~10 min).
  * It never reloads on its own — a surprise reload looks like a crash — it just
@@ -14,7 +16,7 @@ export default function UpdateChecker() {
   useEffect(() => {
     let cancelled = false;
     const check = () => {
-      fetch(`version.json?ts=${Date.now()}`, { cache: "no-store" })
+      fetch(`${BASE}/version.json?ts=${Date.now()}`, { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
         .then((data: { version?: string } | null) => {
           if (!cancelled && data?.version && data.version !== BUILD_VERSION) {
@@ -40,7 +42,7 @@ export default function UpdateChecker() {
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center p-3">
+    <div className="fixed inset-x-0 bottom-20 z-50 flex justify-center p-3">
       <button
         onClick={update}
         className="rounded-full bg-emerald px-5 py-2.5 text-sm font-semibold text-white shadow-soft animate-in"

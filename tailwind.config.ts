@@ -1,32 +1,43 @@
 import type { Config } from "tailwindcss";
 
+// Design tokens come from CSS variables (see app/globals.css) so the whole app
+// can switch between the light mushaf theme (default, like a printed page) and
+// a dark theme without touching a single class name.
+const v = (name: string) => `rgb(var(${name}) / <alpha-value>)`;
+
 const config: Config = {
-  content: [
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
+  content: ["./app/**/*.{js,ts,jsx,tsx,mdx}", "./components/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       fontFamily: {
+        sans: ["var(--font-ui)", "system-ui", "sans-serif"],
         arabic: ["var(--font-arabic)", "Amiri", "Scheherazade New", "serif"],
+        quran: ["var(--font-quran)", "var(--font-arabic)", "Amiri", "serif"],
       },
       colors: {
-        ink: "#10241f",
-        parchment: "#faf6ec",
+        ink: v("--c-ink"),
+        shell: v("--c-shell"),
+        surface: v("--c-surface"),
+        "surface-2": v("--c-surface-2"),
+        parchment: v("--c-surface"),
+        paper: v("--c-paper"),
+        "paper-deep": v("--c-paper-deep"),
+        "paper-ink": v("--c-paper-ink"),
         gold: {
-          DEFAULT: "#c9a24b",
-          soft: "#e3c987",
+          DEFAULT: "#cfae5e",
+          soft: v("--c-gold-soft"),
           deep: "#a9842f",
         },
         emerald: {
-          DEFAULT: "#0f766e",
-          deep: "#0b4f4a",
-          dark: "#08332f",
+          DEFAULT: "#12735a",
+          bright: v("--c-emerald-bright"),
+          deep: "#0d5a46",
+          dark: "#0f3a2f",
         },
       },
       boxShadow: {
-        soft: "0 10px 30px -12px rgba(8, 51, 47, 0.35)",
-        glow: "0 0 0 6px rgba(201, 162, 75, 0.18)",
+        soft: "0 6px 20px -10px rgb(var(--c-shadow) / 0.35)",
+        glow: "0 0 0 6px rgba(21, 159, 120, 0.18)",
       },
       keyframes: {
         ring: {

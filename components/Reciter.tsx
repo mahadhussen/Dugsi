@@ -1,14 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import SurahView from "./SurahView";
+import SurahView, { isMaskedSlot } from "./SurahView";
 import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
-import { transcribeWithWhisper, isWhisperSupported, webgpuAvailable } from "@/lib/speech/whisperLocal";
+import {
+  transcribeWithWhisper,
+  isWhisperSupported,
+  webgpuAvailable,
+  pickWhisperModel,
+  type WhisperModel,
+} from "@/lib/speech/whisperLocal";
+import { startVad, HESITATION_MS, type VadHandle, type Hesitation } from "@/lib/speech/vad";
 import { analyzeRecitation, type RecitationFeedback } from "@/lib/analyze";
 import type { WordStatus } from "@/lib/align";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
 import { tokenize, normalizeWord } from "@/lib/arabic";
-import { trackLive } from "@/lib/live";
+import { trackLive, mergeLiveStatuses } from "@/lib/live";
+import { useSettings } from "@/lib/settings";
 import { pickBestAlternative } from "@/lib/speech/pickBest";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
@@ -79,13 +87,19 @@ export default function Reciter({
   ayat,
   surahNumber,
   trackProgress = false,
+  startVerse,
 }: {
   ayat: Ayah[];
   surahNumber: number;
   trackProgress?: boolean;
+  /** Scroll to this 1-based verse first (e.g. a bookmark or a mistake to practise). */
+  startVerse?: number;
 }) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  const settings = useSettings();
+  const liveMistakesRef = useRef(settings.liveMistakes);
+  liveMistakesRef.current = settings.liveMistakes;
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<RecitationFeedback | null>(null);
@@ -94,9 +108,40 @@ export default function Reciter({
   const [progress, setProgress] = useState<string | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
   const [modelPercent, setModelPercent] = useState(0);
+  const [modelInUse, setModelInUse] = useState<WhisperModel | null>(null);
+  // Decided after mount (depends on the device), so server and client render alike.
+  const [plannedModel, setPlannedModel] = useState<WhisperModel | null>(null);
+  useEffect(() => setPlannedModel(pickWhisperModel(settings.quranModel)), [settings.quranModel]);
+  // Voice activity: long mid-recitation pauses (memorisation weak spots) and
+  // the optional auto-stop. Best-effort — absent when the VAD can't load.
+  const vadRef = useRef<VadHandle | null>(null);
+  const hesitationsRef = useRef<Hesitation[]>([]);
+  const [hesitations, setHesitations] = useState<Hesitation[]>([]);
+  const pointerRef = useRef(0); // latest live pointer, readable from callbacks
+  const autoStopRef = useRef(settings.autoStop);
+  autoStopRef.current = settings.autoStop;
+  const stopRef = useRef<() => void>(() => {});
   const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
   const [livePointer, setLivePointer] = useState(0);
+  const [liveExtras, setLiveExtras] = useState(0); // added words heard so far (live)
+  const extrasRef = useRef(0);
   const [hifz, setHifz] = useState(0); // 0 = off, 1 easy, 2 medium, 3 hide all
+  // Memorisation: hidden words the reader opened (by tap or the Peek buttons),
+  // and how many times they peeked this attempt.
+  const [revealed, setRevealed] = useState<Set<number>>(() => new Set());
+  const peeksRef = useRef(0);
+  const reveal = useCallback((refIndex: number) => {
+    setRevealed((prev) => {
+      if (prev.has(refIndex)) return prev;
+      const next = new Set(prev);
+      next.add(refIndex);
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    setRevealed(new Set());
+    peeksRef.current = 0;
+  }, [ayat, hifz]);
   const [engineTick, setEngineTick] = useState(0); // re-render the status line after re-enable
   // The user's own recording (always kept) + word timestamps when Whisper ran.
   const [recording, setRecording] = useState<{ url: string; words: TimedWord[] } | null>(null);
@@ -136,6 +181,8 @@ export default function Reciter({
 
   // Stop the mic/recorder without processing the result (surah switch, unmount).
   const discardCapture = useCallback(() => {
+    vadRef.current?.stop();
+    vadRef.current = null;
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       discardRef.current = true;
       try {
@@ -227,13 +274,18 @@ export default function Reciter({
         lastTrack = now;
         const tokens = tokenize(text);
         if (tokens.length <= processedTokens) return; // interim revision — wait for growth
-        const { statuses, pointer } = trackLive(
+        const { statuses, pointer, extras } = trackLive(
           expectedNorm,
           tokens.slice(processedTokens),
           trackPointer,
+          { mistakes: liveMistakesRef.current },
         );
         processedTokens = tokens.length;
         trackPointer = Math.max(trackPointer, pointer);
+        if (extras > 0) {
+          extrasRef.current += extras;
+          setLiveExtras(extrasRef.current);
+        }
         // Stamp ONLY words that actually matched this tick (never pointer nudges
         // past unheard words — those stamps would point at the wrong audio).
         // A batch of matches is spread between the previous stamp and now, since
@@ -243,6 +295,9 @@ export default function Reciter({
           const fresh: number[] = [];
           for (const key in statuses) {
             const idx = Number(key);
+            // Only words actually heard carry a timestamp — a word flagged as
+            // skipped or substituted was never (correctly) said at this moment.
+            if (statuses[idx] !== "correct" && statuses[idx] !== "close") continue;
             if (firstLiveMatchRef.current === undefined || idx < firstLiveMatchRef.current) {
               firstLiveMatchRef.current = idx;
             }
@@ -258,23 +313,13 @@ export default function Reciter({
           }
         }
 
-        // Merge forward-only and sticky: once a word is green it stays green, and
-        // the cursor never moves backward. This makes the marking consistent and
-        // smooth instead of flickering as the recogniser revises interim results.
-        setLiveStatuses((prev) => {
-          let out = prev;
-          for (const key in statuses) {
-            const idx = Number(key);
-            const next = statuses[idx];
-            const cur = prev[idx];
-            if (cur === undefined || (cur === "close" && next === "correct")) {
-              if (out === prev) out = { ...prev };
-              out[idx] = next;
-            }
-          }
-          return out;
-        });
+        // Merge sticky: once a word is green it stays green, a word flagged
+        // red recovers when re-read, and the cursor never moves backward. This
+        // keeps the marking consistent and smooth instead of flickering as the
+        // recogniser revises interim results.
+        setLiveStatuses((prev) => mergeLiveStatuses(prev, statuses));
         setLivePointer((prev) => (pointer > prev ? pointer : prev));
+        pointerRef.current = Math.max(pointerRef.current, pointer);
         if (trackProgress) {
           const verse = flatWords[Math.min(flatWords.length - 1, pointer)]?.ayah;
           if (verse) saveFurthest(userId, surahNumber, verse);
@@ -348,6 +393,34 @@ export default function Reciter({
       recorder.start();
       recorderRef.current = recorder;
       recStartRef.current = Date.now();
+      // Silero VAD on the same stream: note long pauses, and (if chosen) stop
+      // by itself after a long silence. Loads from a CDN; silently absent if not.
+      const AUTO_STOP_MS = 6000;
+      void startVad(
+        stream,
+        () => (recStartRef.current > 0 ? (Date.now() - recStartRef.current) / 1000 : 0),
+        {
+          onSilence: (ms, tSec) => {
+            if (ms === HESITATION_MS) {
+              // Only a pause *inside* a recitation counts — not the run-up before
+              // the first word, and not the tail after the last one.
+              if (pointerRef.current > 0 && pointerRef.current < flatWords.length) {
+                const h: Hesitation = { at: tSec - ms / 1000, seconds: ms / 1000, beforeRefIndex: pointerRef.current };
+                hesitationsRef.current = [...hesitationsRef.current, h];
+                setHesitations(hesitationsRef.current);
+              }
+            } else if (ms === AUTO_STOP_MS && autoStopRef.current && pointerRef.current > 0) {
+              stopRef.current();
+            }
+          },
+        },
+        [HESITATION_MS, AUTO_STOP_MS],
+      ).then((handle) => {
+        // If the reciter already stopped while the model was loading, drop it.
+        if (!handle) return;
+        if (recorderRef.current !== recorder || recorder.state === "inactive") handle.stop();
+        else vadRef.current = handle;
+      });
     } catch {
       recorderRef.current = null;
       recStartRef.current = 0;
@@ -384,24 +457,36 @@ export default function Reciter({
       // Breadcrumb: if the tab is memory-killed during this call, the next app
       // start sees it and (after repeats) disables Whisper on this device.
       markWhisperRunning();
-      const result = await transcribeWithWhisper(blob, (p) => {
-        if (p.stage === "loading-model" && typeof p.percent === "number") {
-          setModelStatus("loading");
-          setModelPercent(p.percent);
-          if (!hadLive) setProgress(`Downloading the recitation model… ${p.percent}%`);
-        } else if (p.stage === "transcribing" && !hadLive) {
-          setProgress("Transcribing your recitation…");
-        }
-      });
+      const result = await transcribeWithWhisper(
+        blob,
+        (p) => {
+          if (p.model) setModelInUse(p.model);
+          if (p.stage === "loading-model" && typeof p.percent === "number") {
+            setModelStatus("loading");
+            setModelPercent(p.percent);
+            if (!hadLive) setProgress(`Downloading the ${p.model?.id === "quran" ? "Quran-tuned" : "recitation"} model… ${p.percent}%`);
+          } else if (p.stage === "transcribing" && !hadLive) {
+            setProgress("Transcribing your recitation…");
+          }
+        },
+        pickWhisperModel(settings.quranModel),
+      );
       markWhisperFinished();
       setModelStatus("ready");
+      setModelInUse(result.model);
       // Upgrade the kept recording with word-level timings so the per-verse "You"
       // playback can line up with each mistake.
       if (result.words?.length) {
         setRecording((prev) => (prev ? { ...prev, words: result.words } : prev));
       }
       if (result.text.trim()) {
-        const fb = analyzeRecitation(ayat, result.text, result.words, "on-device Whisper", firstLiveMatchRef.current);
+        const fb = analyzeRecitation(
+          ayat,
+          result.text,
+          result.words,
+          result.model.id === "quran" ? "on-device Whisper, Quran-tuned" : "on-device Whisper",
+          firstLiveMatchRef.current,
+        );
         setFeedback(fb);
         setPhase("done");
         // Re-save with precise Whisper word times layered over the live-derived
@@ -439,6 +524,13 @@ export default function Reciter({
     setFeedback(null);
     setLiveStatuses({});
     setLivePointer(0);
+    setLiveExtras(0);
+    extrasRef.current = 0;
+    setRevealed(new Set()); // hide the words again for a fresh attempt
+    peeksRef.current = 0;
+    hesitationsRef.current = [];
+    setHesitations([]);
+    pointerRef.current = 0;
     clearRecording();
     liveResultShownRef.current = false;
     loggedRef.current = false;
@@ -455,6 +547,10 @@ export default function Reciter({
   // Scrolling/active-follow are handled by the virtualised list itself.
   const [initialTopVerse, setInitialTopVerse] = useState(0);
   useEffect(() => {
+    if (startVerse && startVerse > 0) {
+      setInitialTopVerse(startVerse);
+      return;
+    }
     if (!trackProgress) {
       setInitialTopVerse(0);
       return;
@@ -464,7 +560,7 @@ export default function Reciter({
     return () => {
       cancelled = true;
     };
-  }, [trackProgress, surahNumber, userId]);
+  }, [trackProgress, surahNumber, userId, startVerse]);
   const handleTopVerseChange = useCallback(
     (verse: number) => {
       if (trackProgress) saveFurthest(userId, surahNumber, verse);
@@ -474,6 +570,8 @@ export default function Reciter({
 
   const stop = () => {
     stopTimer();
+    vadRef.current?.stop();
+    vadRef.current = null;
     recognizerRef.current?.cancel(); // stop the live recogniser
     setLiveClips(liveClipTimes(liveTimesRef.current)); // for per-word "You" playback
     // Show the instant result from the live transcript right away, so finishing
@@ -496,6 +594,27 @@ export default function Reciter({
       setPhase("error");
     }
   };
+
+  stopRef.current = stop;
+
+  // Results appear above the page: bring them into view when they land.
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (phase === "done" && feedback) {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [phase, feedback]);
+
+  // QA: `?demo=result` renders a canned result (a few slips) without a mic.
+  useEffect(() => {
+    if (typeof window === "undefined" || phase !== "idle") return;
+    if (new URLSearchParams(window.location.search).get("demo") !== "result") return;
+    const words = flatWords.map((f) => f.word.uthmani);
+    const spoken = words.filter((_, i) => i % 7 !== 3).map((w, i) => (i % 11 === 5 ? "كتاب" : w));
+    setFeedback(analyzeRecitation(ayat, spoken.join(" "), [], "demo", 0));
+    setPhase("done");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ayat]);
 
   const reset = () => {
     setFeedback(null);
@@ -545,6 +664,7 @@ export default function Reciter({
           translit: fw?.word.translit,
           heard: w.heard,
           verse: fw?.ayah ?? 1,
+          indexInAyah: fw?.indexInAyah,
           skipped,
           time: clipForMistake(times, w.refIndex, skipped),
         };
@@ -562,16 +682,31 @@ export default function Reciter({
         .filter((w) => w.status === "wrong" || w.status === "missing")
         .slice(0, 40)
         .map((w) => ({ i: w.refIndex, h: w.heard }));
+      // Which verses the attempt covered (for verse goals and per-verse mastery).
+      const versesHit = new Set<number>();
+      for (const w of feedback.alignment.words) {
+        const v = flatWords[w.refIndex]?.ayah;
+        if (v) versesHit.add(v);
+      }
+      const verseList = Array.from(versesHit);
       logSession(userId, {
         surah: surahNumber,
         score: feedback.score,
         correct: countStatus(feedback, "correct"),
         wrong: countStatus(feedback, "wrong"),
         missing: countStatus(feedback, "missing"),
+        extra: feedback.alignment.extras.length,
+        seconds: secondsRef.current,
+        verses: verseList.length,
+        from_verse: verseList.length ? Math.min(...verseList) : undefined,
+        to_verse: verseList.length ? Math.max(...verseList) : undefined,
+        peeks: peeksRef.current,
+        hifz,
+        hesitations: hesitationsRef.current.length,
         mistakes: missed,
       });
     }
-  }, [phase, feedback, userId, surahNumber]);
+  }, [phase, feedback, userId, surahNumber, flatWords, hifz]);
 
   // Live word-by-word following now runs in both engines (Fast directly, High
   // accuracy via a concurrent browser recogniser). Keep the live marks visible
@@ -580,6 +715,52 @@ export default function Reciter({
   const showingLive = (phase === "recording" || phase === "processing") && !feedback;
   // A scored verdict is only shown when we heard clearly enough (confidence gate).
   const scored = !!feedback && feedback.reliable;
+
+  // Live tally for the HUD while reciting.
+  const liveCounts = useMemo(() => {
+    const c = { correct: 0, missing: 0, wrong: 0 };
+    for (const k in liveStatuses) {
+      const st = liveStatuses[k];
+      if (st === "correct" || st === "close") c.correct++;
+      else if (st === "missing") c.missing++;
+      else if (st === "wrong") c.wrong++;
+    }
+    return c;
+  }, [liveStatuses]);
+
+  // Memorisation peeking: open the next hidden word (or its whole verse) from
+  // where the reciter is. Counted per attempt, so the summary can be honest
+  // about how much help was used.
+  const nextHidden = (): number | null => {
+    if (hifz <= 0) return null;
+    const from = phase === "recording" ? livePointer : 0;
+    const visible = showingLive ? liveStatuses : scored ? statuses : undefined;
+    for (let idx = from; idx < flatWords.length; idx++) {
+      const st = visible?.[idx];
+      if (st === "correct" || st === "close") continue;
+      if (isMaskedSlot(idx, hifz) && !revealed.has(idx)) return idx;
+    }
+    return null;
+  };
+  const peekWord = () => {
+    const idx = nextHidden();
+    if (idx === null) return;
+    peeksRef.current++;
+    reveal(idx);
+  };
+  const peekVerse = () => {
+    const idx = nextHidden();
+    if (idx === null) return;
+    peeksRef.current++;
+    const verse = flatWords[idx].ayah;
+    setRevealed((prev) => {
+      const next = new Set(prev);
+      flatWords.forEach((fw, i) => {
+        if (fw.ayah === verse) next.add(i);
+      });
+      return next;
+    });
+  };
 
   // Memoise the surah so the (frequent) live-transcript text updates don't
   // re-invoke it — it only rebuilds when statuses / cursor / target actually change.
@@ -591,13 +772,23 @@ export default function Reciter({
         statuses={showingLive ? liveStatuses : scored ? statuses : undefined}
         maddVerdicts={scored ? maddVerdicts : undefined}
         activeIndex={liveMode ? livePointer : undefined}
-        showTajweed={!showingLive && !scored}
+        showTajweed={!showingLive && !scored && settings.showTajweed}
         maskLevel={hifz}
         initialTopVerse={initialTopVerse}
         onTopVerseChange={handleTopVerseChange}
+        revealed={revealed}
+        onReveal={reveal}
+        bookmarks
+        showTranslation={settings.showTranslation}
+        showTranslit={settings.showTranslit}
       />
     ),
     [
+      revealed,
+      reveal,
+      settings.showTranslation,
+      settings.showTranslit,
+      settings.showTajweed,
       ayat,
       surahNumber,
       showingLive,
@@ -616,102 +807,122 @@ export default function Reciter({
   if (phase === "unsupported") {
     return (
       <div>
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-2xl border border-amber-400/30 bg-amber-400/15 p-4 text-sm text-amber-700">
           Your browser doesn&apos;t support on-device recitation yet. Open Dugsi in{" "}
           <strong>Google Chrome</strong> (or Safari on iPhone) to use voice feedback — you can still
           read the surah and tajweed guide below.
         </div>
-        <SurahCard>
+        <div className="mt-4">
           <SurahView ayat={ayat} surahNumber={surahNumber} showTajweed />
-        </SurahCard>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <EngineStatus
-        modelStatus={modelStatus}
-        modelPercent={modelPercent}
-        engineTick={engineTick}
-        onReEnable={() => {
-          reEnableWhisper();
-          setEngineTick((t) => t + 1);
-        }}
-      />
-
-      <HifzToggle level={hifz} onSelect={setHifz} />
-
-      {/* Recorder */}
-      <div className="flex flex-col items-center gap-4">
-        {phase === "recording" ? (
-          <button onClick={stop} className="relative grid h-24 w-24 place-items-center" aria-label="Stop reciting">
-            <span className="absolute inset-0 animate-ring rounded-full bg-red-500/40" />
-            <span className="absolute inset-0 rounded-full bg-red-500/15" />
-            <span className="relative grid h-20 w-20 place-items-center rounded-full bg-red-600 text-white shadow-soft transition active:scale-95">
-              <span className="h-6 w-6 rounded-md bg-white" />
-            </span>
-          </button>
-        ) : (
-          <button
-            onClick={start}
-            disabled={phase === "processing"}
-            className="group relative grid h-24 w-24 place-items-center disabled:opacity-60"
-            aria-label="Start reciting"
-          >
-            <span className="absolute inset-0 rounded-full bg-emerald/10 transition group-hover:bg-emerald/20" />
-            <span className="relative grid h-20 w-20 place-items-center rounded-full bg-gradient-to-b from-emerald to-emerald-deep text-white shadow-soft ring-4 ring-emerald/15 transition group-active:scale-95">
-              {phase === "processing" ? (
-                <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              ) : (
-                <MicIcon className="h-9 w-9" />
-              )}
-            </span>
-          </button>
-        )}
-
-        {phase === "recording" ? (
-          <div className="flex items-center gap-2 text-sm font-medium text-red-600">
-            <span className="rec-dot h-2.5 w-2.5 rounded-full bg-red-600" />
-            Listening · {formatTime(seconds)} · tap to stop
-          </div>
-        ) : phase === "processing" ? (
-          <p className="text-center text-sm text-ink/60">{progress ?? "Working…"}</p>
-        ) : (
-          <p className="text-center text-sm text-ink/60">
-            {phase === "done" || phase === "error"
-              ? "Tap to recite again"
-              : "Tap the mic, recite the verses aloud, then tap to stop."}
-          </p>
-        )}
-
-        {phase === "recording" && (
-          <div className="w-full animate-in rounded-2xl border border-emerald/25 bg-white/80 p-4 text-center shadow-soft">
-            <p className="ayah text-2xl text-ink/80" dir="rtl">
-              {liveText || "…"}
-            </p>
-            <p className="mt-1 text-xs text-ink/40">Recite at your own pace.</p>
-          </div>
-        )}
-      </div>
-
+    <div className="space-y-4">
       {error && (
-        <div className="animate-in rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
+        <div className="animate-in rounded-2xl border-2 border-red-500/30 bg-red-500/10 p-4 text-base font-semibold text-red-700">{error}</div>
       )}
 
       {feedback && phase === "done" && (
-        <ResultsPanel
-          feedback={feedback}
-          onReset={reset}
-          mistakes={mistakes}
-          surahNumber={surahNumber}
-          recordingUrl={recording?.url}
-        />
+        <div ref={resultsRef} className="scroll-mt-20">
+          <ResultsPanel
+            feedback={feedback}
+            onReset={reset}
+            mistakes={mistakes}
+            surahNumber={surahNumber}
+            recordingUrl={recording?.url}
+            hesitations={hesitations.map((h) => ({
+              ...h,
+              word: flatWords[h.beforeRefIndex]?.word.uthmani ?? "",
+              verse: flatWords[h.beforeRefIndex]?.ayah ?? 0,
+            }))}
+          />
+        </div>
       )}
 
-      <SurahCard>{surahEl}</SurahCard>
+      {/* The mushaf page */}
+      {surahEl}
+
+      {/* Control dock — pinned above the tab bar while the page scrolls */}
+      <div className="sticky bottom-[5.6rem] z-30">
+        <div className="card p-3">
+          {phase === "recording" && (
+            <div className="mb-2 px-1 text-center">
+              <p className="ayah truncate text-2xl text-ink/80" dir="rtl">
+                {liveText || "…"}
+              </p>
+              <LiveTally
+                correct={liveCounts.correct}
+                missing={liveCounts.missing}
+                wrong={liveCounts.wrong}
+                extra={liveExtras}
+                detecting={settings.liveMistakes}
+              />
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3">
+            {/* Hide words (memorise) */}
+            <HifzToggle level={hifz} onSelect={setHifz} onPeekWord={peekWord} onPeekVerse={peekVerse} />
+
+            {/* Mic */}
+            {phase === "recording" ? (
+              <button onClick={stop} className="relative grid h-20 w-20 shrink-0 place-items-center" aria-label="Stop reciting">
+                <span className="absolute inset-0 animate-ring rounded-full bg-red-500/40" />
+                <span className="absolute inset-0 rounded-full bg-red-500/15" />
+                <span className="relative grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-red-600 text-white shadow-soft transition active:scale-95">
+                  <span className="h-7 w-7 rounded-md bg-white" />
+                </span>
+              </button>
+            ) : (
+              <button
+                onClick={start}
+                disabled={phase === "processing"}
+                className="group relative grid h-20 w-20 shrink-0 place-items-center disabled:opacity-60"
+                aria-label="Start reciting"
+              >
+                <span className="absolute inset-0 rounded-full bg-emerald/15 transition group-hover:bg-emerald/25" />
+                <span className="relative grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-emerald text-white shadow-soft transition group-active:scale-95">
+                  {phase === "processing" ? (
+                    <span className="h-8 w-8 animate-spin rounded-full border-4 border-white/40 border-t-white" />
+                  ) : (
+                    <MicIcon className="h-10 w-10" />
+                  )}
+                </span>
+              </button>
+            )}
+
+            {/* Status */}
+            <div className="min-w-0 flex-1 text-right text-sm font-bold text-ink/70">
+              {phase === "recording" ? (
+                <span className="inline-flex items-center gap-1.5 text-red-600">
+                  <span className="rec-dot h-2.5 w-2.5 rounded-full bg-red-500" />
+                  {formatTime(seconds)}
+                </span>
+              ) : phase === "processing" ? (
+                <span>{progress ?? "Checking…"}</span>
+              ) : modelStatus === "loading" ? (
+                <span>Preparing the checker… {modelPercent}%</span>
+              ) : phase === "done" || phase === "error" ? (
+                <span>Tap the mic to recite again</span>
+              ) : (
+                <span>Tap the mic, then recite aloud</span>
+              )}
+            </div>
+          </div>
+          <EngineStatus
+            modelStatus={modelStatus}
+            modelPercent={modelPercent}
+            model={modelInUse ?? plannedModel}
+            engineTick={engineTick}
+            onReEnable={() => {
+              reEnableWhisper();
+              setEngineTick((t) => t + 1);
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -721,28 +932,33 @@ export default function Reciter({
 function EngineStatus({
   modelStatus,
   modelPercent,
+  model,
   engineTick,
   onReEnable,
 }: {
   modelStatus: ModelStatus;
   modelPercent: number;
+  model: WhisperModel | null;
   engineTick: number;
   onReEnable: () => void;
 }) {
   // engineTick is read so the line re-evaluates after a manual re-enable.
   void engineTick;
-  const capable = typeof window !== "undefined" && whisperCapable();
-  const disabled = typeof window !== "undefined" && whisperDisabledByCrashes();
+  const [caps, setCaps] = useState({ capable: false, disabled: false });
+  useEffect(() => setCaps({ capable: whisperCapable(), disabled: whisperDisabledByCrashes() }), [engineTick]);
+  const { capable, disabled } = caps;
   return (
-    <p className="text-center text-xs text-ink/50">
+    <p className="mt-2 truncate text-center text-xs font-semibold text-ink/40">
       {modelStatus === "loading" ? (
         `Preparing the precise on device check… ${modelPercent}%`
       ) : capable ? (
-        "Live word marking (via your browser), plus a precise check that runs on your device."
+        model?.id === "quran"
+          ? "Live word marking (via your browser), plus a precise Quran-tuned check that runs on your device."
+          : "Live word marking (via your browser), plus a precise check that runs on your device."
       ) : disabled ? (
         <>
           Live word marking via your browser. The on device check is off after a crash here.{" "}
-          <button onClick={onReEnable} className="font-semibold text-emerald-deep underline underline-offset-2">
+          <button onClick={onReEnable} className="font-semibold text-emerald-bright underline underline-offset-2">
             Try it again
           </button>
         </>
@@ -753,45 +969,69 @@ function EngineStatus({
   );
 }
 
-function HifzToggle({ level, onSelect }: { level: number; onSelect: (l: number) => void }) {
-  const options: { value: number; label: string }[] = [
-    { value: 0, label: "Off" },
-    { value: 1, label: "Easy" },
-    { value: 2, label: "Medium" },
-    { value: 3, label: "Hard" },
-  ];
+/** The running tally shown under the live transcript while reciting. */
+function LiveTally({
+  correct,
+  missing,
+  wrong,
+  extra,
+  detecting,
+}: {
+  correct: number;
+  missing: number;
+  wrong: number;
+  extra: number;
+  detecting: boolean;
+}) {
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <div className="inline-flex items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-ink/45">Memorise</span>
-        <div className="inline-flex rounded-full border border-gold/30 bg-white/70 p-1 text-sm shadow-soft">
-          {options.map((o) => (
-            <button
-              key={o.value}
-              onClick={() => onSelect(o.value)}
-              className={`rounded-full px-3.5 py-1.5 font-medium transition ${
-                level === o.value ? "bg-gold text-white shadow" : "text-ink/70 hover:text-ink"
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {level > 0 && (
-        <p className="max-w-md text-center text-xs text-ink/50">
-          Hidden words reveal as you recite them correctly — or tap a word to peek. Hit the mic and
-          recite from memory.
-        </p>
+    <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm font-bold">
+      <span className="text-emerald-bright">✓ {correct}</span>
+      {detecting ? (
+        <>
+          <span className={wrong > 0 ? "font-semibold text-red-500" : "text-ink/40"}>✗ {wrong} wrong</span>
+          <span className={missing > 0 ? "font-semibold text-amber-600" : "text-ink/40"}>↷ {missing} skipped</span>
+          <span className={extra > 0 ? "font-semibold text-amber-600" : "text-ink/40"}>+ {extra} added</span>
+        </>
+      ) : (
+        <span className="text-ink/40">Recite at your own pace.</span>
       )}
     </div>
   );
 }
 
-function SurahCard({ children }: { children: React.ReactNode }) {
+function HifzToggle({
+  level,
+  onSelect,
+  onPeekWord,
+  onPeekVerse,
+}: {
+  level: number;
+  onSelect: (l: number) => void;
+  onPeekWord: () => void;
+  onPeekVerse: () => void;
+}) {
+  const labels = ["Off", "Some", "Most", "All"];
   return (
-    <div className="rounded-2xl border border-gold/25 bg-white/75 p-6 shadow-soft backdrop-blur-sm sm:p-8">
-      {children}
+    <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+      <button
+        onClick={() => onSelect((level + 1) % 4)}
+        className={`rounded-xl border-2 px-3 py-2 text-sm font-extrabold transition ${
+          level > 0 ? "border-gold bg-gold/15 text-gold-soft" : "border-ink/15 text-ink/70 hover:border-ink/30"
+        }`}
+        title="Memorise: hide words and reveal them as you recite"
+      >
+        Hide words · {labels[level]}
+      </button>
+      {level > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button onClick={onPeekWord} className="whitespace-nowrap rounded-lg border-2 border-gold/40 px-2 py-1 text-xs font-bold text-gold-soft hover:bg-gold/10">
+            Show word
+          </button>
+          <button onClick={onPeekVerse} className="whitespace-nowrap rounded-lg border-2 border-gold/40 px-2 py-1 text-xs font-bold text-gold-soft hover:bg-gold/10">
+            Show verse
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -802,12 +1042,14 @@ function ResultsPanel({
   mistakes,
   surahNumber,
   recordingUrl,
+  hesitations,
 }: {
   feedback: RecitationFeedback;
   onReset: () => void;
   mistakes: Mistake[];
   surahNumber: number;
   recordingUrl?: string;
+  hesitations: (Hesitation & { word: string; verse: number })[];
 }) {
   const rushed = feedback.timing.checks.filter((c) => c.verdict === "rushed");
 
@@ -815,17 +1057,14 @@ function ResultsPanel({
   // marks — that would tell a correct reciter she failed. Show an honest state.
   if (!feedback.reliable) {
     return (
-      <div className="animate-in rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-soft">
-        <h2 className="text-lg font-bold text-ink">We could not hear you clearly enough</h2>
-        <p className="mt-2 text-sm text-ink/70">
+      <div className="animate-in rounded-3xl border-2 border-amber-400/40 bg-amber-400/15 p-5 shadow-soft">
+        <h2 className="text-2xl font-extrabold text-ink">We could not hear you clearly</h2>
+        <p className="mt-2 text-base font-semibold text-ink/70">
           To avoid marking your recitation wrong by mistake, we are not scoring this attempt. Try
           again a little closer to the microphone, in a quieter place, and recite at a steady pace.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            onClick={onReset}
-            className="rounded-lg bg-gradient-to-b from-emerald to-emerald-deep px-4 py-2 text-sm font-semibold text-white shadow-soft"
-          >
+          <button onClick={onReset} className="btn-primary">
             Try again
           </button>
           <HearYourselfButton recordingUrl={recordingUrl} />
@@ -841,34 +1080,39 @@ function ResultsPanel({
   }
 
   return (
-    <div className="animate-in rounded-2xl border border-emerald/25 bg-white/85 p-6 shadow-soft">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <ScoreRing score={feedback.score} />
-          <div>
-            <h2 className="text-lg font-bold text-ink">Recitation feedback</h2>
-            <p className="text-sm text-ink/70">{feedback.summary}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <HearYourselfButton recordingUrl={recordingUrl} />
-          <button
-            onClick={onReset}
-            className="rounded-lg border border-ink/15 px-4 py-2 text-sm font-medium text-ink/80 transition hover:bg-ink/5"
-          >
-            Clear
-          </button>
+    <div className="animate-in card p-5">
+      <div className="flex items-center gap-4">
+        <ScoreRing score={feedback.score} />
+        <div className="min-w-0">
+          <h2 className="text-2xl font-extrabold text-ink">Your recitation</h2>
+          <p className="text-base font-semibold text-ink/70">{feedback.summary}</p>
         </div>
       </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button onClick={onReset} className="btn-primary">
+          Try again
+        </button>
+        <HearYourselfButton recordingUrl={recordingUrl} />
+      </div>
 
-      <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+      <div className="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <Stat label="Correct words" value={countStatus(feedback, "correct")} tone="good" />
         <Stat label="Needs work" value={countStatus(feedback, "wrong")} tone="bad" />
         <Stat label="Skipped" value={countStatus(feedback, "missing")} tone="warn" />
+        <Stat label="Added words" value={feedback.alignment.extras.length} tone="warn" />
       </div>
 
+      {feedback.alignment.extras.length > 0 && (
+        <p className="mt-2 text-sm font-semibold text-ink/50">
+          Words heard that are not in the text:{" "}
+          <span className="font-arabic text-sm text-ink/70" dir="rtl">
+            {feedback.alignment.extras.slice(0, 12).join(" · ")}
+          </span>
+        </p>
+      )}
+
       {rushed.length > 0 && (
-        <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="mt-4 rounded-xl bg-amber-400/15 p-3 text-base font-semibold text-amber-800">
           <strong>Tajweed tip:</strong> {rushed.length} elongation{rushed.length > 1 ? "s" : ""}{" "}
           looked rushed (marked ⏱ below). Hold the madd letters longer — especially the 6-count madd
           in <span className="font-arabic">ٱلضَّآلِّينَ</span>.
@@ -878,10 +1122,33 @@ function ResultsPanel({
         </div>
       )}
 
+      {hesitations.length > 0 && (
+        <div className="mt-4 rounded-xl border-2 border-ink/10 bg-surface p-3 text-sm">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-ink/50">
+            Hesitations ({hesitations.length})
+          </p>
+          <p className="mt-1 text-sm font-semibold text-ink/55">
+            You paused for a while before these words — the places memory is still thin.
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {hesitations.slice(0, 12).map((h, i) => (
+              <li key={i} className="rounded-lg bg-surface-2 px-2.5 py-1 ring-1 ring-ink/5">
+                <span className="ayah text-lg" dir="rtl">
+                  {h.word}
+                </span>
+                <span className="ml-2 text-xs text-ink/45">
+                  verse {h.verse} · {h.seconds.toFixed(1)} s
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <MistakeReview mistakes={mistakes} surahNumber={surahNumber} recordingUrl={recordingUrl} />
 
-      <details className="mt-4 text-sm">
-        <summary className="cursor-pointer text-ink/55 transition hover:text-ink/80">
+      <details className="mt-4 text-base">
+        <summary className="cursor-pointer font-bold text-ink/55 transition hover:text-ink/80">
           What we heard (transcript)
         </summary>
         <p className="ayah mt-2 text-xl" dir="rtl">
@@ -897,14 +1164,14 @@ function ResultsPanel({
 }
 
 function ScoreRing({ score }: { score: number }) {
-  const color = score >= 85 ? "#0f766e" : score >= 60 ? "#d97706" : "#dc2626";
+  const color = score >= 85 ? "var(--good)" : score >= 60 ? "var(--warn)" : "var(--bad)";
   const r = 26;
   const c = 2 * Math.PI * r;
   const offset = c * (1 - Math.max(0, Math.min(100, score)) / 100);
   return (
-    <div className="relative h-[68px] w-[68px] shrink-0">
+    <div className="relative h-24 w-24 shrink-0">
       <svg viewBox="0 0 64 64" className="h-full w-full -rotate-90">
-        <circle cx="32" cy="32" r={r} fill="none" stroke="#e7e1d3" strokeWidth="6" />
+        <circle cx="32" cy="32" r={r} fill="none" stroke="var(--track)" strokeWidth="6" />
         <circle
           cx="32"
           cy="32"
@@ -917,7 +1184,7 @@ function ScoreRing({ score }: { score: number }) {
           strokeDashoffset={offset}
         />
       </svg>
-      <span className="absolute inset-0 grid place-items-center text-lg font-bold" style={{ color }}>
+      <span className="absolute inset-0 grid place-items-center text-3xl font-extrabold" style={{ color }}>
         {score}
       </span>
     </div>
@@ -925,13 +1192,13 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone: "good" | "bad" | "warn" }) {
-  const color = tone === "good" ? "#0f766e" : tone === "bad" ? "#dc2626" : "#d97706";
+  const color = tone === "good" ? "var(--good)" : tone === "bad" ? "var(--bad)" : "var(--warn)";
   return (
-    <div className="rounded-xl border border-ink/10 bg-white p-3 text-center sm:text-left">
-      <div className="text-2xl font-bold" style={{ color }}>
+    <div className="rounded-2xl border-2 border-ink/10 bg-surface-2 p-3 text-center">
+      <div className="text-3xl font-extrabold" style={{ color }}>
         {value}
       </div>
-      <div className="text-ink/60">{label}</div>
+      <div className="text-sm font-bold text-ink/60">{label}</div>
     </div>
   );
 }

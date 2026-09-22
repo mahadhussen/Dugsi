@@ -45,6 +45,7 @@ export default function SurahMistakes({
                 translit: fw.word.translit,
                 heard: m.h,
                 verse: fw.ayah,
+                indexInAyah: fw.indexInAyah,
                 skipped: m.h === null,
                 time: clipForMistake(times, m.i, m.h === null),
               }
@@ -77,7 +78,7 @@ export default function SurahMistakes({
           <HearYourselfButton recordingUrl={recordingUrl} />
         </div>
       ) : (
-        <p className="px-1 pt-3 text-xs text-amber-700">
+        <p className="px-1 pt-3 text-xs text-amber-600">
           No recording of this surah on <strong>this device</strong> yet — recite it once here and
           you&apos;ll be able to hear yourself at each mistake below.
         </p>

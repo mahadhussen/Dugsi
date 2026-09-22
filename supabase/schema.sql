@@ -45,3 +45,49 @@ create policy "own sessions" on public.sessions
 
 create index if not exists sessions_user_created_idx
   on public.sessions (user_id, created_at desc);
+
+-- ── v2: richer sessions (time, verses, hifz), settings, bookmarks ───────────
+-- Sessions now carry how long they lasted, which verses were recited, how many
+-- words were added, peeks in memorisation mode, and a client id generated on the
+-- device so local-first history merges with the account without duplicates.
+alter table public.sessions add column if not exists client_id  uuid;
+alter table public.sessions add column if not exists extra      int not null default 0;
+alter table public.sessions add column if not exists seconds    int not null default 0;
+alter table public.sessions add column if not exists verses     int not null default 0;
+alter table public.sessions add column if not exists from_verse int;
+alter table public.sessions add column if not exists to_verse   int;
+alter table public.sessions add column if not exists peeks      int not null default 0;
+alter table public.sessions add column if not exists hifz       int not null default 0;
+alter table public.sessions add column if not exists hesitations int not null default 0;
+
+create unique index if not exists sessions_user_client_idx
+  on public.sessions (user_id, client_id)
+  where client_id is not null;
+
+-- Goals + reminder settings: one JSON document per user (last write wins).
+create table if not exists public.user_settings (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  data       jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.user_settings enable row level security;
+drop policy if exists "own settings" on public.user_settings;
+create policy "own settings" on public.user_settings
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- Verse bookmarks.
+create table if not exists public.bookmarks (
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  surah      int  not null,
+  verse      int  not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, surah, verse)
+);
+alter table public.bookmarks enable row level security;
+drop policy if exists "own bookmarks" on public.bookmarks;
+create policy "own bookmarks" on public.bookmarks
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
