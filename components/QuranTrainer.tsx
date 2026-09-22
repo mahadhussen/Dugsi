@@ -7,6 +7,7 @@ import VerseRange, { type Range } from "./VerseRange";
 import { surahMeta, loadSurah, type Surah } from "@/lib/quran";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, resetFurthest } from "@/lib/supabase/progress";
+import { PAGE_COUNT, pageStart, surahStartingOn } from "@/lib/quran/layout";
 
 /** Where to go, from the progress page (bookmarks, mistakes) or a URL. */
 export interface GotoTarget {
@@ -21,6 +22,15 @@ export interface GotoTarget {
 function parseGotoFromUrl(): GotoTarget | null {
   if (typeof window === "undefined") return null;
   const q = new URLSearchParams(window.location.search);
+  // ?page=N opens that page of the printed mushaf.
+  const page = Number(q.get("page"));
+  if (page >= 1 && page <= PAGE_COUNT && !q.get("surah")) {
+    // Prefer the surah that opens on the page; otherwise the one already running.
+    const opening = surahStartingOn(page);
+    if (opening) return { surah: opening, verse: 1 };
+    const start = pageStart(page);
+    return { surah: start.surah, verse: start.ayah };
+  }
   const surah = Number(q.get("surah"));
   if (!surah || surah < 1 || surah > 114) return null;
   const num = (k: string) => {

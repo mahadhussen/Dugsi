@@ -107,10 +107,14 @@ reading-progress marker.
     words light up as the Sheikh recites them on the Listen page (with 0.75× /
     1× / 1.25× speed), and in the mistake review **Correct** plays *just that
     word* in the qari's voice next to **You**.
-20. **A real mushaf.** The Quran text flows continuously on a white page like
-    the printed mushaf: Amiri Quran set justified, eight-lobed rosette verse
-    markers (tap one to hear the verse), an ornamental surah banner and the
-    calligraphic basmala where the mushaf prints it. Hidden verses in
+20. **The real mushaf pages.** The Quran is shown as the 604 pages of the
+    printed Madinah mushaf, 15 lines each, every word on the line the King Fahd
+    Complex printed it on (layout generated from the Complex's own typeset
+    document by `scripts/build-mushaf-layout.py`), set in the Complex's own
+    HAFS Uthmanic typeface so every mark reads as in print. Eight-lobed
+    rosette verse markers (tap one to hear the verse), the surah banner and
+    the basmala sit where the mushaf prints them; the page number follows in
+    the top bar and `/?page=N` opens any page. Hidden verses in
     memorisation mode become empty ruled lines with only the markers left.
     Recitation marks colour the letters themselves (green right, red wrong).
     A reader top bar shows the chapter and verse with prev/next, search,

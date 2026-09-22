@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Amiri, Amiri_Quran } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import UpdateChecker from "@/components/UpdateChecker";
 import AppNav from "@/components/AppNav";
@@ -16,12 +17,23 @@ const amiri = Amiri({
   display: "swap",
 });
 
-// A typeface drawn for the mushaf itself (SIL OFL), used for the Quran text.
+// A typeface drawn for the mushaf (SIL OFL): the basmala glyph, and the
+// fallback for the Quran text while the Complex's typeface loads.
 const amiriQuran = Amiri_Quran({
   subsets: ["arabic"],
   weight: "400",
-  variable: "--font-quran",
+  variable: "--font-amiri-quran",
   display: "swap",
+});
+
+// The King Fahd Glorious Qur'an Printing Complex's own Hafs typeface, shipped
+// unmodified under its licence (free to use, copy and distribute; no changes,
+// no resale), so the text reads exactly as the printed Madinah mushaf.
+const hafs = localFont({
+  src: "./fonts/UthmanicHafs1Ver13.ttf",
+  variable: "--font-hafs",
+  display: "swap",
+  preload: true,
 });
 
 export const metadata: Metadata = {
@@ -40,7 +52,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${amiri.variable} ${amiriQuran.variable}`}>
+    <html lang="en" className={`${amiri.variable} ${amiriQuran.variable} ${hafs.variable}`}>
       <head>
         {/* Apply the saved theme before first paint (no flash). */}
         <script

@@ -21,6 +21,13 @@ deliberately *not* added.
 | [risan/quran-json](https://github.com/risan/quran-json) | JSON packaging | MIT | Attribution |
 | Saheeh International | English translation | © Abul-Qasim Publishing; distributed by Tanzil for non-commercial use | Non-commercial app, unmodified, attributed |
 
+## Typeface and page layout
+
+| Source | Used for | Licence / terms | Obligations we meet |
+|---|---|---|---|
+| [King Fahd Glorious Qur'an Printing Complex](https://fonts.qurancomplex.gov.sa/) — *KFGQPC HAFS Uthmanic Script* v0.13 (`app/fonts/UthmanicHafs1Ver13.ttf`, SHA-256 `5e3147…81e84`, copied byte for byte from [mustafa0x/qpc-fonts](https://github.com/mustafa0x/qpc-fonts) @ `8a4f39d`) | The Quran text typeface, so every letter and mark reads as in the printed Madinah mushaf | Embedded EULA: "Permission is hereby granted, Free of Cost, to any person obtaining a copy of this Font … the rights to Use, Copy, Distribute", provided the font is not sold, modified, altered, translated, reverse engineered, decompiled or disassembled | Shipped unmodified (Next.js only copies the file under a hashed name); never sold; credited on `/about` |
+| King Fahd Complex — Word document of the Hafs mushaf (`UthmanicHafs v22.docx`, same repository) | The 604-page, 15-line page layout in `lib/quran/layout/` (which word sits on which line), rebuilt with `scripts/build-mushaf-layout.py` | The Complex distributes its mushaf text files for free use; only the line and page positions are derived, the words shown are Dugsi's own corpus | Credited on `/about`; the document itself is not redistributed |
+
 ## Audio and timing data
 
 | Source | Used for | Licence | Obligations |
@@ -48,14 +55,15 @@ deliberately *not* added.
 ## npm dependencies
 
 Next.js (MIT), React (MIT), Tailwind CSS (MIT), react-virtuoso (MIT),
-@supabase/supabase-js (MIT), adhan (MIT). Amiri font via Google Fonts (SIL OFL 1.1).
+@supabase/supabase-js (MIT), adhan (MIT). Amiri font via Google Fonts (SIL OFL 1.1) for
+UI Arabic and as the fallback while the Complex's typeface loads.
 
 ## Things we looked at and did not use
 
 - **quran/quran_android** (GPL-3.0): copying code would force Dugsi under GPL.
 - **quran.com API v4**: requires OAuth client credentials and terms of use; not needed since the text is shipped.
 - **Bernström Swedish translation** (in fawazahmed0/quran-api): copyrighted, no redistribution licence. Zetterstéen (d. 1953) is public domain but was not vetted for text quality yet.
-- **KFGQPC Uthmanic fonts**: licence restricts redistribution; Amiri (OFL) is used instead.
+- **KFGQPC per-page QCF fonts** (one font per mushaf page): same licence as the text font, but 604 files; the text font plus the printed line layout gives the same page without the download.
 
 ## Recommendation for this repository's own licence
 

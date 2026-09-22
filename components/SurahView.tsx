@@ -2,11 +2,18 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
-import type { Ayah } from "@/lib/quran/types";
+import type { Ayah, Surah } from "@/lib/quran/types";
+import { loadSurah } from "@/lib/quran";
+import { lastPageOf, loadPages, pageOf, surahsOnPages, isSegments, type Page } from "@/lib/quran/layout";
 import { primaryRuleColor } from "@/lib/tajweed/rules";
 import type { WordStatus } from "@/lib/align";
 import { setReaderPosition } from "@/lib/reader-store";
+import { isMaskedSlot } from "@/lib/hifz";
 import { AyahMarker, SurahBanner, Basmala } from "./MushafOrnaments";
+import { WordSpan } from "./WordSpan";
+import MushafPage from "./MushafPage";
+
+export { isMaskedSlot } from "@/lib/hifz";
 
 interface Props {
   ayat: Ayah[];
@@ -30,35 +37,18 @@ interface Props {
   onReveal?: (refIndex: number) => void;
   /** Kept for callers; bookmarking now lives in the top bar. */
   bookmarks?: boolean;
-  /** Translation / transliteration under each verse. With both off the text
-   *  flows continuously like a printed page. */
+  /** Translation / transliteration under each verse. With both off the text is
+   *  shown as the printed mushaf pages. */
   showTranslation?: boolean;
   showTranslit?: boolean;
-  /** Surah banner + basmala at the top of the page (off when showing a range). */
+  /** Surah banner + basmala at the top (verse-block mode; the printed pages
+   *  carry their own banners). */
   header?: boolean;
 }
 
-/** Fraction of words hidden at each Hifz level. */
-function hideThreshold(level: number): number {
-  return level === 1 ? 35 : level === 2 ? 70 : level >= 3 ? 100 : 0;
-}
-
-/** Deterministic per-word masking so the hidden set is stable across renders. */
-export function isMaskedSlot(refIndex: number, level: number): boolean {
-  if (level <= 0) return false;
-  const h = Math.imul(refIndex + 1, 2654435761) >>> 0;
-  return h % 100 < hideThreshold(level);
-}
-
-const statusClass: Record<WordStatus, string> = {
-  correct: "word-correct",
-  close: "word-close",
-  wrong: "word-wrong",
-  missing: "word-missing",
-};
-
-/** Verses per virtualised item in flowing mode. */
+/** Verses per virtualised item in verse-block mode. */
 const FLOW_CHUNK = 12;
+const NO_COMPONENTS = {};
 
 interface WordsProps {
   ayah: Ayah;
@@ -115,36 +105,21 @@ function VerseWords({
         ayah.words.map((word, i) => {
           const idx = baseRefIndex + i;
           const status = statuses?.[idx];
-          const madd = maddVerdicts?.[idx];
           // Memorisation: hide the word unless tapped open or recited correctly.
           const said = status === "correct" || status === "close";
           const masked = maskLevel > 0 && isMaskedSlot(idx, maskLevel) && !revealed?.has(idx) && !said;
-          if (masked) {
-            return (
-              <span
-                key={i}
-                className="word word-mask"
-                onClick={() => onReveal?.(idx)}
-                role="button"
-                tabIndex={0}
-                aria-label="Hidden word — tap to reveal"
-              >
-                {word.uthmani}{" "}
-              </span>
-            );
-          }
-          const colorClass = !hasFeedback && showTajweed ? primaryRuleColor(word.rules ?? []) : null;
-          const statusBg = status ? statusClass[status] : "";
-          const active = activeIndex === idx ? "word-active" : "";
           return (
-            <span key={i} className={`word ${colorClass ?? ""} ${statusBg} ${active}`} title={word.translit}>
-              {word.uthmani}
-              {madd === "rushed" && (
-                <sup className="ml-0.5 text-xs" style={{ color: "var(--bad)" }} title="Elongation may be rushed">
-                  ⏱
-                </sup>
-              )}{" "}
-            </span>
+            <WordSpan
+              key={i}
+              text={word.uthmani}
+              translit={word.translit}
+              masked={masked}
+              onReveal={() => onReveal?.(idx)}
+              colorClass={!hasFeedback && showTajweed ? primaryRuleColor(word.rules ?? []) : null}
+              status={status}
+              active={activeIndex === idx}
+              madd={maddVerdicts?.[idx]}
+            />
           );
         })
       ) : (
@@ -174,9 +149,9 @@ interface FlowProps {
 }
 
 /**
- * A run of verses. In flowing mode they share one justified paragraph, like
- * the printed page; with translation on, each verse gets its own block with
- * the translation beneath.
+ * A run of verses. Without translation they share one justified paragraph
+ * (the fallback when the printed layout is unavailable); with translation on,
+ * each verse gets its own block with the translation beneath.
  */
 const FlowBlock = memo(function FlowBlock(p: FlowProps) {
   const flowing = !p.showTranslation && !p.showTranslit;
@@ -260,6 +235,29 @@ function countWords(ayat: Ayah[], from: number, to: number): number {
   return n;
 }
 
+/** The printed pages that carry the verses being shown. */
+interface Book {
+  ayat: Ayah[];
+  first: number;
+  pages: Page[];
+  texts: Map<number, Surah>;
+}
+
+/** Placeholder with the shape of a page while its layout loads. */
+function PageSkeleton() {
+  return (
+    <div className="mushaf px-3 py-4 sm:px-8 sm:py-7" aria-busy="true">
+      <div className="mpage">
+        {Array.from({ length: 15 }, (_, i) => (
+          <div key={i} className="mline">
+            <span className="mskel" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SurahView({
   ayat,
   surahNumber,
@@ -285,6 +283,20 @@ export default function SurahView({
     }
     return o;
   }, [ayat]);
+  const ayahIndex = useMemo(() => {
+    const m = new Map<number, number>();
+    ayat.forEach((a, i) => m.set(a.number, i));
+    return m;
+  }, [ayat]);
+  // Global word index of a word of this surah, or undefined outside the shown verses.
+  const refIndex = useCallback(
+    (ayah: number, word: number): number | undefined => {
+      const i = ayahIndex.get(ayah);
+      if (i === undefined || word < 0 || word >= ayat[i].words.length) return undefined;
+      return wordOffsets[i] + word;
+    },
+    [ayahIndex, wordOffsets, ayat],
+  );
 
   // Words the reader has tapped open (in addition to ones revealed by reciting).
   // Controlled by the parent when it needs to peek programmatically.
@@ -302,29 +314,70 @@ export default function SurahView({
   const revealed = revealedProp ?? ownRevealed;
   const reveal = onRevealProp ?? ownReveal;
 
+  // Page mode: the printed mushaf pages, unless translation/transliteration
+  // is on (then one block per verse). Falls back to flowing text if the
+  // layout cannot be loaded.
+  const flowing = !showTranslation && !showTranslit;
+  const [book, setBook] = useState<Book | null>(null);
+  const [bookFailed, setBookFailed] = useState(false);
+  useEffect(() => {
+    if (!flowing || ayat.length === 0) return;
+    let cancelled = false;
+    const first = pageOf(surahNumber, ayat[0].number);
+    const last = lastPageOf(surahNumber, ayat[ayat.length - 1].number);
+    (async () => {
+      const pages = await loadPages(first, last);
+      const ids = surahsOnPages(pages);
+      const loaded = await Promise.all(ids.map((id) => loadSurah(id)));
+      if (cancelled) return;
+      setBook({ ayat, first, pages, texts: new Map(ids.map((id, i) => [id, loaded[i]])) });
+      setBookFailed(false);
+    })().catch(() => {
+      if (!cancelled) setBookFailed(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [flowing, surahNumber, ayat]);
+  const pageMode = flowing && !bookFailed;
+  const ready = book !== null && book.ayat === ayat;
+
   const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const chunkEls = useRef<(HTMLDivElement | null)[]>([]);
   const lastActiveVerse = useRef(-1);
-  const virtualized = ayat.length > 20;
-  const showHeader = header && ayat.length > 0 && ayat[0].number === 1;
+  const virtualized = pageMode ? (book?.pages.length ?? 0) > 3 : ayat.length > 20;
+  const showHeader = !pageMode && header && ayat.length > 0 && ayat[0].number === 1;
   // Al-Fatiha's first verse *is* the basmala; At-Tawbah has none.
   const basmala = showHeader && surahNumber !== 1 && surahNumber !== 9;
 
-  // Virtualised items are runs of verses; short surahs are one run.
+  // Virtualised items: printed pages, or runs of verses (verse-block mode).
   const chunks = useMemo(() => {
     const out: { from: number; to: number }[] = [];
-    const size = virtualized ? FLOW_CHUNK : ayat.length;
+    const size = ayat.length > 20 ? FLOW_CHUNK : Math.max(1, ayat.length);
     for (let i = 0; i < ayat.length; i += size) out.push({ from: i, to: Math.min(ayat.length, i + size) });
     return out;
-  }, [ayat, virtualized]);
-  const chunkOf = (verseIndex: number) => Math.floor(verseIndex / (virtualized ? FLOW_CHUNK : Math.max(1, ayat.length)));
+  }, [ayat]);
+  const itemCount = pageMode ? (book?.pages.length ?? 0) : chunks.length;
+  const itemOfVerse = (verseIdx: number) =>
+    pageMode && book
+      ? pageOf(surahNumber, ayat[verseIdx]?.number ?? 1) - book.first
+      : Math.floor(verseIdx / (ayat.length > 20 ? FLOW_CHUNK : Math.max(1, ayat.length)));
+  const firstVerseOfItem = (i: number): number => {
+    if (pageMode && book) {
+      for (const line of book.pages[i] ?? []) {
+        if (!isSegments(line)) continue;
+        for (const [s, a] of line) if (s === surahNumber && ayahIndex.has(a)) return a;
+      }
+      return ayat[0]?.number ?? 1;
+    }
+    return ayat[chunks[i]?.from ?? 0]?.number ?? 1;
+  };
 
   // Tell the top bar where we are: the first verse still visible under the
   // header as the page scrolls (throttled), and the verse being recited.
   const activeRef = useRef(activeIndex);
   activeRef.current = activeIndex;
   useEffect(() => {
-    if (ayat.length > 0) setReaderPosition(surahNumber, ayat[0].number);
+    if (ayat.length > 0) setReaderPosition(surahNumber, ayat[0].number, pageOf(surahNumber, ayat[0].number));
     if (typeof window === "undefined") return;
     let raf = 0;
     const update = () => {
@@ -340,7 +393,7 @@ export default function SurahView({
           break;
         }
       }
-      if (best !== null) setReaderPosition(surahNumber, best);
+      if (best !== null) setReaderPosition(surahNumber, best, pageOf(surahNumber, best));
     };
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(update);
@@ -366,39 +419,56 @@ export default function SurahView({
     }
     if (v === lastActiveVerse.current) return;
     lastActiveVerse.current = v;
-    setReaderPosition(surahNumber, ayat[v]?.number ?? 1);
+    const verse = ayat[v]?.number ?? 1;
+    setReaderPosition(surahNumber, verse, pageOf(surahNumber, verse));
 
     if (typeof document === "undefined") return;
-    const el = document.querySelector<HTMLElement>(`[data-verse="${ayat[v]?.number}"]`);
+    const el = document.querySelector<HTMLElement>(`[data-verse="${verse}"]`);
     if (el) {
       const rect = el.getBoundingClientRect();
       const mid = window.scrollY + rect.top + rect.height / 2;
       window.scrollTo({ top: mid - window.innerHeight * 0.42, behavior: "smooth" });
     } else if (virtualized) {
-      virtuosoRef.current?.scrollToIndex({ index: chunkOf(v), align: "center", behavior: "smooth" });
+      virtuosoRef.current?.scrollToIndex({ index: itemOfVerse(v), align: "center", behavior: "smooth" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIndex, wordOffsets, virtualized]);
+  }, [activeIndex, wordOffsets, virtualized, ready]);
 
-  const renderChunk = (c: number) => (
-    <FlowBlock
-      ayat={ayat}
-      offsets={wordOffsets}
-      from={chunks[c].from}
-      to={chunks[c].to}
-      surahNumber={surahNumber}
-      statuses={statuses}
-      maddVerdicts={maddVerdicts}
-      showTajweed={showTajweed}
-      tajweedEveryWord={!virtualized}
-      activeIndex={activeIndex}
-      maskLevel={maskLevel}
-      revealed={revealed}
-      onReveal={reveal}
-      showTranslation={showTranslation}
-      showTranslit={showTranslit}
-    />
-  );
+  const renderItem = (i: number) =>
+    pageMode && book ? (
+      <MushafPage
+        page={book.first + i}
+        lines={book.pages[i]}
+        texts={book.texts}
+        surahNumber={surahNumber}
+        refIndex={refIndex}
+        statuses={statuses}
+        maddVerdicts={maddVerdicts}
+        showTajweed={showTajweed}
+        activeIndex={activeIndex}
+        maskLevel={maskLevel}
+        revealed={revealed}
+        onReveal={reveal}
+      />
+    ) : (
+      <FlowBlock
+        ayat={ayat}
+        offsets={wordOffsets}
+        from={chunks[i].from}
+        to={chunks[i].to}
+        surahNumber={surahNumber}
+        statuses={statuses}
+        maddVerdicts={maddVerdicts}
+        showTajweed={showTajweed}
+        tajweedEveryWord={ayat.length <= 20}
+        activeIndex={activeIndex}
+        maskLevel={maskLevel}
+        revealed={revealed}
+        onReveal={reveal}
+        showTranslation={showTranslation}
+        showTranslit={showTranslit}
+      />
+    );
 
   // Stable component identity so Virtuoso doesn't remount the banner each render.
   const Header = useMemo(() => {
@@ -411,43 +481,37 @@ export default function SurahView({
     return H;
   }, [showHeader, basmala, surahNumber]);
 
-  // Short surahs (e.g. Al-Fatiha): render plainly — no need to virtualise.
+  if (pageMode && !ready) return <PageSkeleton />;
+
+  // A few pages or a short surah: render plainly — no need to virtualise.
   if (!virtualized) {
     return (
-      <div className="mushaf px-4 py-5 sm:px-8 sm:py-7">
+      <div className="mushaf px-3 py-4 sm:px-8 sm:py-7">
         <Header />
-        {chunks.map((_, c) => (
-          <div
-            key={c}
-            ref={(el) => {
-              chunkEls.current[c] = el;
-            }}
-          >
-            {renderChunk(c)}
-          </div>
+        {Array.from({ length: itemCount }, (_, i) => (
+          <div key={i}>{renderItem(i)}</div>
         ))}
       </div>
     );
   }
 
+  const startVerseIdx = initialTopVerse && initialTopVerse > 1 ? (ayahIndex.get(initialTopVerse) ?? 0) : 0;
   return (
-    <div className="mushaf px-4 py-5 sm:px-8 sm:py-7">
+    <div className="mushaf px-3 py-4 sm:px-8 sm:py-7">
       <Virtuoso
         ref={virtuosoRef}
         useWindowScroll
-        totalCount={chunks.length}
+        totalCount={itemCount}
         overscan={600}
         increaseViewportBy={300}
-        components={{ Header }}
-        initialTopMostItemIndex={
-          initialTopVerse && initialTopVerse > 1 ? { index: chunkOf(initialTopVerse - 1), align: "start" } : 0
-        }
+        components={pageMode ? NO_COMPONENTS : { Header }}
+        initialTopMostItemIndex={startVerseIdx > 0 ? { index: itemOfVerse(startVerseIdx), align: "start" } : 0}
         rangeChanged={(r) => {
-          const verse = ayat[chunks[r.startIndex]?.from ?? 0]?.number ?? 1;
+          const verse = firstVerseOfItem(r.startIndex);
           onTopVerseChange?.(verse);
-          if (activeIndex === undefined) setReaderPosition(surahNumber, verse);
+          if (activeIndex === undefined) setReaderPosition(surahNumber, verse, pageOf(surahNumber, verse));
         }}
-        itemContent={(c) => renderChunk(c)}
+        itemContent={(i) => renderItem(i)}
       />
     </div>
   );

@@ -85,8 +85,14 @@ export default function AppNav() {
               <div className="flex min-w-0 flex-1 items-center justify-center gap-1 text-center">
                 <div className="min-w-0 leading-tight">
                   <div className="truncate text-[15px] font-semibold text-ink">Chapter {meta?.transliteration ?? pos.surah}</div>
-                  <div className="text-[12px] text-ink/60">
+                  <div className="whitespace-nowrap text-[11px] text-ink/60">
                     Chapter {pos.surah} <span className="text-ink/30">|</span> Verse {pos.verse}
+                    {pos.page ? (
+                      <>
+                        {" "}
+                        <span className="text-ink/30">|</span> Page {pos.page}
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex flex-col">

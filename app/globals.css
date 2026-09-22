@@ -5,7 +5,7 @@
 /* ---- Theme tokens (RGB triplets so Tailwind can apply opacity) ---- */
 :root {
   --font-arabic: "Amiri", "Scheherazade New", serif;
-  --font-quran: "Amiri Quran", "Amiri", "Scheherazade New", serif;
+  --font-quran: var(--font-hafs), var(--font-amiri-quran), "Amiri", "Scheherazade New", serif;
 
   /* light: a printed mushaf */
   --c-ink: 20 20 22;
@@ -99,7 +99,7 @@ body {
   }
 }
 .basmala {
-  font-family: var(--font-quran);
+  font-family: var(--font-amiri-quran), var(--font-quran);
   /* the single basmala ligature is wide — scale it to the page */
   font-size: min(2.3rem, 5.8vw);
   line-height: 1.8;
@@ -145,6 +145,89 @@ body {
   50% {
     box-shadow: 0 0 0 4px rgba(21, 159, 120, 0.15);
   }
+}
+
+/* ---- The printed page: 15 lines, each word where the Complex set it ---- */
+.mpage {
+  --mbase: clamp(1rem, 4.7vw, 1.9rem);
+  font-family: var(--font-quran);
+  font-size: calc(var(--mbase) * var(--mscale, 1));
+  direction: rtl;
+  color: rgb(var(--c-paper-ink));
+  padding: 0.5rem 0 0.75rem;
+  overflow: hidden;
+}
+.mpage + .mpage,
+div + div > .mpage {
+  border-top: 1px solid rgb(var(--c-paper-ink) / 0.12);
+  margin-top: 0.75rem;
+  padding-top: 1rem;
+}
+.mline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2.05em;
+  line-height: 2.05;
+  white-space: nowrap;
+}
+.mline-c,
+.mline-h,
+.mline-b {
+  justify-content: center;
+}
+.mline-c {
+  gap: 0.3em;
+}
+.mline .word {
+  flex: 0 0 auto;
+}
+.mline .ayah-marker {
+  flex: 0 0 auto;
+  width: 1.45em !important;
+  height: 1.45em !important;
+}
+.mline .ayah-marker svg {
+  width: 100%;
+  height: 100%;
+}
+.mline-h > div {
+  margin: 0;
+  max-width: 100%;
+}
+.mline-h svg {
+  height: 1.9em;
+}
+.mline-b {
+  display: block;
+  text-align: center;
+  padding: 0.1em 0;
+}
+.mline-b .basmala {
+  margin: 0;
+  font-size: 1.35em;
+  line-height: 1.5;
+  overflow: visible;
+}
+.mpage-num {
+  direction: ltr;
+  margin-top: 0.6rem;
+  text-align: center;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: rgb(var(--c-paper-ink) / 0.5);
+}
+/* words of another surah, or outside the practised range */
+.word-far {
+  color: rgb(var(--c-paper-ink) / 0.4);
+}
+.mskel {
+  display: block;
+  width: 100%;
+  height: 0.8em;
+  border-radius: 999px;
+  background: rgb(var(--c-paper-ink) / 0.06);
 }
 
 /* ---- Hifz (memorisation): hidden words leave an empty ruled line ---- */

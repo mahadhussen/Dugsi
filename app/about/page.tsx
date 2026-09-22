@@ -54,6 +54,18 @@ const DATA: Source[] = [
     url: "https://commons.wikimedia.org",
   },
   {
+    name: "King Fahd Glorious Qur'an Printing Complex — HAFS Uthmanic Script typeface",
+    what: "The Quran typeface, so every letter and mark reads exactly as in the printed Madinah mushaf. Shipped unmodified.",
+    licence: "Free to use, copy and distribute; may not be sold or modified (the Complex's end-user licence)",
+    url: "https://fonts.qurancomplex.gov.sa/",
+  },
+  {
+    name: "King Fahd Glorious Qur'an Printing Complex — Madinah mushaf page layout",
+    what: "Which word sits on which of the 15 lines of each of the 604 printed pages, taken from the Complex's own typeset document of the Hafs mushaf. The words themselves are Dugsi's verified text.",
+    licence: "Free to use with attribution",
+    url: "https://qurancomplex.gov.sa/",
+  },
+  {
     name: "quran-align by Collin Fair",
     what: "Word-level timestamps inside the EveryAyah recordings (Alafasy, Al-Husary Muallim, Ash-Shuraim, Al-Minshawi) — powers word highlighting while listening and 'hear the qari say just this word'.",
     licence: "Creative Commons Attribution 4.0",
@@ -93,7 +105,7 @@ const LIBS: Source[] = [
   { name: "ONNX Runtime Web (Microsoft)", what: "Runs the VAD and Whisper models.", licence: "MIT", url: "https://github.com/microsoft/onnxruntime" },
   { name: "@ricky0123/vad-web", what: "Browser wrapper for Silero VAD.", licence: "ISC", url: "https://github.com/ricky0123/vad" },
   { name: "adhan-js (Batoul Apps)", what: "Prayer time calculation.", licence: "MIT", url: "https://github.com/batoulapps/adhan-js" },
-  { name: "Amiri typeface (Khaled Hosny)", what: "The Arabic typeface.", licence: "SIL Open Font License 1.1", url: "https://github.com/aliftype/amiri" },
+  { name: "Amiri typeface (Khaled Hosny)", what: "Arabic in the interface, the basmala glyph, and the fallback while the mushaf typeface loads.", licence: "SIL Open Font License 1.1", url: "https://github.com/aliftype/amiri" },
   { name: "Next.js, React, Tailwind CSS, react-virtuoso, Supabase JS", what: "The app framework and UI.", licence: "MIT / Apache-2.0", url: "https://github.com/vercel/next.js" },
 ];
 

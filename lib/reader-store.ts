@@ -6,14 +6,16 @@ import { useSyncExternalStore } from "react";
 export interface ReaderPosition {
   surah: number;
   verse: number;
+  /** Page of the printed Madinah mushaf, when known. */
+  page?: number;
 }
 
-let current: ReaderPosition = { surah: 1, verse: 1 };
+let current: ReaderPosition = { surah: 1, verse: 1, page: 1 };
 const listeners = new Set<() => void>();
 
-export function setReaderPosition(surah: number, verse: number): void {
-  if (current.surah === surah && current.verse === verse) return;
-  current = { surah, verse };
+export function setReaderPosition(surah: number, verse: number, page?: number): void {
+  if (current.surah === surah && current.verse === verse && (page === undefined || current.page === page)) return;
+  current = { surah, verse, page: page ?? current.page };
   listeners.forEach((l) => l());
 }
 
@@ -26,7 +28,7 @@ function subscribe(cb: () => void): () => void {
   return () => listeners.delete(cb);
 }
 
-const SERVER: ReaderPosition = { surah: 1, verse: 1 };
+const SERVER: ReaderPosition = { surah: 1, verse: 1, page: 1 };
 
 export function useReaderPosition(): ReaderPosition {
   return useSyncExternalStore(subscribe, getReaderPosition, () => SERVER);
