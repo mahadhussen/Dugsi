@@ -24,6 +24,11 @@ const COVERAGE: Record<string, string[]> = {
 };
 const CELL_COVERAGE = 12;
 
+/** Attributes whose values follow from a rule on `attr`. */
+export function coveredBy(attr: string): string[] {
+  return COVERAGE[attr] ?? [attr];
+}
+
 export interface CandidateRule {
   key: string;
   explained: ExplainedRule;

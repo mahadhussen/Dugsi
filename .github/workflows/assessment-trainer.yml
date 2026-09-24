@@ -1,0 +1,43 @@
+name: Assessment trainer
+
+# Runs only when the separate assessment-trainer app changes; the Dugsi site
+# has its own CI/deploy workflows and is not affected.
+on:
+  push:
+    paths: ["assessment-trainer/**", ".github/workflows/assessment-trainer.yml"]
+  pull_request:
+    paths: ["assessment-trainer/**", ".github/workflows/assessment-trainer.yml"]
+
+defaults:
+  run:
+    working-directory: assessment-trainer
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: file:./ci.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: assessment-trainer/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python dependencies
+        run: pip install -r python/requirements.txt
+      - name: Install dependencies
+        run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Python tests (vision)
+        run: python -m pytest python/tests -q
+      - name: Unit, API, database and benchmark tests
+        run: npx vitest run
+      - name: Solver benchmark (100 per category)
+        run: npx tsx scripts/benchmark.ts 100
+      - name: Production build
+        run: npx prisma db push && npm run build

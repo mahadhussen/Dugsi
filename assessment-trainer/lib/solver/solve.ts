@@ -2,7 +2,7 @@ import type { MatrixProblem } from "../matrigma/types";
 import { missingIndex, OPTION_LABELS } from "../matrigma/types";
 import { cellFeatures } from "./features";
 import { fitAttributeRules, selectBestPerAttribute } from "./rules";
-import { collectCandidates, decide } from "./decision";
+import { collectCandidates, coveredBy, decide } from "./decision";
 import { STRATEGIES, type StrategyContext } from "./strategies";
 import { synthesizeCell } from "./synthesize";
 import { calibrate, computeConfidence, UNCERTAIN_THRESHOLD, type CalibrationBin } from "./confidence";
@@ -84,16 +84,32 @@ export function solveMatrix(problem: MatrixProblem, opts: SolveOptions = {}): So
   const factors = { consistency, validation, similarity: best.v, margin, agreement, extraction };
   // Ambiguity: a validated, informative alternative rule that points to a
   // different option. The data support two explanations — do not overclaim.
+  // A rejected rule is not a competing explanation when a kept attribute rule
+  // already determines its attribute more completely (e.g. "A ∪ B = C" on the
+  // exact object sets also fixes the number of objects).
+  const subsumed = (c: (typeof decision.rejected)[number]) =>
+    decision.kept.some(
+      (k) => k.attr && k.explained.informative && k.coverage > c.coverage && coveredBy(k.attr.attr.name).includes(c.explained.attribute),
+    );
+  // Diagonal readings are secondary: they never override a row/column rule.
   const ambiguous = decision.rejected.some(
-    (c) => c.explained.informative && c.validatedLines >= 2 && c.optionScores.some((v, i) => v >= 0.85 && i !== best.i),
+    (c) => c.explained.informative && c.validatedLines >= 2 && c.explained.axis !== "diag" && !subsumed(c) && c.optionScores.some((v, i) => v >= 0.85 && i !== best.i),
   );
   const raw = computeConfidence({ ...factors, tie }) * (ambiguous ? 0.7 : 1);
+  // Options favoured by the validated-but-rejected alternatives: when the data
+  // support two explanations we list the candidates instead of picking one.
+  const altOptions = ambiguous
+    ? decision.rejected
+        .filter((c) => c.explained.informative && c.validatedLines >= 2 && c.explained.axis !== "diag" && !subsumed(c))
+        .flatMap((c) => c.optionScores.map((v, i) => (v >= 0.85 && i !== best.i ? i : -1)))
+        .filter((i) => i >= 0)
+    : [];
   const confidence = calibrate(raw, opts.calibration);
 
   const validated = !tie && decision.kept.every((c) => c.optionScores[best.i] >= 0.85) && keptInf.length > 0;
   const status: Solution["status"] =
     tie || ambiguous || confidence < UNCERTAIN_THRESHOLD || !validated ? "uncertain" : "solved";
-  const answer = tie ? null : best.i;
+  const answer = tie || ambiguous ? null : best.i;
 
   const bestAttr = selectBestPerAttribute(attributeRules);
   const transform = decision.kept.find((c) => c.transform && c.transform.predicted && c.explained.informative);
@@ -120,7 +136,11 @@ export function solveMatrix(problem: MatrixProblem, opts: SolveOptions = {}): So
     .filter((c) => c.explained.informative)
     .map((c) => `Rejected alternative: ${c.explained.text} (contradicts a more complete or simpler rule)`));
 
-  const primary = pickStrategyName(active, best.i, keptInf.length);
+  // Distinct attributes with a changing rule (a whole-cell transformation that
+  // restates an attribute rule does not make it a two-rule question).
+  const attrRules = keptInf.filter((c) => c.explained.attribute !== "cell").map((c) => c.explained.attribute);
+  const changingAttrs = new Set(attrRules.filter((a) => !attrRules.some((b) => b !== a && coveredBy(b).includes(a))));
+  const primary = pickStrategyName(active, best.i, changingAttrs.size);
   const solution: Solution = {
     status,
     answer,
@@ -129,7 +149,7 @@ export function solveMatrix(problem: MatrixProblem, opts: SolveOptions = {}): So
     rawConfidence: raw,
     strategy: primary,
     validated,
-    candidates,
+    candidates: ambiguous ? [...new Set([...candidates, ...altOptions])] : candidates,
     optionScores: combined,
     strategies,
     rules,

@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --background: 40 14% 98%;
+  --foreground: 222 30% 12%;
+  --card: 0 0% 100%;
+  --muted: 220 14% 95%;
+  --muted-foreground: 220 9% 40%;
+  --border: 220 13% 88%;
+  --primary: 214 67% 50%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 214 80% 96%;
+  --good: 142 64% 30%;
+  --warn: 36 100% 35%;
+  --bad: 0 70% 45%;
+  /* chart roles (reference data-viz palette) */
+  --series-1: #2a78d6;
+  --chart-ref: #8a8984;
+  --chart-grid: #e6e5e0;
+  --chart-text: #52514e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --background: 222 20% 8%;
+    --foreground: 210 20% 96%;
+    --card: 222 18% 11%;
+    --muted: 222 14% 16%;
+    --muted-foreground: 215 12% 68%;
+    --border: 222 12% 22%;
+    --primary: 214 76% 56%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 214 40% 18%;
+    --good: 142 55% 50%;
+    --warn: 40 95% 55%;
+    --bad: 0 75% 62%;
+    --series-1: #3987e5;
+    --chart-ref: #8f8e88;
+    --chart-grid: #2c2c2a;
+    --chart-text: #c3c2b7;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: 222 20% 8%;
+  --foreground: 210 20% 96%;
+  --card: 222 18% 11%;
+  --muted: 222 14% 16%;
+  --muted-foreground: 215 12% 68%;
+  --border: 222 12% 22%;
+  --primary: 214 76% 56%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 214 40% 18%;
+  --good: 142 55% 50%;
+  --warn: 40 95% 55%;
+  --bad: 0 75% 62%;
+  --series-1: #3987e5;
+  --chart-ref: #8f8e88;
+  --chart-grid: #2c2c2a;
+  --chart-text: #c3c2b7;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
+
+/* Matrix figures are drawn in ink; invert for dark mode on a light tile. */
+.matrix-tile {
+  background: #ffffff;
+}

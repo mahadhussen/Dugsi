@@ -2,6 +2,20 @@ import type { MatrixProblem } from "../matrigma/types";
 import { OPTION_LABELS } from "../matrigma/types";
 import type { Explanation, Solution } from "./types";
 
+const ATTR_LABEL: Record<string, string> = {
+  count: "number of objects",
+  shape: "shape",
+  shapes: "shape",
+  sides: "shape",
+  fill: "fill",
+  size: "size",
+  rotation: "rotation",
+  positions: "position",
+  slotCol: "position",
+  slotRow: "position",
+  objects: "arrangement",
+};
+
 export function questionTypeLabel(p: MatrixProblem): string {
   if (p.rows === 1) return `Sequence of ${p.cols} figures`;
   return `${p.rows}×${p.cols} matrix`;
@@ -13,8 +27,17 @@ export function buildExplanation(problem: MatrixProblem, s: Solution): Explanati
   const constants = s.rules.filter((r) => !r.informative);
   const rules = informative.map((r) => r.text);
   if (constants.length) {
-    const attrs = [...new Set(constants.map((r) => r.attribute))];
-    rules.push(`Unchanged along the ${constants[0].axis === "col" ? "columns" : "rows"}: ${attrs.join(", ")}.`);
+    const byAxis = new Map<string, string[]>();
+    for (const r of constants) byAxis.set(r.axis, [...(byAxis.get(r.axis) ?? []), r.attribute]);
+    for (const [axis, attrs] of byAxis) {
+      const where = axis === "col" ? "each column" : axis === "diag" ? "each diagonal" : "each row";
+      if (attrs.includes("cell")) {
+        rules.push(`Within ${where} all figures are identical.`);
+        continue;
+      }
+      const labels = [...new Set(attrs.map((a) => ATTR_LABEL[a] ?? a))];
+      rules.push(`Unchanged within ${where}: ${labels.join(", ")}.`);
+    }
   }
   const validation: string[] = [];
   const seen = new Set<string>();

@@ -62,6 +62,19 @@ function mod(a: number, n: number) {
   return ((a % n) + n) % n;
 }
 
+/**
+ * Three arrow directions whose cyclic gaps are all different. With equal gaps
+ * (e.g. up/right/down) a Latin square of directions can also be read as
+ * "rotate by a fixed step", which would make the puzzle ambiguous.
+ */
+function distinctGapDirections(rng: Rng): number[] {
+  for (;;) {
+    const v = rng.sample([0, 45, 90, 135, 180, 225, 270, 315], 3).sort((a, b) => a - b);
+    const gaps = [v[1] - v[0], v[2] - v[1], 360 - v[2] + v[0]];
+    if (new Set(gaps).size === 3) return rng.shuffle(v);
+  }
+}
+
 function latin<T>(rng: Rng, values: T[]): (r: number, c: number) => T {
   const shift = rng.pick([1, 2]);
   const perm = rng.shuffle(values);
@@ -119,7 +132,12 @@ function ruleFor(attr: AttrName, rng: Rng, base: CellSpec, variant: "main" | "ex
           describe: `In each row the figure rotates ${Math.abs(step)}° ${step > 0 ? "clockwise" : "counter-clockwise"} per step.`,
         };
       }
-      const vals = base.shape === "arrow" ? rng.sample([0, 90, 180, 270], 3) : rng.sample([0, 90, 180], 3);
+      if (base.shape !== "arrow") {
+        // Triangle orientations repeat every 120°, so a Latin square of them is
+        // indistinguishable from a rotation step; use a progression instead.
+        return { attr, kind: "prog", value: (r, c) => mod(starts[r] + step * c, 360), describe: `In each row the figure rotates ${Math.abs(step)}° ${step > 0 ? "clockwise" : "counter-clockwise"} per step.` };
+      }
+      const vals = distinctGapDirections(rng);
       return { attr, kind: "latin", value: latin(rng, vals), describe: `Each row contains the orientations ${vals.map((v) => DIR_WORD[v] ?? `${v}°`).join(", ")} once each.` };
     }
     case "count": {
@@ -538,6 +556,7 @@ function generateComposition(seed: number, difficulty: Difficulty, rng: Rng) {
       tries++;
     } while (tries < 50 && (c.length === 0 || c.length === 9 || sameSet(c, a) || sameSet(c, b) || sameSet(a, b)));
     rowSets.push([a, b, c]);
+    if (r === 1 && competingOpFits(rowSets, op)) return null; // another operation would also explain rows 1–2
     grid.push(mk([...a]), mk([...b]), mk([...c]));
   }
   const [a, b, c] = rowSets[2];
@@ -558,6 +577,17 @@ function generateComposition(seed: number, difficulty: Difficulty, rng: Rng) {
         ? "In each row the third cell is the first with the elements of the second removed (A − B = C)."
         : "In each row the third cell keeps the elements that appear in exactly one of the first two (XOR).";
   return finish(seed, "composition", difficulty, grid, rng.shuffle(wrong), [{ attribute: "objects", kind: op, axis: "row", description: desc }], rng);
+}
+
+/** True if a different set operation also explains every complete row (ambiguous puzzle). */
+function competingOpFits(rows: number[][][], op: string): boolean {
+  const ops: Record<string, (a: number[], b: number[]) => number[]> = {
+    union: (a, b) => [...new Set([...a, ...b])],
+    difference: (a, b) => a.filter((x) => !b.includes(x)),
+    xor: (a, b) => [...a.filter((x) => !b.includes(x)), ...b.filter((x) => !a.includes(x))],
+    intersection: (a, b) => a.filter((x) => b.includes(x)),
+  };
+  return Object.entries(ops).some(([name, fn]) => name !== op && rows.every(([a, b, c]) => sameSet(fn(a, b), c)));
 }
 
 function sameSet(a: number[], b: number[]) {
