@@ -1,0 +1,311 @@
+{
+ "id": "alternation-easy-5073",
+ "category": "alternation",
+ "difficulty": "easy",
+ "correctAnswer": 5,
+ "rules": [
+  {
+   "attribute": "cell",
+   "kind": "alternation",
+   "axis": "row",
+   "description": "In each row the figures alternate A → B → A: the third cell repeats the first."
+  }
+ ],
+ "problem": {
+  "rows": 3,
+  "cols": 3,
+  "cells": [
+   {
+    "objects": [
+     {
+      "shape": "pentagon",
+      "fill": 0,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "pentagon",
+      "fill": 0,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.5,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "pentagon",
+      "fill": 0,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "pentagon",
+      "fill": 0,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 0,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "circle",
+      "fill": 0,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 0,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "cross",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "cross",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     },
+     {
+      "shape": "cross",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   null
+  ],
+  "options": [
+   {
+    "objects": [
+     {
+      "shape": "cross",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "cross",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     },
+     {
+      "shape": "cross",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "circle",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "circle",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     },
+     {
+      "shape": "circle",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 0,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "pentagon",
+      "fill": 0,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "pentagon",
+      "fill": 0,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 0.5,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   }
+  ]
+ }
+}

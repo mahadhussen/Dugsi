@@ -1,0 +1,665 @@
+import type {
+  Cell,
+  Difficulty,
+  Fill,
+  GeneratedMatrixQuestion,
+  MatrigmaCategory,
+  MatrixObject,
+  MatrixProblem,
+  RuleDescriptor,
+  Shape,
+} from "./types";
+import { MATRIGMA_CATEGORIES } from "./types";
+import { Rng } from "./rng";
+import { SLOT_COORDS } from "./geometry";
+import { COUNT_LAYOUT_SLOTS } from "./layouts";
+import { cellSimilarity, cellSimilarityStrict } from "../solver/similarity";
+import { cellFeatures } from "../solver/features";
+import { TRANSFORMS } from "../solver/transforms";
+
+/**
+ * Synthetic Matrigma-like question generator.
+ *
+ * Every question is built from explicit rules, so the solution is known by
+ * construction. Wrong options are near-misses that each violate at least one
+ * rule, and are checked to be visually distinct from the answer and from each
+ * other.
+ */
+
+export const GENERATOR_VERSION = "1.0.0";
+const ROWS = 3;
+const COLS = 3;
+const N_OPTIONS = 6;
+
+type AttrName = "shape" | "count" | "fill" | "size" | "rotation" | "position" | "sides";
+type RuleKind = "const" | "rowconst" | "prog" | "latin" | "alt" | "add";
+
+interface CellSpec {
+  shape: Shape;
+  count: number;
+  fill: Fill;
+  size: number;
+  rotation: number;
+  pos: number;
+  /** Explicit slots for multi-object cells (scattered layout). */
+  slots?: number[];
+}
+
+interface AttrRule {
+  attr: AttrName;
+  kind: RuleKind;
+  value: (r: number, c: number) => number | string;
+  describe: string;
+}
+
+const PLAIN_SHAPES: Shape[] = ["circle", "square", "triangle", "pentagon", "hexagon", "star", "diamond", "cross"];
+const FILLS: Fill[] = [0, 0.5, 1];
+const FILL_WORD: Record<number, string> = { 0: "empty", 0.5: "half-filled", 1: "solid" };
+const SIDES_SHAPE: Record<number, Shape> = { 3: "triangle", 4: "square", 5: "pentagon", 6: "hexagon" };
+const DIR_WORD: Record<number, string> = { 0: "up", 45: "up-right", 90: "right", 135: "down-right", 180: "down", 225: "down-left", 270: "left", 315: "up-left" };
+
+function mod(a: number, n: number) {
+  return ((a % n) + n) % n;
+}
+
+function latin<T>(rng: Rng, values: T[]): (r: number, c: number) => T {
+  const shift = rng.pick([1, 2]);
+  const perm = rng.shuffle(values);
+  return (r, c) => perm[mod(c + r * shift, 3)];
+}
+
+function buildCell(s: CellSpec, decoration: MatrixObject | null): Cell {
+  const objects: MatrixObject[] = [];
+  if (s.count <= 1) {
+    const [x, y] = SLOT_COORDS[s.pos];
+    objects.push({ shape: s.shape, fill: s.fill, size: s.size, rotation: s.rotation, x, y });
+  } else {
+    for (const slot of s.slots && s.slots.length === s.count ? s.slots : COUNT_LAYOUT_SLOTS[s.count]) {
+      const [x, y] = SLOT_COORDS[slot];
+      objects.push({ shape: s.shape, fill: s.fill, size: s.size, rotation: s.rotation, x, y });
+    }
+  }
+  if (decoration) objects.push(decoration);
+  return { objects };
+}
+
+interface Plan {
+  rules: AttrRule[];
+  decoration: MatrixObject | null;
+  base: CellSpec;
+  /** Scatter multi-object cells over random slots (avoids accidental set relations). */
+  scatter: boolean;
+}
+
+/** Choose the rule for one attribute. */
+function ruleFor(attr: AttrName, rng: Rng, base: CellSpec, variant: "main" | "extra" | "rowconst"): AttrRule {
+  if (variant === "rowconst") {
+    switch (attr) {
+      case "shape": {
+        const vals = rng.sample(PLAIN_SHAPES.filter((s) => s !== base.shape), 3);
+        return { attr, kind: "rowconst", value: (r) => vals[r], describe: "Each row uses its own shape." };
+      }
+      case "fill": {
+        const vals = rng.shuffle(FILLS);
+        return { attr, kind: "rowconst", value: (r) => vals[r], describe: "Each row uses its own fill." };
+      }
+      default:
+        throw new Error(`rowconst not supported for ${attr}`);
+    }
+  }
+  switch (attr) {
+    case "rotation": {
+      const step = base.shape === "arrow" ? rng.pick([45, 90, -90, -45]) : rng.pick([90, -90]);
+      const starts = rng.shuffle(base.shape === "arrow" ? [0, 90, 180, 270, 45, 135] : [0, 90, 180]).slice(0, 3);
+      if (variant === "extra" || rng.bool(0.8)) {
+        return {
+          attr,
+          kind: "prog",
+          value: (r, c) => mod(starts[r] + step * c, 360),
+          describe: `In each row the figure rotates ${Math.abs(step)}° ${step > 0 ? "clockwise" : "counter-clockwise"} per step.`,
+        };
+      }
+      const vals = base.shape === "arrow" ? rng.sample([0, 90, 180, 270], 3) : rng.sample([0, 90, 180], 3);
+      return { attr, kind: "latin", value: latin(rng, vals), describe: `Each row contains the orientations ${vals.map((v) => DIR_WORD[v] ?? `${v}°`).join(", ")} once each.` };
+    }
+    case "count": {
+      const k = rng.int(0, 2);
+      if (k === 0) {
+        const d = rng.pick([1, -1]);
+        const starts = d > 0 ? rng.shuffle([1, 2, 3]) : rng.shuffle([3, 4, 5]);
+        return { attr, kind: "prog", value: (r, c) => starts[r] + d * c, describe: `In each row the number of objects ${d > 0 ? "increases" : "decreases"} by one.` };
+      }
+      if (k === 1) {
+        const vals = rng.sample([1, 2, 3, 4, 5], 3);
+        return { attr, kind: "latin", value: latin(rng, vals), describe: `Each row contains ${vals.sort().join(", ")} objects, once each.` };
+      }
+      const pairs = rng.shuffle([[1, 1], [1, 2], [2, 1], [2, 2], [1, 3], [3, 1], [2, 3], [3, 2]]).slice(0, 3);
+      return { attr, kind: "add", value: (r, c) => (c < 2 ? pairs[r][c] : pairs[r][0] + pairs[r][1]), describe: "In each row the third cell has as many objects as the first two together." };
+    }
+    case "fill": {
+      if (rng.bool(0.5)) {
+        const asc = rng.bool();
+        const seq = asc ? FILLS : [...FILLS].reverse();
+        return { attr, kind: "prog", value: (_r, c) => seq[c], describe: `In each row the fill goes ${seq.map((f) => FILL_WORD[f]).join(" → ")}.` };
+      }
+      return { attr, kind: "latin", value: latin(rng, FILLS), describe: "Each row contains an empty, a half-filled and a solid figure." };
+    }
+    case "size": {
+      const sizes = [0.45, 0.65, 0.85];
+      if (rng.bool(0.6)) {
+        const seq = rng.bool() ? sizes : [...sizes].reverse();
+        return { attr, kind: "prog", value: (_r, c) => seq[c], describe: `In each row the figure ${seq[0] < seq[2] ? "grows" : "shrinks"} step by step.` };
+      }
+      return { attr, kind: "latin", value: latin(rng, sizes), describe: "Each row contains a small, a medium and a large figure." };
+    }
+    case "position": {
+      const y = rng.int(0, 2);
+      if (rng.bool(0.6)) {
+        const dx = rng.pick([1, -1]);
+        const x0 = rng.shuffle([0, 1, 2]);
+        return {
+          attr,
+          kind: "prog",
+          value: (r, c) => mod(y + r, 3) * 3 + mod(x0[r] + dx * c, 3),
+          describe: `In each row the figure moves one step ${dx > 0 ? "right" : "left"} (wrapping around).`,
+        };
+      }
+      const cols = latin(rng, [0, 1, 2]);
+      return { attr, kind: "latin", value: (r, c) => mod(y + r, 3) * 3 + cols(r, c), describe: "In each row the figure visits the left, middle and right position once each." };
+    }
+    case "shape": {
+      if (variant === "main" && rng.bool(0.3)) {
+        // Alternate start values so the two complete rows differ; otherwise
+        // "each row contains the same three shapes" would fit equally well.
+        const s0 = rng.pick([3, 4]);
+        const starts = [s0, 7 - s0, s0];
+        return { attr: "sides", kind: "prog", value: (r, c) => SIDES_SHAPE[starts[r] + c], describe: "In each row the number of corners increases by one (triangle → square → pentagon…)." };
+      }
+      if (rng.bool(0.25)) {
+        const pairs = Array.from({ length: 3 }, () => rng.sample(PLAIN_SHAPES, 2));
+        return { attr, kind: "alt", value: (r, c) => pairs[r][c % 2], describe: "In each row the shapes alternate A → B → A." };
+      }
+      const vals = rng.sample(PLAIN_SHAPES, 3);
+      return { attr, kind: "latin", value: latin(rng, vals), describe: `Each row contains a ${vals.join(", a ")} — each exactly once.` };
+    }
+    default:
+      throw new Error(`no rule for ${attr}`);
+  }
+}
+
+const MAIN_ATTR: Partial<Record<MatrigmaCategory, AttrName>> = {
+  rotation: "rotation",
+  direction: "rotation",
+  count: "count",
+  position: "position",
+  shape: "shape",
+  fill: "fill",
+  size: "size",
+};
+
+function compatibleExtras(active: AttrName[]): AttrName[] {
+  const all: AttrName[] = ["count", "fill", "shape", "rotation", "size", "position"];
+  return all.filter((a) => {
+    if (active.includes(a)) return false;
+    if (a === "sides" || (a === "shape" && active.includes("sides"))) return false;
+    if (a === "shape" && active.includes("rotation")) return false;
+    if (a === "rotation" && (active.includes("shape") || active.includes("sides"))) return false;
+    if ((a === "size" || a === "position") && active.includes("count")) return false;
+    if (a === "count" && (active.includes("size") || active.includes("position"))) return false;
+    if (a === "size" && active.includes("position")) return false;
+    if (a === "position" && active.includes("size")) return false;
+    return true;
+  });
+}
+
+function planAttributes(category: MatrigmaCategory, difficulty: Difficulty, rng: Rng): Plan {
+  const active: AttrName[] = [];
+  if (category === "multi-rule") {
+    const n = difficulty === "expert" ? 3 : 2;
+    while (active.length < n) {
+      const opts = compatibleExtras(active);
+      active.push(rng.pick(opts));
+    }
+  } else {
+    active.push(MAIN_ATTR[category]!);
+    const extras = difficulty === "hard" ? 1 : difficulty === "expert" ? 2 : 0;
+    for (let i = 0; i < extras; i++) {
+      const opts = compatibleExtras(active);
+      if (opts.length) active.push(rng.pick(opts));
+    }
+  }
+  const rotating = active.includes("rotation");
+  const base: CellSpec = {
+    shape: rotating ? (category === "direction" ? "arrow" : rng.pick(["arrow", "triangle"] as Shape[])) : rng.pick(PLAIN_SHAPES),
+    count: 1,
+    fill: rng.pick(active.includes("fill") ? FILLS : ([0, 1] as Fill[])),
+    size: 0.7,
+    rotation: 0,
+    pos: 4,
+  };
+  if (active.includes("count")) base.size = 0.3;
+  if (active.includes("position")) base.size = 0.35;
+  if (rotating && base.shape === "arrow") base.fill = rng.pick([0, 1] as Fill[]);
+  const rules: AttrRule[] = [];
+  for (const a of active) {
+    rules.push(ruleFor(a, rng, base, a === active[0] ? "main" : "extra"));
+  }
+  let decoration: MatrixObject | null = null;
+  if (difficulty === "medium") {
+    // Distracting elements: a second attribute that is constant within each
+    // row but differs between rows, and/or a constant decorative element.
+    const free = (["shape", "fill"] as AttrName[]).filter(
+      (a) => !active.includes(a) && !(a === "shape" && (rotating || active.includes("sides"))) && !rules.some((r) => r.attr === "sides"),
+    );
+    if (free.length) rules.push(ruleFor(rng.pick(free), rng, base, "rowconst"));
+    if (!active.includes("count") && !active.includes("position") && rng.bool(0.6)) {
+      const slot = rng.pick([0, 2, 6, 8]);
+      const [x, y] = SLOT_COORDS[slot];
+      decoration = { shape: "circle", fill: 1, size: 0.12, rotation: 0, x, y };
+    }
+  }
+  const countRule = rules.find((r) => r.attr === "count");
+  const scatter = !!countRule && (countRule.kind === "add" || rng.bool(0.5));
+  return { rules, decoration, base, scatter };
+}
+
+function specAt(plan: Plan, r: number, c: number): CellSpec {
+  const s: CellSpec = { ...plan.base };
+  for (const rule of plan.rules) {
+    const v = rule.value(r, c);
+    switch (rule.attr) {
+      case "shape":
+      case "sides":
+        s.shape = v as Shape;
+        break;
+      case "count":
+        s.count = v as number;
+        break;
+      case "fill":
+        s.fill = v as Fill;
+        break;
+      case "size":
+        s.size = v as number;
+        break;
+      case "rotation":
+        s.rotation = v as number;
+        break;
+      case "position":
+        s.pos = v as number;
+        break;
+    }
+  }
+  return s;
+}
+
+/** Near-miss wrong answers: perturb one attribute of the correct spec. */
+function specDistractors(plan: Plan, correct: CellSpec, rng: Rng): CellSpec[] {
+  const out: CellSpec[] = [];
+  const ruleAttrs = plan.rules.map((r) => (r.attr === "sides" ? "shape" : r.attr));
+  const rotating = plan.rules.some((r) => r.attr === "rotation");
+  const tweak = (attr: AttrName): CellSpec | null => {
+    const s = { ...correct };
+    switch (attr) {
+      case "shape": {
+        const pool = rotating ? (["arrow", "triangle"] as Shape[]).filter((x) => x !== s.shape) : PLAIN_SHAPES.filter((x) => x !== s.shape);
+        s.shape = rng.pick(pool);
+        if (s.shape === "arrow" || s.shape === "triangle") s.rotation = correct.rotation;
+        return s;
+      }
+      case "count": {
+        const next = s.count + rng.pick([1, -1, 2]);
+        if (next < 1 || next > 5) return null;
+        s.count = next;
+        if (next > 1) {
+          s.size = Math.min(s.size, 0.3);
+          s.pos = 4;
+        }
+        return s;
+      }
+      case "fill":
+        s.fill = rng.pick(FILLS.filter((f) => f !== s.fill));
+        return s;
+      case "size": {
+        const opts = [0.45, 0.65, 0.85].filter((x) => Math.abs(x - s.size) > 0.1);
+        if (s.count > 1 || s.pos !== 4) return null;
+        s.size = rng.pick(opts);
+        return s;
+      }
+      case "rotation": {
+        if (s.shape !== "arrow" && s.shape !== "triangle") return null;
+        s.rotation = mod(s.rotation + rng.pick(s.shape === "arrow" ? [90, 180, 270, 45] : [90, 180]), 360);
+        return s;
+      }
+      case "position": {
+        if (s.count > 1 || s.size > 0.45) return null; // large figures would not fit off-centre
+        s.pos = rng.pick([0, 1, 2, 3, 4, 5, 6, 7, 8].filter((p) => p !== s.pos));
+        return s;
+      }
+      default:
+        return null;
+    }
+  };
+  // Prefer perturbing rule attributes (the informative ones), then the rest.
+  const order: AttrName[] = [...ruleAttrs, ...ruleAttrs, "shape", "fill", "count", "rotation", "size", "position"] as AttrName[];
+  for (let tries = 0; tries < 80 && out.length < 12; tries++) {
+    const attr = order[tries % order.length];
+    const s = tweak(attr);
+    if (s) out.push(s);
+  }
+  // Two-attribute perturbation for extra variety.
+  for (let tries = 0; tries < 10; tries++) {
+    const a = tweak(rng.pick(ruleAttrs as AttrName[]));
+    if (!a) continue;
+    const saved = { ...correct };
+    Object.assign(correct, a);
+    const b = tweak(rng.pick(["fill", "shape", "count"] as AttrName[]));
+    Object.assign(correct, saved);
+    if (b) out.push({ ...a, ...Object.fromEntries(Object.entries(b).filter(([k, v]) => (a as unknown as Record<string, unknown>)[k] === (correct as unknown as Record<string, unknown>)[k] && v !== (correct as unknown as Record<string, unknown>)[k])) });
+  }
+  return out;
+}
+
+/** Rule-relevant signature: two cells with equal signatures are indistinguishable by the rules. */
+function signature(c: Cell, ignorePositions: boolean): string {
+  const f = cellFeatures(c);
+  const parts = [f.count, f.shapes, f.fill, f.size === null ? "x" : Math.round(f.size * 20), f.rotation === null ? "x" : Math.round(f.rotation)];
+  if (!ignorePositions) parts.push(f.objects);
+  return parts.join("|");
+}
+
+function assembleOptions(correct: Cell, candidates: Cell[], rng: Rng, ignorePositions = false): { options: Cell[]; answer: number } | null {
+  const chosen: Cell[] = [];
+  const correctSig = signature(correct, ignorePositions);
+  for (const c of candidates) {
+    if (cellSimilarityStrict(c, correct) >= 0.95) continue;
+    if (signature(c, ignorePositions) === correctSig) continue;
+    if (chosen.some((x) => cellSimilarityStrict(x, c) >= 0.95)) continue;
+    chosen.push(c);
+    if (chosen.length === N_OPTIONS - 1) break;
+  }
+  if (chosen.length < N_OPTIONS - 1) return null;
+  const answer = rng.int(0, N_OPTIONS - 1);
+  const options = [...chosen];
+  options.splice(answer, 0, correct);
+  return { options, answer };
+}
+
+function finish(
+  seed: number,
+  category: MatrigmaCategory,
+  difficulty: Difficulty,
+  grid: Cell[],
+  distractors: Cell[],
+  rules: RuleDescriptor[],
+  rng: Rng,
+  ignorePositions = false,
+): GeneratedMatrixQuestion | null {
+  const missing = ROWS * COLS - 1;
+  const correct = grid[missing];
+  const assembled = assembleOptions(correct, distractors, rng, ignorePositions);
+  if (!assembled) return null;
+  const problem: MatrixProblem = {
+    rows: ROWS,
+    cols: COLS,
+    cells: grid.map((c, i) => (i === missing ? null : c)),
+    options: assembled.options,
+  };
+  return {
+    id: `${category}-${difficulty}-${seed}`,
+    seed,
+    category,
+    difficulty,
+    problem,
+    correctAnswer: assembled.answer,
+    rules,
+    ruleText: rules.map((r) => r.description).join(" "),
+  };
+}
+
+function scatterSlots(count: number, rng: Rng): number[] {
+  return rng.sample([0, 1, 2, 3, 4, 5, 6, 7, 8], count);
+}
+
+function generateAttributeQuestion(seed: number, category: MatrigmaCategory, difficulty: Difficulty, rng: Rng) {
+  const plan = planAttributes(category, difficulty, rng);
+  const specs: CellSpec[] = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      const s = specAt(plan, r, c);
+      if (plan.scatter && s.count > 1 && s.count <= 9) s.slots = scatterSlots(s.count, rng);
+      specs.push(s);
+    }
+  // Reject degenerate layouts (e.g. count > layout size).
+  if (specs.some((s) => s.count < 1 || s.count > 9)) return null;
+  const grid = specs.map((s) => buildCell(s, plan.decoration));
+  const correctSpec = specs[specs.length - 1];
+  const distractors = specDistractors(plan, correctSpec, rng).map((s) => {
+    if (plan.scatter && s.count !== correctSpec.count && s.count > 1) s.slots = scatterSlots(s.count, rng);
+    return buildCell(s, plan.decoration);
+  });
+  // Also offer the "previous cell" and "row above" as tempting wrong answers.
+  distractors.splice(1, 0, grid[7], grid[5]);
+  const rules: RuleDescriptor[] = plan.rules
+    .filter((r) => r.kind !== "rowconst")
+    .map((r) => ({ attribute: r.attr, kind: r.kind, axis: "row", description: r.describe }));
+  return finish(seed, category, difficulty, grid, distractors, rules, rng, plan.scatter);
+}
+
+// ---------------------------------------------------------------------------
+// Reflection: [A, mirror_h(A), mirror_v(mirror_h(A))]
+
+function randomAsymmetricCell(rng: Rng): Cell {
+  const slots = rng.sample([0, 1, 2, 3, 5, 6, 7, 8], 2);
+  const arrow: MatrixObject = {
+    shape: "arrow",
+    fill: rng.pick([0, 1] as Fill[]),
+    size: 0.4,
+    rotation: rng.pick([45, 135, 225, 315, 90, 270]),
+    x: SLOT_COORDS[slots[0]][0],
+    y: SLOT_COORDS[slots[0]][1],
+  };
+  const other: MatrixObject = {
+    shape: rng.pick(["circle", "square", "triangle"] as Shape[]),
+    fill: rng.pick([0, 1] as Fill[]),
+    size: 0.3,
+    rotation: 0,
+    x: SLOT_COORDS[slots[1]][0],
+    y: SLOT_COORDS[slots[1]][1],
+  };
+  return { objects: [arrow, other] };
+}
+
+function generateReflection(seed: number, difficulty: Difficulty, rng: Rng) {
+  const T = (id: string) => TRANSFORMS.find((t) => t.id === id)!;
+  const first = rng.pick(["flip_h", "flip_v"]);
+  const second = difficulty === "easy" ? first : first === "flip_h" ? "flip_v" : "flip_h";
+  const grid: Cell[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    let a: Cell;
+    let tries = 0;
+    do {
+      a = randomAsymmetricCell(rng);
+      tries++;
+    } while (
+      tries < 50 &&
+      (cellSimilarity(T("flip_h").apply(a), a) > 0.8 || cellSimilarity(T("flip_v").apply(a), a) > 0.8)
+    );
+    const b = T(first).apply(a);
+    const c = T(second).apply(b);
+    grid.push(a, b, c);
+  }
+  const prev = grid[7];
+  const correct = grid[8];
+  const wrong = [
+    T(first === "flip_h" ? "flip_v" : "flip_h").apply(prev),
+    T("rotate_90").apply(prev),
+    T("rotate_-90").apply(prev),
+    prev,
+    T("rotate_180").apply(correct),
+    T("translate_1_0").apply(correct),
+    { objects: correct.objects.map((o, i) => (i === 0 ? { ...o, fill: (o.fill === 1 ? 0 : 1) as Fill } : o)) },
+    { objects: correct.objects.map((o, i) => (i === 0 ? { ...o, rotation: mod(o.rotation + 90, 360) } : o)) },
+  ];
+  const desc =
+    first === second
+      ? `In each row each figure is the previous one ${T(first).describe}.`
+      : `In each row the second figure is the first ${T(first).describe}, and the third is the second ${T(second).describe}.`;
+  return finish(seed, "reflection", difficulty, grid, rng.shuffle(wrong), [{ attribute: "cell", kind: "reflection", axis: "row", description: desc }], rng);
+}
+
+// ---------------------------------------------------------------------------
+// Composition / subtraction / XOR over a pool of small elements in slots
+
+function generateComposition(seed: number, difficulty: Difficulty, rng: Rng) {
+  const op = difficulty === "easy" ? "union" : difficulty === "medium" ? rng.pick(["union", "difference"]) : rng.pick(["xor", "difference", "union"]);
+  const shape = rng.pick(["circle", "square", "triangle", "diamond"] as Shape[]);
+  const fill = rng.pick([0, 1] as Fill[]);
+  const mk = (slots: number[]): Cell => ({
+    objects: slots.sort((a, b) => a - b).map((s) => ({ shape, fill, size: 0.3, rotation: 0, x: SLOT_COORDS[s][0], y: SLOT_COORDS[s][1] })),
+  });
+  const apply = (a: number[], b: number[]) => {
+    const A = new Set(a);
+    const B = new Set(b);
+    if (op === "union") return [...new Set([...a, ...b])];
+    if (op === "difference") return a.filter((x) => !B.has(x));
+    return [...a.filter((x) => !B.has(x)), ...b.filter((x) => !A.has(x))];
+  };
+  const grid: Cell[] = [];
+  const rowSets: number[][][] = [];
+  for (let r = 0; r < ROWS; r++) {
+    let a: number[];
+    let b: number[];
+    let c: number[];
+    let tries = 0;
+    do {
+      a = rng.sample([0, 1, 2, 3, 4, 5, 6, 7, 8], rng.int(2, 4));
+      b = op === "difference" ? [...rng.sample(a, rng.int(1, a.length - 1)), ...rng.sample([0, 1, 2, 3, 4, 5, 6, 7, 8].filter((x) => !a.includes(x)), rng.int(0, 1))] : rng.sample([0, 1, 2, 3, 4, 5, 6, 7, 8], rng.int(2, 4));
+      c = apply(a, b);
+      tries++;
+    } while (tries < 50 && (c.length === 0 || c.length === 9 || sameSet(c, a) || sameSet(c, b) || sameSet(a, b)));
+    rowSets.push([a, b, c]);
+    grid.push(mk([...a]), mk([...b]), mk([...c]));
+  }
+  const [a, b, c] = rowSets[2];
+  const alt = (fn: (x: number[], y: number[]) => number[]) => mk(fn(a, b));
+  const union = (x: number[], y: number[]) => [...new Set([...x, ...y])];
+  const diff = (x: number[], y: number[]) => x.filter((v) => !y.includes(v));
+  const xor = (x: number[], y: number[]) => [...diff(x, y), ...diff(y, x)];
+  const inter = (x: number[], y: number[]) => x.filter((v) => y.includes(v));
+  const wrong: Cell[] = [alt(union), alt(diff), alt(xor), alt(inter), alt((x, y) => diff(y, x))];
+  const free = [0, 1, 2, 3, 4, 5, 6, 7, 8].filter((x) => !c.includes(x));
+  if (free.length) wrong.push(mk([...c, rng.pick(free)]));
+  if (c.length > 1) wrong.push(mk(c.filter((_, i) => i !== 0)));
+  wrong.push(mk([...a]), mk([...b]));
+  const desc =
+    op === "union"
+      ? "In each row the third cell overlays the first two (A + B = C)."
+      : op === "difference"
+        ? "In each row the third cell is the first with the elements of the second removed (A − B = C)."
+        : "In each row the third cell keeps the elements that appear in exactly one of the first two (XOR).";
+  return finish(seed, "composition", difficulty, grid, rng.shuffle(wrong), [{ attribute: "objects", kind: op, axis: "row", description: desc }], rng);
+}
+
+function sameSet(a: number[], b: number[]) {
+  return a.length === b.length && a.every((x) => b.includes(x));
+}
+
+// ---------------------------------------------------------------------------
+// Alternation: A B A in each row (whole-cell)
+
+function randomCell(rng: Rng): Cell {
+  const count = rng.int(1, 3);
+  const shape = rng.pick(PLAIN_SHAPES);
+  const fill = rng.pick([0, 0.5, 1] as Fill[]);
+  const slots = COUNT_LAYOUT_SLOTS[count];
+  const size = count === 1 ? rng.pick([0.5, 0.7]) : 0.3;
+  return { objects: slots.map((s) => ({ shape, fill, size, rotation: 0, x: SLOT_COORDS[s][0], y: SLOT_COORDS[s][1] })) };
+}
+
+function generateAlternation(seed: number, difficulty: Difficulty, rng: Rng) {
+  const grid: Cell[] = [];
+  const pairs: [Cell, Cell][] = [];
+  for (let r = 0; r < ROWS; r++) {
+    let a: Cell;
+    let b: Cell;
+    do {
+      a = randomCell(rng);
+      b = randomCell(rng);
+    } while (cellSimilarity(a, b) > 0.8);
+    pairs.push([a, b]);
+    grid.push(a, b, a);
+  }
+  const [a, b] = pairs[2];
+  const tweak = (c: Cell, f: (o: MatrixObject) => MatrixObject): Cell => ({ objects: c.objects.map(f) });
+  const wrong: Cell[] = [
+    b,
+    tweak(a, (o) => ({ ...o, fill: (o.fill === 1 ? 0 : 1) as Fill })),
+    tweak(a, (o) => ({ ...o, shape: o.shape === "circle" ? "square" : "circle" })),
+    pairs[1][0],
+    pairs[0][0],
+    tweak(b, (o) => ({ ...o, fill: (o.fill === 1 ? 0 : 1) as Fill })),
+    tweak(a, (o) => ({ ...o, size: o.size > 0.4 ? (o.size > 0.6 ? 0.5 : 0.7) : o.size, shape: o.size > 0.4 ? o.shape : o.shape === "star" ? "cross" : "star" })),
+  ];
+  return finish(
+    seed,
+    "alternation",
+    difficulty,
+    grid,
+    wrong,
+    [{ attribute: "cell", kind: "alternation", axis: "row", description: "In each row the figures alternate A → B → A: the third cell repeats the first." }],
+    rng,
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+export interface GenerateOptions {
+  category?: MatrigmaCategory;
+  difficulty?: Difficulty;
+  seed?: number;
+}
+
+const DEFAULT_DIFFICULTY: Record<MatrigmaCategory, Difficulty> = {
+  rotation: "easy",
+  reflection: "medium",
+  count: "easy",
+  position: "easy",
+  shape: "easy",
+  fill: "easy",
+  size: "easy",
+  direction: "easy",
+  composition: "medium",
+  alternation: "easy",
+  "multi-rule": "hard",
+};
+
+export function generateQuestion(opts: GenerateOptions = {}): GeneratedMatrixQuestion {
+  let seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
+  for (let attempt = 0; attempt < 200; attempt++, seed = (seed * 1103515245 + 12345) >>> 1) {
+    const rng = new Rng(seed);
+    const category = opts.category ?? rng.pick(MATRIGMA_CATEGORIES);
+    let difficulty = opts.difficulty ?? DEFAULT_DIFFICULTY[category];
+    if (category === "multi-rule" && (difficulty === "easy" || difficulty === "medium")) difficulty = "hard";
+    let q: GeneratedMatrixQuestion | null;
+    switch (category) {
+      case "reflection":
+        q = generateReflection(seed, difficulty, rng);
+        break;
+      case "composition":
+        q = generateComposition(seed, difficulty, rng);
+        break;
+      case "alternation":
+        q = generateAlternation(seed, difficulty, rng);
+        break;
+      default:
+        q = generateAttributeQuestion(seed, category, difficulty, rng);
+    }
+    if (q) return q;
+  }
+  throw new Error("Failed to generate a valid question");
+}
+
+export function generateBatch(n: number, opts: Omit<GenerateOptions, "seed"> & { seedStart?: number } = {}): GeneratedMatrixQuestion[] {
+  const start = opts.seedStart ?? Math.floor(Math.random() * 2 ** 30);
+  return Array.from({ length: n }, (_, i) => generateQuestion({ ...opts, seed: start + i * 7919 }));
+}

@@ -1,0 +1,303 @@
+{
+ "id": "reflection-hard-5103",
+ "category": "reflection",
+ "difficulty": "hard",
+ "correctAnswer": 1,
+ "rules": [
+  {
+   "attribute": "cell",
+   "kind": "reflection",
+   "axis": "row",
+   "description": "In each row the second figure is the first mirrored left ↔ right, and the third is the second mirrored top ↕ bottom."
+  }
+ ],
+ "problem": {
+  "rows": 3,
+  "cols": 3,
+  "cells": [
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.4,
+      "rotation": 90,
+      "x": 0.2,
+      "y": 0.8
+     },
+     {
+      "shape": "triangle",
+      "fill": 0,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.4,
+      "rotation": 270,
+      "x": 0.8,
+      "y": 0.8
+     },
+     {
+      "shape": "triangle",
+      "fill": 0,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.19999999999999996,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.4,
+      "rotation": 270,
+      "x": 0.8,
+      "y": 0.19999999999999996
+     },
+     {
+      "shape": "triangle",
+      "fill": 0,
+      "size": 0.3,
+      "rotation": 60,
+      "x": 0.19999999999999996,
+      "y": 0.19999999999999996
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 45,
+      "x": 0.2,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.2
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 315,
+      "x": 0.8,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.19999999999999996,
+      "y": 0.2
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 225,
+      "x": 0.8,
+      "y": 0.8
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.19999999999999996,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 45,
+      "x": 0.8,
+      "y": 0.8
+     },
+     {
+      "shape": "circle",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.2
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 315,
+      "x": 0.19999999999999996,
+      "y": 0.8
+     },
+     {
+      "shape": "circle",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.19999999999999996,
+      "y": 0.2
+     }
+    ]
+   },
+   null
+  ],
+  "options": [
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 45,
+      "x": 0.8,
+      "y": 0.8
+     },
+     {
+      "shape": "circle",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.1999999999999999
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 225,
+      "x": 0.19999999999999996,
+      "y": 0.19999999999999996
+     },
+     {
+      "shape": "circle",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.19999999999999996,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 45,
+      "x": 0.19999999999999996,
+      "y": 0.19999999999999998
+     },
+     {
+      "shape": "circle",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.19999999999999993
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 315,
+      "x": 0.19999999999999996,
+      "y": 0.8
+     },
+     {
+      "shape": "circle",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.19999999999999996,
+      "y": 0.2
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 315,
+      "x": 0.19999999999999996,
+      "y": 0.19999999999999996
+     },
+     {
+      "shape": "circle",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.19999999999999996,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.4,
+      "rotation": 225,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "circle",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.8
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,149 @@
+// SQLite database for the local assessment trainer.
+// JSON payloads are stored as strings (SQLite has no native JSON column).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String   @default("Local user")
+  settings  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  attempts    QuestionAttempt[]
+  sessions    PracticeSession[]
+  mapResponses MAPResponse[]
+  metrics     PerformanceMetric[]
+}
+
+model QuestionCategory {
+  id        String     @id @default(cuid())
+  key       String     @unique
+  name      String
+  kind      String // "matrigma" | "map"
+  questions Question[]
+}
+
+model Question {
+  id               String   @id @default(cuid())
+  type             String // "matrigma" | "map"
+  source           String // "generated" | "screenshot" | "manual"
+  categoryId       String?
+  category         QuestionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  difficulty       String   @default("medium")
+  rule             String   @default("")
+  payload          String // JSON: MatrixProblem (+ optional vision data)
+  correctAnswer    Int? // index of the correct option when known
+  solverAnswer     Int?
+  solverConfidence Float?
+  solverStrategy   String?
+  verified         Boolean  @default(false) // user confirmed the correct answer
+  imagePath        String? // only set when image storage is enabled
+  createdAt        DateTime @default(now())
+
+  attempts  QuestionAttempt[]
+  generated GeneratedQuestion?
+
+  @@index([type, source])
+}
+
+model GeneratedQuestion {
+  id               String   @id @default(cuid())
+  questionId       String   @unique
+  question         Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  seed             Int
+  generatorVersion String
+  category         String
+  difficulty       String
+  rules            String // JSON array of rule descriptors
+  createdAt        DateTime @default(now())
+}
+
+model QuestionAttempt {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  sessionId      String?
+  session        PracticeSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  selectedAnswer Int? // null = timed out / skipped
+  correctAnswer  Int
+  isCorrect      Boolean
+  responseTime   Int // milliseconds
+  difficulty     String
+  category       String
+  confidence     Float? // solver confidence for this question
+  solverStrategy String?
+  timestamp      DateTime @default(now())
+
+  @@index([userId, timestamp])
+  @@index([category])
+}
+
+model PracticeSession {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind               String // "matrigma" | "map"
+  mode               String // "timed" | "adaptive" | "category" | "free"
+  questionCount      Int
+  perQuestionSeconds Int?
+  totalSeconds       Int?
+  startedAt          DateTime  @default(now())
+  endedAt            DateTime?
+  summary            String    @default("{}")
+
+  attempts     QuestionAttempt[]
+  mapResponses MAPResponse[]
+}
+
+model MAPStatement {
+  id             String   @id @default(cuid())
+  text           String
+  lang           String   @default("sv")
+  domain         String
+  subscale       String
+  keyed          Int      @default(1) // +1 agreement expresses more of the subscale, -1 less
+  source         String   @default("bank") // "bank" | "ocr" | "manual"
+  interpretation String   @default("")
+  behaviour      String   @default("")
+  createdAt      DateTime @default(now())
+
+  responses MAPResponse[]
+}
+
+model MAPResponse {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  statementId  String
+  statement    MAPStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  sessionId    String?
+  session      PracticeSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  value        Int // 1..7 (strongly disagree .. strongly agree)
+  responseTime Int          @default(0)
+  category     String
+  timestamp    DateTime     @default(now())
+
+  @@index([userId, timestamp])
+}
+
+model PerformanceMetric {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day           String // YYYY-MM-DD
+  category      String
+  attempts      Int      @default(0)
+  correct       Int      @default(0)
+  totalTimeMs   Int      @default(0)
+
+  @@unique([userId, day, category])
+}
