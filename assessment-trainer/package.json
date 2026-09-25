@@ -18,6 +18,7 @@
     "test:all": "vitest run && python3 -m pytest python/tests -q && tsx scripts/benchmark.ts",
     "benchmark": "tsx scripts/benchmark.ts",
     "benchmark:vision": "tsx scripts/vision-benchmark.ts",
+    "benchmark:vision-js": "tsx scripts/js-vision-benchmark.ts",
     "test-data": "tsx scripts/generate-test-data.ts",
     "postinstall": "prisma generate"
   },

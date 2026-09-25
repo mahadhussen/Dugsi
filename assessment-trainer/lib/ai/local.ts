@@ -1,5 +1,5 @@
 import type { ReasoningProvider, TextProvider, VisionProvider } from "./types";
-import { analyzeWithPython } from "../vision/python";
+import { analyzeMatrixLocal } from "../vision/local";
 import { ocrLocal } from "../vision/ocr";
 import { analyzeStatement } from "../map/classify";
 
@@ -7,7 +7,7 @@ import { analyzeStatement } from "../map/classify";
 export const localVision: VisionProvider = {
   name: "local (OpenCV + tesseract.js)",
   async extractMatrix(image) {
-    return { ...(await analyzeWithPython(image)), provider: "local" };
+    return analyzeMatrixLocal(image);
   },
   async extractText(image) {
     return ocrLocal(image);

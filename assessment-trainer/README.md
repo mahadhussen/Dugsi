@@ -91,10 +91,11 @@ In personality practice: **1–7** answer · **Space** show/hide the explanation
 ## Testing
 
 ```bash
-npm test               # Vitest: solver, generator, vision bridge, MAP, OCR, statistics, database, API
+npm test               # Vitest: solver, generator, vision bridge, TypeScript vision, MAP, OCR, statistics, database, API
 npm run test:python    # pytest: preprocessing, matrix/cell detection, object extraction
 npm run benchmark      # solver on 100 synthetic questions per category (add a number for more)
 npm run benchmark:vision   # screenshot -> OpenCV -> solver, PNG / JPEG q70 / downscaled
+npm run benchmark:vision-js  # same, with the pure TypeScript (browser) vision pipeline
 npm run test:all       # everything above
 ```
 
@@ -107,6 +108,7 @@ Measured results (this repository, September 2026):
 |---|---|
 | Solver, 100 generated questions × 11 categories | 99.9 % correct, **0 wrong**, 1 abstention |
 | Screenshot → vision → solver, 330 renders (PNG, JPEG q70, 0.7× scale) | 97.3 % correct, **0 wrong**, the rest abstained |
+| Same with the TypeScript (browser) vision, 198 renders | 96.5 % correct, **0 wrong**, the rest abstained, ~70 ms each |
 | Object extraction vs. ground truth on the fixtures | every shape, fill, rotation and count correct |
 | Confidence calibration (solver benchmark) | 90–100 % confidence → 100 % correct |
 
@@ -143,6 +145,8 @@ assessment-trainer/
     solver/               features, rule engine, transformations, 16 strategies,
                           decision engine, confidence, explanations
     vision/               Python bridge (with cache), OCR, vision → problem
+    vision/js/            the same vision pipeline in pure TypeScript (runs in a
+                          browser; used by the app when Python is unavailable)
     map/                  personality model (5 domains, 25 facets), statement bank,
                           classifier, consistency engine, OCR text extraction
     statistics/           stats, calibration, adaptive selection
@@ -171,6 +175,12 @@ upload (validated: type, 10 MB) ──► VisionProvider.extractMatrix
                  rotation, position, count + confidence
   ──► lib/solver.solveMatrix  ──► explanation + confidence ──► UI overlays
 ```
+
+`lib/vision/js/` implements the same stages without OpenCV (adaptive threshold,
+enclosed square cells, lattice + missing slot, options row, per cell Otsu,
+connected components, convex hull shape rules) and returns the same JSON. The app
+uses it automatically when Python cannot be started, and the standalone web demo
+uses it for drag and drop screenshot analysis entirely in the browser.
 
 The Python part is only the eye. All reasoning happens in TypeScript on a
 structured representation, which the generator, the UI and the tests share:
@@ -280,7 +290,7 @@ responseTime, difficulty, category, confidence, solverStrategy and timestamp.
 
 | Symptom | Fix |
 |---|---|
-| Settings shows *Python / OpenCV: not available* | `pip install -r python/requirements.txt`, or set `PYTHON_BIN` to the interpreter that has OpenCV |
+| Settings shows *Python / OpenCV: not available* | `pip install -r python/requirements.txt`, or set `PYTHON_BIN` to the interpreter that has OpenCV. Until then matrix screenshots use the TypeScript vision pipeline (slightly lower recall, same abstain behaviour). |
 | "Unable to reliably detect the matrix" | Crop the screenshot to the matrix plus the answer options, use a larger/sharper screenshot, or choose the question type manually. The detector expects equally sized, bordered cells. |
 | An answer is "Uncertain – inspect manually" | Check the detected objects table and overlays; low extraction quality or two equally valid rules lower confidence on purpose. |
 | OCR language data missing | `npm install` (installs `@tesseract.js-data/swe` and `/eng`); OCR runs offline |

@@ -3,7 +3,7 @@ import type { ReasoningProvider, TextProvider, VisionProvider } from "./types";
 import type { VisionResult } from "../vision/types";
 import { SUBSCALES } from "../map/model";
 import { describe, analyzeStatement as localAnalyze } from "../map/classify";
-import { analyzeWithPython } from "../vision/python";
+import { analyzeMatrixLocal } from "../vision/local";
 
 /**
  * Anthropic (Claude) providers. Used only when configured via env and an API
@@ -38,7 +38,7 @@ export const anthropicVision: VisionProvider = {
   name: `anthropic (${MODEL()}) for OCR, OpenCV for matrices`,
   async extractMatrix(image): Promise<VisionResult> {
     // Matrix extraction stays local: visual verification beats model intuition.
-    return { ...(await analyzeWithPython(image)), provider: "local" };
+    return analyzeMatrixLocal(image);
   },
   async extractText(image, mime) {
     const out = await jsonCall<{ text: string }>(
