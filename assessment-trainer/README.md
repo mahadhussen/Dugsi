@@ -39,6 +39,9 @@ What it does:
   combinations, shrinking bars, shapes with lines, and texture bands. The
   figure-like types are "glyphs" (`lib/matrigma/glyphs.ts`): each declares its
   properties, and the rule engine fits rules on them without special code.
+- **Rule focus** – *Focus: XOR* and *Focus: Construction (A + B = C)* mix
+  questions with that one rule across several picture types (figures in a
+  grid, line patterns, lines and dots, overlay in any position).
 - **Adaptive test** – one question at a time, no going back and no feedback
   until the end. A Rasch model (`lib/statistics/ability-test.ts`) re-estimates
   ability after each answer and picks the next question where it is most

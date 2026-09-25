@@ -109,6 +109,18 @@ describe("new question types (glyphs, lines and dots, overlay anywhere)", () => 
   });
 });
 
+describe("rule focus (XOR / construction)", () => {
+  it.each(["xor", "construction"] as const)("%s: every question uses the rule and is solved", (focus) => {
+    for (const d of ["easy", "medium", "hard", "expert"] as const) {
+      for (let i = 0; i < 15; i++) {
+        const q = generateQuestion({ focus, difficulty: d, seed: 600 + i * 43 });
+        expect(q.rules.some((r) => (focus === "xor" ? r.kind === "xor" : r.kind === "union" || r.kind === "union_any"))).toBe(true);
+        expect(solveMatrix(q.problem).answer).toBe(q.correctAnswer);
+      }
+    }
+  });
+});
+
 describe("line pattern (overlay) questions", () => {
   it("are solved correctly with an explanation that names the layers", () => {
     for (const d of ["easy", "medium", "hard", "expert"] as const) {

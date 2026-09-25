@@ -538,8 +538,8 @@ function generateReflection(seed: number, difficulty: Difficulty, rng: Rng) {
 // ---------------------------------------------------------------------------
 // Composition / subtraction / XOR over a pool of small elements in slots
 
-function generateComposition(seed: number, difficulty: Difficulty, rng: Rng) {
-  const op = difficulty === "easy" ? "union" : difficulty === "medium" ? rng.pick(["union", "difference"]) : rng.pick(["xor", "difference", "union"]);
+function generateComposition(seed: number, difficulty: Difficulty, rng: Rng, forceOp?: "union" | "xor") {
+  const op = forceOp ?? (difficulty === "easy" ? "union" : difficulty === "medium" ? rng.pick(["union", "difference"]) : rng.pick(["xor", "difference", "union"]));
   const shape = rng.pick(["circle", "square", "triangle", "diamond"] as Shape[]);
   const fill = rng.pick([0, 1] as Fill[]);
   const mk = (slots: number[]): Cell => ({
@@ -720,11 +720,12 @@ const OP_TEXT: Record<LayerOp, string> = {
   difference: "are the first cell with the second cell's elements removed",
 };
 
-function generateOverlay(seed: number, difficulty: Difficulty, rng: Rng, unchecked = false): GeneratedMatrixQuestion | null {
+function generateOverlay(seed: number, difficulty: Difficulty, rng: Rng, unchecked = false, forceOp?: "union" | "xor"): GeneratedMatrixQuestion | null {
   const axisA: LAxis = rng.bool() ? "row" : "col";
   const axisB: LAxis = axisA === "row" ? "col" : "row";
-  const plan: { layer: Layer; axis: LAxis; op: LayerOp; only: number[] | null }[] = [{ layer: "lines", axis: axisA, op: difficulty === "expert" ? rng.pick(["xor", "difference"] as LayerOp[]) : "union", only: null }];
-  if (difficulty !== "easy") plan.push({ layer: "bars", axis: axisB, op: "union", only: difficulty === "medium" ? null : [1, 2] });
+  const linesOp: LayerOp = forceOp ?? (difficulty === "expert" ? rng.pick(["xor", "difference"] as LayerOp[]) : "union");
+  const plan: { layer: Layer; axis: LAxis; op: LayerOp; only: number[] | null }[] = [{ layer: "lines", axis: axisA, op: linesOp, only: null }];
+  if (difficulty !== "easy") plan.push({ layer: "bars", axis: axisB, op: forceOp ?? "union", only: difficulty === "medium" ? null : [1, 2] });
   if (difficulty === "hard" || difficulty === "expert") plan.push({ layer: "dots", axis: axisB, op: "union", only: [0] });
   const layers: Record<Layer, string[][]> = { lines: Array.from({ length: 9 }, () => []), bars: Array.from({ length: 9 }, () => []), dots: Array.from({ length: 9 }, () => []) };
   for (const p of plan) layers[p.layer] = buildLayer(p.layer, p.axis, p.op, rng, p.only);
@@ -929,9 +930,9 @@ function buildGraphLayer(pool: readonly string[], op: GOp, rng: Rng, sizes: [num
   return lines;
 }
 
-function generateLinesDots(seed: number, difficulty: Difficulty, rng: Rng): GeneratedMatrixQuestion | null {
-  const segOp: GOp = difficulty === "easy" || difficulty === "medium" ? "xor" : rng.pick(["xor", "difference", "union"] as GOp[]);
-  const ptOp: GOp | null = difficulty === "easy" ? null : difficulty === "medium" ? "intersection" : rng.pick(["intersection", "union", "xor"] as GOp[]);
+function generateLinesDots(seed: number, difficulty: Difficulty, rng: Rng, forceOp?: "union" | "xor"): GeneratedMatrixQuestion | null {
+  const segOp: GOp = forceOp ?? (difficulty === "easy" || difficulty === "medium" ? "xor" : rng.pick(["xor", "difference", "union"] as GOp[]));
+  const ptOp: GOp | null = difficulty === "easy" ? null : forceOp && difficulty !== "medium" ? forceOp : difficulty === "medium" ? "intersection" : rng.pick(["intersection", "union", "xor"] as GOp[]);
   const ptAxis: "row" | "col" = difficulty === "expert" ? "col" : "row";
   const segs = buildGraphLayer(GRAPH_SEGMENTS, segOp, rng, [2, 3]);
   const pts = ptOp ? buildGraphLayer(GRAPH_POINTS, ptOp, rng, [2, 3]) : null;
@@ -968,7 +969,12 @@ function generateLinesDots(seed: number, difficulty: Difficulty, rng: Rng): Gene
 
 // ---------------------------------------------------------------------------
 
+export { FOCUS_CATEGORIES, FOCUS_LABELS, type RuleFocus } from "./types";
+import { FOCUS_CATEGORIES, type RuleFocus } from "./types";
+
 export interface GenerateOptions {
+  /** Practise one rule (XOR or construction) across picture types; overrides the random category. */
+  focus?: RuleFocus;
   category?: MatrigmaCategory;
   difficulty?: Difficulty;
   seed?: number;
@@ -1004,7 +1010,8 @@ export function generateQuestion(opts: GenerateOptions = {}): GeneratedMatrixQue
   let seed = opts.seed ?? Math.floor(Math.random() * 2 ** 31);
   for (let attempt = 0; attempt < 200; attempt++, seed = (seed * 1103515245 + 12345) >>> 1) {
     const rng = new Rng(seed);
-    const category = opts.category ?? rng.pick(MATRIGMA_CATEGORIES);
+    const category = opts.category ?? (opts.focus ? rng.pick(FOCUS_CATEGORIES[opts.focus]) : rng.pick(MATRIGMA_CATEGORIES));
+    const forceOp = opts.focus === "xor" ? "xor" : opts.focus === "construction" ? "union" : undefined;
     let difficulty = opts.difficulty ?? DEFAULT_DIFFICULTY[category];
     if (category === "multi-rule" && (difficulty === "easy" || difficulty === "medium")) difficulty = "hard";
     let q: GeneratedMatrixQuestion | null;
@@ -1013,13 +1020,13 @@ export function generateQuestion(opts: GenerateOptions = {}): GeneratedMatrixQue
         q = generateReflection(seed, difficulty, rng);
         break;
       case "composition":
-        q = generateComposition(seed, difficulty, rng);
+        q = generateComposition(seed, difficulty, rng, forceOp);
         break;
       case "alternation":
         q = generateAlternation(seed, difficulty, rng);
         break;
       case "overlay":
-        q = generateOverlay(seed, difficulty, rng);
+        q = generateOverlay(seed, difficulty, rng, false, forceOp);
         break;
       case "rolling":
         q = generateRolling(seed, difficulty, rng);
@@ -1028,7 +1035,7 @@ export function generateQuestion(opts: GenerateOptions = {}): GeneratedMatrixQue
         q = generatePetals(seed, difficulty, rng);
         break;
       case "linesdots":
-        q = generateLinesDots(seed, difficulty, rng);
+        q = generateLinesDots(seed, difficulty, rng, forceOp);
         break;
       case "hatch":
         q = G.generateHatch(seed, difficulty, rng, finish);

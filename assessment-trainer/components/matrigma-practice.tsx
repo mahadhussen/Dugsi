@@ -17,6 +17,7 @@ import { Label, Select } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { Alert } from "@/components/ui/alert";
 import { cn, pct, secs } from "@/lib/utils";
+import { FOCUS_LABELS, type RuleFocus } from "@/lib/matrigma/types";
 import { abilityReport, nextItem, type ItemType, type TestResponse } from "@/lib/statistics/ability-test";
 
 type Mode = "adaptive" | "category" | "timed" | "test";
@@ -47,7 +48,8 @@ export function MatrigmaPractice() {
   const params = useSearchParams();
   const initialCategory = params.get("category") as MatrigmaCategory | null;
   const [mode, setMode] = useState<Mode>(initialCategory ? "category" : "adaptive");
-  const [category, setCategory] = useState<MatrigmaCategory>(initialCategory ?? "rotation");
+  // A category, or a rule focus written as "focus:xor" / "focus:construction".
+  const [category, setCategory] = useState<string>(initialCategory ?? "rotation");
   const [difficulty, setDifficulty] = useState<Difficulty | "auto">("auto");
   const [count, setCount] = useState<number>(10);
   const [perQuestion, setPerQuestion] = useState(60);
@@ -109,7 +111,8 @@ export function MatrigmaPractice() {
         qs = await fetchQuestions({
           count,
           adaptive: mode === "adaptive" || (timed && difficulty === "auto"),
-          category: mode === "category" ? category : undefined,
+          category: mode === "category" && !category.startsWith("focus:") ? category : undefined,
+          focus: mode === "category" && category.startsWith("focus:") ? category.slice(6) : undefined,
           difficulty: difficulty === "auto" ? undefined : difficulty,
         });
       }
@@ -254,7 +257,7 @@ export function MatrigmaPractice() {
               <Label htmlFor="mode">Mode</Label>
               <Select id="mode" value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
                 <option value="adaptive">Adaptive (weak areas)</option>
-                <option value="category">Single category</option>
+                <option value="category">Single category or rule focus</option>
                 <option value="timed">Timed test</option>
                 <option value="test">Adaptive test (level estimate)</option>
               </Select>
@@ -262,7 +265,12 @@ export function MatrigmaPractice() {
             {mode === "category" && (
               <div className="space-y-1.5">
                 <Label htmlFor="category">Category</Label>
-                <Select id="category" value={category} onChange={(e) => setCategory(e.target.value as MatrigmaCategory)}>
+                <Select id="category" value={category} onChange={(e) => setCategory(e.target.value)}>
+                  {(Object.keys(FOCUS_LABELS) as RuleFocus[]).map((f) => (
+                    <option key={f} value={`focus:${f}`}>
+                      {FOCUS_LABELS[f]}
+                    </option>
+                  ))}
                   {MATRIGMA_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
                       {CATEGORY_LABELS[c]}

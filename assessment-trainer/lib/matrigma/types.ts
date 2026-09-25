@@ -133,6 +133,17 @@ export const CATEGORY_LABELS: Record<MatrigmaCategory, string> = {
   "multi-rule": "Multi-rule",
 };
 
+/** Rule focus: practise one kind of rule across several picture types. */
+export type RuleFocus = "xor" | "construction";
+export const FOCUS_CATEGORIES: Record<RuleFocus, MatrigmaCategory[]> = {
+  xor: ["composition", "overlay", "linesdots"],
+  construction: ["composition", "overlay", "linesdots", "hatch"],
+};
+export const FOCUS_LABELS: Record<RuleFocus, string> = {
+  xor: "Focus: XOR (only what differs)",
+  construction: "Focus: Construction (A + B = C)",
+};
+
 export interface RuleDescriptor {
   attribute: string;
   kind: string;
