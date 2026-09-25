@@ -106,7 +106,7 @@ export function analyzeRgba(img: RgbaImage): VisionResult {
       ...base,
       ok: false,
       stage: "objects",
-      error: `${textureCells} cells contain line patterns (textures), which the rule solver cannot read from an image.`,
+      error: `${textureCells} cells contain line patterns or overlapping figures, which the rule solver cannot read from an image.`,
       region: orig(latticeBox(lat)),
       candidateBoxes: [...lat.cells.values()].map((b) => orig(b)),
       timings: { total_ms: Date.now() - t0 },

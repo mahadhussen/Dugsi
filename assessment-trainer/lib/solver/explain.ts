@@ -17,6 +17,9 @@ const ATTR_LABEL: Record<string, string> = {
   lines: "background lines",
   bars: "thick bars",
   dots: "dots",
+  petalCount: "number of petals",
+  petalStart: "counter-clockwise end of the flower",
+  petalEnd: "clockwise end of the flower",
 };
 
 export function questionTypeLabel(p: MatrixProblem): string {

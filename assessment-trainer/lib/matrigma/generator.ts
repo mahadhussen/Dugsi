@@ -17,6 +17,7 @@ import { cellSimilarity, cellSimilarityStrict } from "../solver/similarity";
 import { cellFeatures } from "../solver/features";
 import { TRANSFORMS } from "../solver/transforms";
 import { solveMatrix } from "../solver/solve";
+import { rollPositions, shapeKey, type Pt } from "../solver/rolling";
 import { LINE_TOKENS, BAR_TOKENS } from "./types";
 import type { CellPattern } from "./types";
 
@@ -386,6 +387,8 @@ function signature(c: Cell, ignorePositions: boolean): string {
   const parts = [f.count, f.shapes, f.fill, f.size === null ? "x" : Math.round(f.size * 20), f.rotation === null ? "x" : Math.round(f.rotation)];
   if (!ignorePositions) parts.push(f.objects);
   if (c.pattern) parts.push(f.lines ?? "", f.bars ?? "", f.dots ?? "");
+  if (c.blocks?.length) parts.push(shapeKey(c.blocks));
+  if (c.petals?.length) parts.push([...c.petals].map((a) => ((a % 360) + 360) % 360).sort((a, b) => a - b).join(","));
   return parts.join("|");
 }
 
@@ -754,6 +757,131 @@ function generateOverlay(seed: number, difficulty: Difficulty, rng: Rng, uncheck
 }
 
 // ---------------------------------------------------------------------------
+// Rolling-block questions: one square rolls around a fixed figure of squares.
+
+const BASES: Record<number, Pt[][]> = {
+  2: [[[0, 0], [1, 0]]],
+  3: [
+    [[0, 0], [1, 0], [2, 0]],
+    [[0, 0], [1, 0], [1, 1]],
+  ],
+  4: [
+    [[0, 0], [1, 0], [0, 1], [1, 1]],
+    [[0, 0], [1, 0], [2, 0], [1, 1]],
+    [[0, 0], [0, 1], [0, 2], [1, 2]],
+    [[0, 0], [1, 0], [1, 1], [2, 1]],
+    [[0, 0], [1, 0], [2, 0], [3, 0]],
+  ],
+};
+
+const rot90 = (cells: Pt[]): Pt[] => cells.map(([x, y]) => [-y, x] as Pt);
+const mirror = (cells: Pt[]): Pt[] => cells.map(([x, y]) => [-x, y] as Pt);
+function norm(cells: Pt[]): Pt[] {
+  const mx = Math.min(...cells.map((c) => c[0]));
+  const my = Math.min(...cells.map((c) => c[1]));
+  return cells.map(([x, y]) => [x - mx, y - my] as Pt);
+}
+const blockCell = (cells: Pt[]): Cell => ({ objects: [], blocks: norm(cells) });
+
+function generateRolling(seed: number, difficulty: Difficulty, rng: Rng): GeneratedMatrixQuestion | null {
+  const sizes: Record<Difficulty, number[]> = { easy: [2, 3], medium: [3, 3, 4], hard: [4], expert: [4] };
+  const step = difficulty === "expert" ? rng.pick([2, -2]) : difficulty === "hard" ? rng.pick([1, -1]) : 1;
+  const grid: Cell[] = [];
+  const bases: Pt[][] = [];
+  const used = new Set<string>();
+  let lastIdx = 0;
+  for (let r = 0; r < 3; r++) {
+    let base = rng.pick(BASES[rng.pick(sizes[difficulty])]);
+    for (let k = rng.int(0, 3); k > 0; k--) base = rot90(base);
+    if (rng.bool()) base = mirror(base);
+    base = norm(base);
+    const key = shapeKey(base);
+    if (used.has(key)) return null; // a different fixed figure in every row
+    used.add(key);
+    bases.push(base);
+    const pos = rollPositions(base);
+    if (Math.abs(step) * 2 >= pos.length) return null;
+    const i0 = rng.int(0, pos.length - 1);
+    for (let k = 0; k < 3; k++) grid.push(blockCell([...base, pos[((i0 + k * step) % pos.length + pos.length) % pos.length]]));
+    lastIdx = i0 + 2 * step;
+  }
+  const base = bases[2];
+  const pos = rollPositions(base);
+  const at = (i: number) => pos[((i % pos.length) + pos.length) % pos.length];
+  const idx = lastIdx;
+  const correct = grid[8].blocks!;
+  const wrong: Cell[] = rng.shuffle([
+    blockCell([...base, at(idx + step)]),
+    blockCell([...base, at(idx - step)]),
+    blockCell([...base, at(idx + 2 * step)]),
+    blockCell([...base, at(idx - 2 * step)]),
+    blockCell([...base, at(idx + 1)]),
+    blockCell([...base, at(idx - 1)]),
+    blockCell(mirror(correct)),
+    blockCell(rot90(correct)),
+    blockCell(base),
+    grid[7],
+  ]);
+  const dir = step > 0 ? "clockwise" : "counter-clockwise";
+  const rules: RuleDescriptor[] = [
+    {
+      attribute: "cell",
+      kind: "rolling",
+      axis: "row",
+      description: `In each row one square rolls ${Math.abs(step) === 1 ? "one step" : `${Math.abs(step)} steps`} ${dir} around the rest of the figure, which stays the same.`,
+    },
+  ];
+  const q = finish(seed, "rolling", difficulty, grid, wrong, rules, rng);
+  if (!q) return null;
+  const s = solveMatrix(q.problem);
+  return s.status === "solved" && s.answer === q.correctAnswer ? q : null;
+}
+
+// ---------------------------------------------------------------------------
+// Growing-petal questions: a flower of rhombus petals gains one petal per step;
+// along rows it grows at one end of the arc, down columns at the other end (or
+// the whole flower turns).
+
+const wrap360 = (a: number) => ((a % 360) + 360) % 360;
+const arc = (start: number, count: number): number[] => Array.from({ length: count }, (_, i) => wrap360(start + 45 * i));
+const petalCell = (petals: number[]): Cell => ({ objects: [], petals });
+
+function generatePetals(seed: number, difficulty: Difficulty, rng: Rng): GeneratedMatrixQuestion | null {
+  const s0 = 45 * rng.int(0, 7);
+  // start(r, c) = counter-clockwise end, count(r, c) = number of petals.
+  const plans: Record<Difficulty, { start: (r: number, c: number) => number; count: (r: number, c: number) => number; rows: string; cols: string }> = {
+    easy: { start: (r) => s0 + 90 * r, count: (_r, c) => c + 1, rows: "a petal is added clockwise", cols: "the whole flower turns 90° clockwise" },
+    medium: { start: (r) => s0 - 45 * r, count: (r, c) => r + c + 1, rows: "a petal is added clockwise", cols: "a petal is added counter-clockwise" },
+    hard: { start: (_r, c) => s0 - 45 * c, count: (r, c) => r + c + 1, rows: "a petal is added counter-clockwise", cols: "a petal is added clockwise" },
+    expert: { start: (r) => s0 + 45 * r, count: (r, c) => r + c + 1, rows: "a petal is added clockwise", cols: "the flower turns 90° clockwise and gains a petal counter-clockwise" },
+  };
+  const plan = plans[difficulty];
+  const grid: Cell[] = [];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) grid.push(petalCell(arc(plan.start(r, c), plan.count(r, c))));
+  const st = plan.start(2, 2);
+  const n = plan.count(2, 2);
+  const wrong: Cell[] = rng.shuffle([
+    petalCell(arc(st + 45, n)), // right number, turned: fits the count rule only
+    petalCell(arc(st - 45, n)),
+    petalCell(arc(st + 90, n)),
+    petalCell(arc(st, n - 1)),
+    petalCell(arc(st + 45, n - 1)),
+    petalCell(arc(st, n + 1)),
+    petalCell(arc(st - 45, n + 1)),
+    petalCell(arc(st, n).map((a) => wrap360(-a))), // mirror image
+    grid[7],
+  ]);
+  const rules: RuleDescriptor[] = [
+    { attribute: "petals", kind: "progression", axis: "row", description: `Along each row ${plan.rows} at each step.` },
+    { attribute: "petals", kind: "progression", axis: "col", description: `Down each column ${plan.cols} at each step.` },
+  ];
+  const q = finish(seed, "petals", difficulty, grid, wrong, rules, rng);
+  if (!q) return null;
+  const s = solveMatrix(q.problem);
+  return s.status === "solved" && s.answer === q.correctAnswer ? q : null;
+}
+
+// ---------------------------------------------------------------------------
 
 export interface GenerateOptions {
   category?: MatrigmaCategory;
@@ -773,6 +901,8 @@ const DEFAULT_DIFFICULTY: Record<MatrigmaCategory, Difficulty> = {
   composition: "medium",
   alternation: "easy",
   overlay: "medium",
+  rolling: "medium",
+  petals: "medium",
   "multi-rule": "hard",
 };
 
@@ -796,6 +926,12 @@ export function generateQuestion(opts: GenerateOptions = {}): GeneratedMatrixQue
         break;
       case "overlay":
         q = generateOverlay(seed, difficulty, rng);
+        break;
+      case "rolling":
+        q = generateRolling(seed, difficulty, rng);
+        break;
+      case "petals":
+        q = generatePetals(seed, difficulty, rng);
         break;
       default:
         q = generateAttributeQuestion(seed, category, difficulty, rng);

@@ -4,6 +4,7 @@ import { describePrediction, describeRule, fitAttributeRules, selectBestPerAttri
 import { describeTransformRule, fitAlternation, fitTransformRules, type TransformRule } from "./transform-rules";
 import type { Axis } from "./lines";
 import type { ExplainedRule, StrategyId, StrategyResult } from "./types";
+import { fitRolling } from "./rolling";
 
 export interface StrategyContext {
   problem: MatrixProblem;
@@ -165,6 +166,23 @@ export const STRATEGIES: { id: StrategyId; label: string; run: StrategyFn }[] = 
         ? { applicable: true, rules: [explainTransform(whole)], optionScores: whole.optionScores, complexity: whole.complexity, validatedLines: whole.validated.length, predicted: whole.predicted }
         : { ...attr, applicable: false };
       return merge(attr, wholePart);
+    },
+  },
+  {
+    id: "rolling_block",
+    label: "Rolling block",
+    run: (c) => {
+      const n = c.problem.options.length;
+      const rules = fitRolling(c.problem, c.missing);
+      if (!rules.length) return { applicable: false, rules: [], optionScores: new Array(n).fill(0), complexity: 0, validatedLines: 0 };
+      return {
+        applicable: true,
+        rules: rules.map((r) => r.explained),
+        optionScores: Array.from({ length: n }, (_, i) => Math.max(...rules.map((r) => r.optionScores[i]))),
+        complexity: Math.min(...rules.map((r) => r.explained.complexity)),
+        validatedLines: Math.min(...rules.map((r) => r.validated.length)),
+        predicted: null,
+      };
     },
   },
   {

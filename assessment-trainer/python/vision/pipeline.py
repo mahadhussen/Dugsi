@@ -65,7 +65,7 @@ def analyze(data: bytes) -> dict:
             **base,
             "ok": False,
             "stage": "objects",
-            "error": f"{texture} cells contain line patterns (textures), which the rule solver cannot read from an image.",
+            "error": f"{texture} cells contain line patterns or overlapping figures, which the rule solver cannot read from an image.",
             "region": _to_original(lat.bbox, scale),
             "candidateBoxes": [_to_original(b, scale) for b in lat.cells.values()],
             "timings": timings,

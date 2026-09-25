@@ -25,8 +25,31 @@ export interface CellFeatures {
   lines: string | null;
   bars: string | null;
   dots: string | null;
+  /** Petal flower: count and the two ends of the arc of petals (null without petals). */
+  petalCount: number | null;
+  petalStart: number | null;
+  petalEnd: number | null;
   /** True for a texture-only cell (pattern, no objects). */
   patternOnly: boolean;
+}
+
+/**
+ * Petals form a contiguous arc; its counter-clockwise end ("start") and
+ * clockwise end ("end") are found after the largest gap between petals.
+ */
+function petalArc(petals: number[] | undefined): { petalCount: number | null; petalStart: number | null; petalEnd: number | null } {
+  if (!petals?.length) return { petalCount: null, petalStart: null, petalEnd: null };
+  const a = [...new Set(petals.map((p) => ((Math.round(p) % 360) + 360) % 360))].sort((x, y) => x - y);
+  let gapAfter = a.length - 1;
+  let best = -1;
+  for (let i = 0; i < a.length; i++) {
+    const gap = ((a[(i + 1) % a.length] - a[i] + 360) % 360) || 360;
+    if (gap > best) {
+      best = gap;
+      gapAfter = i;
+    }
+  }
+  return { petalCount: a.length, petalStart: a[(gapAfter + 1) % a.length], petalEnd: a[gapAfter] };
 }
 
 const layer = (v: string[] | undefined) => (v ? [...new Set(v)].sort().join(";") : null);
@@ -90,6 +113,7 @@ export function cellFeatures(cell: Cell): CellFeatures {
     lines: cell.pattern ? layer(cell.pattern.lines) : null,
     bars: cell.pattern ? layer(cell.pattern.bars) : null,
     dots: cell.pattern ? layer(cell.pattern.dots) : null,
-    patternOnly: !!cell.pattern && all.length === 0,
+    ...petalArc(cell.petals),
+    patternOnly: (!!cell.pattern || !!cell.blocks?.length || !!cell.petals?.length) && all.length === 0,
   };
 }

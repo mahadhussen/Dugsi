@@ -1,5 +1,6 @@
 import type { Cell, MatrixObject } from "../matrigma/types";
 import { rotationDistance } from "../matrigma/geometry";
+import { shapeKey } from "./rolling";
 
 /** Similarity of two objects in [0,1]. */
 export function objectSimilarity(a: MatrixObject, b: MatrixObject): number {
@@ -20,13 +21,17 @@ export function objectSimilarity(a: MatrixObject, b: MatrixObject): number {
 
 function patternTokens(c: Cell): Set<string> {
   const p = c.pattern;
-  if (!p) return new Set();
-  return new Set([...p.lines.map((t) => `l:${t}`), ...p.bars.map((t) => `b:${t}`), ...p.dots.map((t) => `d:${t}`)]);
+  const out = new Set<string>();
+  if (p) for (const t of [...p.lines.map((t) => `l:${t}`), ...p.bars.map((t) => `b:${t}`), ...p.dots.map((t) => `d:${t}`)]) out.add(t);
+  // Block figures compare by shape (position in the cell does not matter).
+  if (c.blocks?.length) for (const t of shapeKey(c.blocks).split(";")) out.add(`k:${t}`);
+  if (c.petals?.length) for (const a of c.petals) out.add(`p:${((Math.round(a) % 360) + 360) % 360}`);
+  return out;
 }
 
 /** Jaccard similarity of the texture layers (1 when neither cell has a pattern). */
 export function patternSimilarity(a: Cell, b: Cell): number {
-  if (!a.pattern && !b.pattern) return 1;
+  if (!a.pattern && !b.pattern && !a.blocks?.length && !b.blocks?.length && !a.petals?.length && !b.petals?.length) return 1;
   const A = patternTokens(a);
   const B = patternTokens(b);
   const union = new Set([...A, ...B]);

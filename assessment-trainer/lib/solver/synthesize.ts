@@ -10,6 +10,16 @@ import { countLayout } from "../matrigma/layouts";
  * verification against every option.
  */
 export function synthesizeCell(profile: Record<string, AttrValue | null>, template: Cell | null): Cell | null {
+  if (template?.blocks?.length) return null; // shown via the rolling rule's own prediction
+  if (template?.petals?.length) {
+    const n = typeof profile.petalCount === "number" ? Math.round(profile.petalCount) : null;
+    const s = typeof profile.petalStart === "number" ? profile.petalStart : null;
+    const e = typeof profile.petalEnd === "number" ? profile.petalEnd : null;
+    const count = n ?? (s !== null && e !== null ? Math.round((((e - s) % 360) + 360) % 360 / 45) + 1 : null);
+    const first = s ?? (e !== null && count ? e - 45 * (count - 1) : null);
+    if (count === null || first === null) return null;
+    return { objects: [], petals: Array.from({ length: count }, (_, i) => (((first + 45 * i) % 360) + 360) % 360) };
+  }
   if (template?.pattern) {
     const layer = (k: "lines" | "bars" | "dots") => (typeof profile[k] === "string" ? String(profile[k]).split(";").filter(Boolean) : template.pattern![k]);
     return { objects: [], pattern: { lines: layer("lines"), bars: layer("bars"), dots: layer("dots") } };

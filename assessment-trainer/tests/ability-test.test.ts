@@ -53,6 +53,47 @@ describe("adaptive ability test", () => {
   });
 });
 
+describe("rolling block questions", () => {
+  it("are solved correctly, with the rolling rule in the explanation", () => {
+    for (const d of ["easy", "medium", "hard", "expert"] as const) {
+      for (let i = 0; i < 20; i++) {
+        const q = generateQuestion({ category: "rolling", difficulty: d, seed: 7000 + i * 13 });
+        const s = solveMatrix(q.problem);
+        expect(s.answer).toBe(q.correctAnswer);
+        expect(s.explanation.rules.join(" ")).toMatch(/rolls .* (counter-)?clockwise/);
+      }
+    }
+  });
+
+  it("finds the rolling square's positions in clockwise order", async () => {
+    const { rollPositions } = await import("@/lib/solver/rolling");
+    // Horizontal domino: above-left, above-right, right, below-right, below-left, left.
+    expect(rollPositions([[0, 0], [1, 0]])).toEqual([[0, -1], [1, -1], [2, 0], [1, 1], [0, 1], [-1, 0]]);
+  });
+});
+
+describe("growing petal questions", () => {
+  it("are solved correctly and explain where the petals grow", () => {
+    for (const d of ["easy", "medium", "hard", "expert"] as const) {
+      for (let i = 0; i < 20; i++) {
+        const q = generateQuestion({ category: "petals", difficulty: d, seed: 9100 + i * 11 });
+        const s = solveMatrix(q.problem);
+        expect(s.answer).toBe(q.correctAnswer);
+        expect(s.explanation.rules.join(" ")).toMatch(/petal/);
+      }
+    }
+  });
+
+  it("a flower turned by one step (right count, wrong position) is not accepted", () => {
+    const q = generateQuestion({ category: "petals", difficulty: "medium", seed: 42 });
+    const s = solveMatrix(q.problem);
+    const correct = q.problem.options[q.correctAnswer].petals!.length;
+    const sameCount = q.problem.options.filter((o, i) => i !== q.correctAnswer && o.petals!.length === correct);
+    expect(sameCount.length).toBeGreaterThan(0);
+    expect(s.answer).toBe(q.correctAnswer);
+  });
+});
+
 describe("line pattern (overlay) questions", () => {
   it("are solved correctly with an explanation that names the layers", () => {
     for (const d of ["easy", "medium", "hard", "expert"] as const) {

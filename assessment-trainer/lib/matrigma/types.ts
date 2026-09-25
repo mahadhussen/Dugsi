@@ -54,6 +54,10 @@ export interface CellPattern {
 export interface Cell {
   objects: MatrixObject[];
   pattern?: CellPattern;
+  /** A figure built from unit squares, as [x, y] grid cells (rolling-block questions). */
+  blocks?: [number, number][];
+  /** Petals radiating from the centre, as angles in degrees clockwise from up (growing-petal questions). */
+  petals?: number[];
 }
 
 export interface MatrixProblem {
@@ -79,6 +83,8 @@ export const MATRIGMA_CATEGORIES = [
   "composition",
   "alternation",
   "overlay",
+  "rolling",
+  "petals",
   "multi-rule",
 ] as const;
 export type MatrigmaCategory = (typeof MATRIGMA_CATEGORIES)[number];
@@ -95,6 +101,8 @@ export const CATEGORY_LABELS: Record<MatrigmaCategory, string> = {
   composition: "Composition",
   alternation: "Alternation",
   overlay: "Line patterns",
+  rolling: "Rolling block",
+  petals: "Growing petals",
   "multi-rule": "Multi-rule",
 };
 

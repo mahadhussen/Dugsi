@@ -17,7 +17,7 @@ export type RuleKind =
   | "intersection";
 
 export interface AttrSpec {
-  name: "count" | "shape" | "sides" | "fill" | "size" | "rotation" | "positions" | "objects" | "shapes" | "slotCol" | "slotRow" | "lines" | "bars" | "dots";
+  name: "count" | "shape" | "sides" | "fill" | "size" | "rotation" | "positions" | "objects" | "shapes" | "slotCol" | "slotRow" | "lines" | "bars" | "dots" | "petalCount" | "petalStart" | "petalEnd";
   /** Fixed modular period for "angle" attributes that are not rotations. */
   period?: number;
   label: string;
@@ -161,11 +161,41 @@ export const ATTRIBUTES: AttrSpec[] = [
     kinds: ["constant", "distribute", "alternation", ...SET_OPS],
     get: (f) => f.dots,
   },
+  // Growing-petal flowers.
+  {
+    name: "petalCount",
+    label: "number of petals",
+    kind: "numeric",
+    weight: 1,
+    tol: 0.5,
+    kinds: ["constant", "progression", "progression_line", "distribute", "alternation"],
+    get: (f) => f.petalCount,
+  },
+  {
+    name: "petalStart",
+    label: "counter-clockwise end of the petals",
+    kind: "angle",
+    period: 360,
+    weight: 1,
+    tol: 10,
+    kinds: ["constant", "progression", "distribute", "alternation"],
+    get: (f) => f.petalStart,
+  },
+  {
+    name: "petalEnd",
+    label: "clockwise end of the petals",
+    kind: "angle",
+    period: 360,
+    weight: 1,
+    tol: 10,
+    kinds: ["constant", "progression", "distribute", "alternation"],
+    get: (f) => f.petalEnd,
+  },
 ];
 
 // Object attributes say nothing about pure texture cells (0 objects everywhere
 // would "prove" rules like 0 + 0 = 0), so they are skipped for those cells.
-const LAYER_ATTRS = new Set(["lines", "bars", "dots"]);
+const LAYER_ATTRS = new Set(["lines", "bars", "dots", "petalCount", "petalStart", "petalEnd"]);
 for (const a of ATTRIBUTES) {
   if (LAYER_ATTRS.has(a.name)) continue;
   const get = a.get;

@@ -339,6 +339,8 @@ function fmtVal(spec: AttrSpec, v: AttrValue | null): string {
   if (spec.name === "objects") return `${String(v).split(";").filter(Boolean).length} elements`;
   if (spec.name === "shape") return SHAPE_WORD(v);
   if (spec.name === "lines" || spec.name === "bars" || spec.name === "dots") return describeLayer(spec.name, String(v));
+  if (spec.name === "petalStart" || spec.name === "petalEnd") return `${Math.round(Number(v))}°`;
+  if (spec.name === "petalCount") return String(Math.round(Number(v)));
   return String(v);
 }
 
@@ -355,6 +357,9 @@ export function describeRule(r: FittedRule): string {
       if (r.attr.name === "size") return `${where} the size ${d > 0 ? "grows" : "shrinks"} by the same amount each step.`;
       if (r.attr.name === "slotCol") return `${where} the figure moves one step ${d > 0 ? "right" : "left"} (wrapping around the edge).`;
       if (r.attr.name === "slotRow") return `${where} the figure moves one step ${d > 0 ? "down" : "up"} (wrapping around the edge).`;
+      if (r.attr.name === "petalCount") return `${where} ${Math.abs(Math.round(d)) === 1 ? "one petal is" : `${Math.abs(Math.round(d))} petals are`} ${d > 0 ? "added" : "removed"} per step.`;
+      if (r.attr.name === "petalEnd") return `${where} the clockwise end of the flower moves ${Math.abs(Math.round(d))}° ${d > 0 ? "clockwise (new petals grow clockwise)" : "counter-clockwise"}.`;
+      if (r.attr.name === "petalStart") return `${where} the counter-clockwise end of the flower moves ${Math.abs(Math.round(d))}° ${d < 0 ? "counter-clockwise (new petals grow counter-clockwise)" : "clockwise"}.`;
       return `${where} the ${L} ${d > 0 ? "increases" : "decreases"} by ${Math.abs(Math.round(d * 100) / 100)} per step.`;
     }
     case "progression_line":

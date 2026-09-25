@@ -97,8 +97,35 @@ function patternSvg(p: CellPattern, x0: number, y0: number, size: number, uid: s
   return `<defs><clipPath id="${clipId}"><rect x="${fmt(L)}" y="${fmt(T)}" width="${fmt(W)}" height="${fmt(W)}"/></clipPath></defs>${parts.join("")}`;
 }
 
+/** A figure of unit squares, centred, at a fixed scale so figures compare by size. */
+function blocksSvg(blocks: [number, number][], x0: number, y0: number, size: number): string {
+  const u = size * 0.15;
+  const xs = blocks.map((b) => b[0]);
+  const ys = blocks.map((b) => b[1]);
+  const w = (Math.max(...xs) - Math.min(...xs) + 1) * u;
+  const h = (Math.max(...ys) - Math.min(...ys) + 1) * u;
+  const ox = x0 + (size - w) / 2 - Math.min(...xs) * u;
+  const oy = y0 + (size - h) / 2 - Math.min(...ys) * u;
+  const sw = Math.max(1, size * 0.012);
+  return blocks
+    .map(([x, y]) => `<rect x="${fmt(ox + x * u)}" y="${fmt(oy + y * u)}" width="${fmt(u)}" height="${fmt(u)}" fill="#6b7280" stroke="${INK}" stroke-width="${fmt(sw)}"/>`)
+    .join("");
+}
+
+/** Rhombus petals radiating from the centre of the cell. */
+function petalsSvg(petals: number[], x0: number, y0: number, size: number): string {
+  const cx = x0 + size / 2;
+  const cy = y0 + size / 2;
+  const L = size * 0.3;
+  const W = size * 0.075;
+  const sw = Math.max(1.5, size * 0.02);
+  return petals
+    .map((a) => `<polygon points="0,0 ${fmt(W)},${fmt(-L / 2)} 0,${fmt(-L)} ${fmt(-W)},${fmt(-L / 2)}" fill="#ffffff" stroke="${INK}" stroke-width="${fmt(sw)}" stroke-linejoin="round" transform="translate(${fmt(cx)} ${fmt(cy)}) rotate(${fmt(a)})"/>`)
+    .join("");
+}
+
 export function cellSvgContent(cell: Cell, x0: number, y0: number, size: number, uid: string): string {
-  const pattern = cell.pattern ? patternSvg(cell.pattern, x0, y0, size, uid) : "";
+  const pattern = (cell.pattern ? patternSvg(cell.pattern, x0, y0, size, uid) : "") + (cell.blocks?.length ? blocksSvg(cell.blocks, x0, y0, size) : "") + (cell.petals?.length ? petalsSvg(cell.petals, x0, y0, size) : "");
   return pattern + cell.objects.map((o, i) => objectSvg(o, x0, y0, size, `${uid}_${i}`)).join("");
 }
 

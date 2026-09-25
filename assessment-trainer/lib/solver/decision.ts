@@ -4,6 +4,7 @@ import { describePrediction, describeRule } from "./rules";
 import { describeTransformRule, fitAlternation, fitTransformRules, type TransformRule } from "./transform-rules";
 import type { ExplainedRule } from "./types";
 import type { Axis } from "./lines";
+import { fitRolling } from "./rolling";
 
 /**
  * Decision engine: builds the most complete *consistent* explanation.
@@ -105,6 +106,17 @@ export function collectCandidates(problem: MatrixProblem, missing: number, attri
   }
   const alt = fitAlternation(problem, missing);
   if (alt) out.push(fromTransform(alt, "alternation"));
+  for (const r of fitRolling(problem, missing)) {
+    out.push({
+      key: `cell/rolling${r.step}/${r.axis}`,
+      explained: r.explained,
+      optionScores: r.optionScores,
+      coverage: CELL_COVERAGE,
+      complexity: r.explained.complexity,
+      validatedLines: r.validated.length,
+      weight: 2,
+    });
+  }
   return out;
 }
 

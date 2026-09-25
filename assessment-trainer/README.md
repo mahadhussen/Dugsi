@@ -18,7 +18,7 @@ What it does:
   confidence, a step-by-step explanation and overlays. If the matrix can't be
   detected it says *"Unable to reliably detect the matrix."*, shows the detected
   region and the problem, and never guesses.
-- **Matrix practice** – synthetic questions with known solutions in 12 categories
+- **Matrix practice** – synthetic questions with known solutions in 14 categories
   and 4 difficulty levels; adaptive mode (more questions in weak categories),
   single-category mode, and timed tests (5/10/20 questions, per-question and
   session timers).
@@ -26,6 +26,13 @@ What it does:
   bars, dots) that combine along rows or columns, e.g. background lines add up
   down each column while the bars add up along each row. Each question is only
   kept when the rule solver independently finds the intended answer.
+- **Rolling block questions** – figures of unit squares where, along each row,
+  one square rolls one or two steps (clockwise or counter-clockwise) around the
+  rest of the figure (`lib/solver/rolling.ts`).
+- **Growing petal questions** – a flower of rhombus petals gains a petal per
+  step; along the rows it grows at one end of the arc and down the columns at
+  the other (or the whole flower turns). Solved with three attributes: number
+  of petals and the clockwise / counter-clockwise ends of the arc.
 - **Adaptive test** – one question at a time, no going back and no feedback
   until the end. A Rasch model (`lib/statistics/ability-test.ts`) re-estimates
   ability after each answer and picks the next question where it is most
@@ -116,7 +123,7 @@ Measured results (this repository, September 2026):
 
 | Check | Result |
 |---|---|
-| Solver, 100 generated questions × 12 categories | 99.9 % correct, **0 wrong**, 1 abstention |
+| Solver, 100 generated questions × 14 categories | 99.9 % correct, **0 wrong**, 1 abstention |
 | Screenshot → vision → solver, 330 renders (PNG, JPEG q70, 0.7× scale) | 97.3 % correct, **0 wrong**, the rest abstained |
 | Same with the TypeScript (browser) vision, 198 renders | 96.5 % correct, **0 wrong**, the rest abstained, ~70 ms each |
 | Object extraction vs. ground truth on the fixtures | every shape, fill, rotation and count correct |
@@ -152,7 +159,7 @@ assessment-trainer/
   components/             UI (shadcn-style components in components/ui)
   lib/
     matrigma/             types, shape geometry, SVG renderer, generator
-    solver/               features, rule engine, transformations, 16 strategies,
+    solver/               features, rule engine, transformations, 17 strategies,
                           decision engine, confidence, explanations
     vision/               Python bridge (with cache), OCR, vision → problem
     vision/js/            the same vision pipeline in pure TypeScript (runs in a
