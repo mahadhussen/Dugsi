@@ -10,6 +10,10 @@ import { countLayout } from "../matrigma/layouts";
  * verification against every option.
  */
 export function synthesizeCell(profile: Record<string, AttrValue | null>, template: Cell | null): Cell | null {
+  if (template?.pattern) {
+    const layer = (k: "lines" | "bars" | "dots") => (typeof profile[k] === "string" ? String(profile[k]).split(";").filter(Boolean) : template.pattern![k]);
+    return { objects: [], pattern: { lines: layer("lines"), bars: layer("bars"), dots: layer("dots") } };
+  }
   if (profile.objects && typeof profile.objects === "string") {
     const objs: MatrixObject[] = profile.objects
       .split(";")

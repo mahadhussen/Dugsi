@@ -6,6 +6,8 @@ import { analyzeWithPython } from "@/lib/vision/python";
 import { toProblem } from "@/lib/vision/problem";
 import { solveMatrix } from "@/lib/solver/solve";
 import { hasPython } from "./helpers";
+import { generateQuestion } from "@/lib/matrigma/generator";
+import { renderScreenshotSvg } from "@/lib/matrigma/render";
 
 const DIR = path.join(__dirname, "..", "test-data", "screenshots");
 const fixtures = fs.existsSync(DIR) ? fs.readdirSync(DIR).filter((f) => f.endsWith(".png")) : [];
@@ -57,6 +59,16 @@ describe.skipIf(!hasPython())("vision pipeline (Python/OpenCV)", () => {
     const v = await analyzeWithPython(blank);
     expect(v.ok).toBe(false);
     if (!v.ok) expect(v.stage).toBe("matrix");
+  });
+
+  it("reports line-pattern matrices as unsupported instead of misreading them", async () => {
+    for (const difficulty of ["easy", "hard"] as const) {
+      const q = generateQuestion({ category: "overlay", difficulty, seed: 8080 });
+      const png = await sharp(Buffer.from(renderScreenshotSvg(q.problem).svg)).png().toBuffer();
+      const v = await analyzeWithPython(png);
+      expect(v.ok).toBe(false);
+      if (!v.ok) expect(v.stage).toBe("objects");
+    }
   });
 
   it("returns a decode error for garbage bytes", async () => {

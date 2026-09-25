@@ -237,3 +237,35 @@ def extract_objects(gray: np.ndarray, box: tuple[int, int, int, int]) -> tuple[l
     if any(o.shape == "unknown" for o in objs):
         quality *= 0.5
     return objs, quality
+
+
+def is_texture_cell(gray: np.ndarray, box: tuple[int, int, int, int]) -> bool:
+    """True for a line-pattern cell (families of thin lines or a cross-hatched
+    mesh). Such cells cannot be described as a few shapes, so the pipeline
+    reports them as unsupported instead of misreading them."""
+    x, y, w, h = box
+    size = float(min(w, h))
+    inset = max(3, int(round(0.04 * size)))
+    crop = gray[y + inset:y + h - inset, x + inset:x + w - inset]
+    if crop.size == 0 or float(crop.max()) - float(crop.min()) < 40:
+        return False
+    _, bin_ = cv2.threshold(crop, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    contours, hierarchy = cv2.findContours(bin_, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+    if hierarchy is None:
+        return False
+    min_area = 0.0015 * size * size
+    min_hole = max(4.0, 0.0006 * size * size)
+    holes: dict[int, int] = {}
+    for i, c in enumerate(contours):
+        parent = hierarchy[0][i][3]
+        if parent != -1 and cv2.contourArea(c) >= min_hole:
+            holes[parent] = holes.get(parent, 0) + 1
+    thin_lines = 0
+    for i, c in enumerate(contours):
+        if hierarchy[0][i][3] != -1 or cv2.contourArea(c) < min_area:
+            continue
+        if holes.get(i, 0) >= 4:
+            return True
+        if classify(c, size)[0] == "line":
+            thin_lines += 1
+    return thin_lines >= 4

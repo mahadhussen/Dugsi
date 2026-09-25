@@ -18,12 +18,30 @@ export function objectSimilarity(a: MatrixObject, b: MatrixObject): number {
   return 0.3 * shape + 0.2 * fill + 0.15 * size + 0.2 * rot + 0.15 * pos;
 }
 
+function patternTokens(c: Cell): Set<string> {
+  const p = c.pattern;
+  if (!p) return new Set();
+  return new Set([...p.lines.map((t) => `l:${t}`), ...p.bars.map((t) => `b:${t}`), ...p.dots.map((t) => `d:${t}`)]);
+}
+
+/** Jaccard similarity of the texture layers (1 when neither cell has a pattern). */
+export function patternSimilarity(a: Cell, b: Cell): number {
+  if (!a.pattern && !b.pattern) return 1;
+  const A = patternTokens(a);
+  const B = patternTokens(b);
+  const union = new Set([...A, ...B]);
+  if (!union.size) return 1;
+  let inter = 0;
+  for (const t of A) if (B.has(t)) inter++;
+  return inter / union.size;
+}
+
 /**
  * Similarity of two cells in [0,1] using greedy best-pair object matching.
  * Unmatched objects count as zero similarity.
  */
 export function cellSimilarity(a: Cell, b: Cell): number {
-  return matchCells(a, b).mean;
+  return matchCells(a, b).mean * patternSimilarity(a, b);
 }
 
 /**
@@ -32,7 +50,8 @@ export function cellSimilarity(a: Cell, b: Cell): number {
  */
 export function cellSimilarityStrict(a: Cell, b: Cell): number {
   if (a.objects.length !== b.objects.length) return 0;
-  return matchCells(a, b).min;
+  const p = patternSimilarity(a, b);
+  return p < 1 ? 0 : matchCells(a, b).min;
 }
 
 function matchCells(a: Cell, b: Cell): { mean: number; min: number } {

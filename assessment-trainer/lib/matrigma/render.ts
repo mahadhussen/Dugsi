@@ -1,4 +1,4 @@
-import type { Cell, GeneratedMatrixQuestion, MatrixObject, MatrixProblem } from "./types";
+import type { Cell, CellPattern, GeneratedMatrixQuestion, MatrixObject, MatrixProblem } from "./types";
 import { OPTION_LABELS } from "./types";
 import { rotatePoint, shapePolygon } from "./geometry";
 
@@ -45,8 +45,61 @@ function objectSvg(o: MatrixObject, x0: number, y0: number, cell: number, uid: s
   return `<g transform="${t}">${body}</g>`;
 }
 
+/** Texture layers of an overlay cell: thin line families, thick bars and dots, inside a square. */
+function patternSvg(p: CellPattern, x0: number, y0: number, size: number, uid: string): string {
+  const m = size * 0.16;
+  const L = x0 + m;
+  const T = y0 + m;
+  const W = size - 2 * m;
+  const R = L + W;
+  const B = T + W;
+  const thin = Math.max(1.2, size * 0.012);
+  const gap = W / 7;
+  const clipId = `p${uid}`;
+  const parts: string[] = [];
+  for (const t of p.lines) {
+    const seg: string[] = [];
+    if (t === "v" || t === "h") {
+      for (let i = 1; i < 7; i++) {
+        const q = (t === "v" ? L : T) + i * gap;
+        seg.push(t === "v" ? `M${fmt(q)} ${fmt(T)}V${fmt(B)}` : `M${fmt(L)} ${fmt(q)}H${fmt(R)}`);
+      }
+    } else if (t === "d" || t === "a") {
+      // Diagonal families: lines x + y = k (/) or x - y = k (\), clipped to the square.
+      for (let k = -6; k <= 6; k++) {
+        const o = k * gap * 1.1;
+        seg.push(t === "d" ? `M${fmt(L + o)} ${fmt(B)}L${fmt(R + o)} ${fmt(T)}` : `M${fmt(L + o)} ${fmt(T)}L${fmt(R + o)} ${fmt(B)}`);
+      }
+    } else if (t === "arc-up" || t === "arc-down") {
+      // Arcs curving up (∪-shaped, sagging) or down (∩-shaped).
+      const bend = W * 0.18 * (t === "arc-up" ? 1 : -1);
+      for (let i = 1; i < 6; i++) {
+        const y = T + (i * W) / 6;
+        seg.push(`M${fmt(L)} ${fmt(y - bend / 2)}Q${fmt(L + W / 2)} ${fmt(y + bend * 1.5)} ${fmt(R)} ${fmt(y - bend / 2)}`);
+      }
+    }
+    if (seg.length) parts.push(`<path d="${seg.join("")}" fill="none" stroke="${INK}" stroke-width="${fmt(thin)}" clip-path="url(#${clipId})"/>`);
+  }
+  const barW = size * 0.085;
+  const cx = x0 + size / 2;
+  const cy = y0 + size / 2;
+  const h = W / 2 + barW * 0.2;
+  for (const t of p.bars) {
+    const rot = t === "v" ? 0 : t === "h" ? 90 : t === "d" ? 45 : -45;
+    const len = t === "d" || t === "a" ? h * 1.3 : h;
+    parts.push(`<rect x="${fmt(-barW / 2)}" y="${fmt(-len)}" width="${fmt(barW)}" height="${fmt(2 * len)}" fill="${INK}" transform="translate(${fmt(cx)} ${fmt(cy)}) rotate(${rot})"/>`);
+  }
+  const DOT: Record<string, [number, number]> = { tl: [0.24, 0.24], tr: [0.76, 0.24], bl: [0.24, 0.76], br: [0.76, 0.76], c: [0.5, 0.5] };
+  for (const t of p.dots) {
+    const [dx, dy] = DOT[t] ?? [0.5, 0.5];
+    parts.push(`<circle cx="${fmt(x0 + dx * size)}" cy="${fmt(y0 + dy * size)}" r="${fmt(size * 0.055)}" fill="${INK}" stroke="#ffffff" stroke-width="${fmt(thin)}"/>`);
+  }
+  return `<defs><clipPath id="${clipId}"><rect x="${fmt(L)}" y="${fmt(T)}" width="${fmt(W)}" height="${fmt(W)}"/></clipPath></defs>${parts.join("")}`;
+}
+
 export function cellSvgContent(cell: Cell, x0: number, y0: number, size: number, uid: string): string {
-  return cell.objects.map((o, i) => objectSvg(o, x0, y0, size, `${uid}_${i}`)).join("");
+  const pattern = cell.pattern ? patternSvg(cell.pattern, x0, y0, size, uid) : "";
+  return pattern + cell.objects.map((o, i) => objectSvg(o, x0, y0, size, `${uid}_${i}`)).join("");
 }
 
 export function renderCellSvg(cell: Cell | null, size = 120, uid = "cell"): string {

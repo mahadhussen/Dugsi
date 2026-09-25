@@ -18,10 +18,20 @@ What it does:
   confidence, a step-by-step explanation and overlays. If the matrix can't be
   detected it says *"Unable to reliably detect the matrix."*, shows the detected
   region and the problem, and never guesses.
-- **Matrix practice** – synthetic questions with known solutions in 11 categories
+- **Matrix practice** – synthetic questions with known solutions in 12 categories
   and 4 difficulty levels; adaptive mode (more questions in weak categories),
   single-category mode, and timed tests (5/10/20 questions, per-question and
   session timers).
+- **Line pattern questions** – texture layers (thin line families, arcs, thick
+  bars, dots) that combine along rows or columns, e.g. background lines add up
+  down each column while the bars add up along each row. Each question is only
+  kept when the rule solver independently finds the intended answer.
+- **Adaptive test** – one question at a time, no going back and no feedback
+  until the end. A Rasch model (`lib/statistics/ability-test.ts`) re-estimates
+  ability after each answer and picks the next question where it is most
+  informative. The result is a level 1–9 on the tool's own scale with the
+  categories to practise next; it is an estimate from synthetic questions, not
+  a norm-referenced score from any real test.
 - **Personality practice** – statements on a 7-point scale with explanations of
   what each statement describes and how agreeing and disagreeing differ. The
   app has **no correct answers** and never suggests one; when related statements
@@ -106,7 +116,7 @@ Measured results (this repository, September 2026):
 
 | Check | Result |
 |---|---|
-| Solver, 100 generated questions × 11 categories | 99.9 % correct, **0 wrong**, 1 abstention |
+| Solver, 100 generated questions × 12 categories | 99.9 % correct, **0 wrong**, 1 abstention |
 | Screenshot → vision → solver, 330 renders (PNG, JPEG q70, 0.7× scale) | 97.3 % correct, **0 wrong**, the rest abstained |
 | Same with the TypeScript (browser) vision, 198 renders | 96.5 % correct, **0 wrong**, the rest abstained, ~70 ms each |
 | Object extraction vs. ground truth on the fixtures | every shape, fill, rotation and count correct |
@@ -133,7 +143,7 @@ static export like the Dugsi site.
 assessment-trainer/
   app/                    Next.js App Router pages + API routes
     page.tsx              Dashboard
-    practice/matrigma     Matrix practice (adaptive, category, timed)
+    practice/matrigma     Matrix practice (adaptive, category, timed, adaptive test)
     practice/map          Personality statement practice
     analyze               Screenshot upload + analysis
     statistics, question-bank, settings
@@ -310,7 +320,7 @@ responseTime, difficulty, category, confidence, solverStrategy and timestamp.
 | Symptom | Fix |
 |---|---|
 | Settings shows *Python / OpenCV: not available* | `pip install -r python/requirements.txt`, or set `PYTHON_BIN` to the interpreter that has OpenCV. Until then matrix screenshots use the TypeScript vision pipeline (slightly lower recall, same abstain behaviour). |
-| "Unable to reliably detect the matrix" | Crop the screenshot to the matrix plus the answer options, use a larger/sharper screenshot, or choose the question type manually. The detector expects equally sized, bordered cells. |
+| "Unable to reliably detect the matrix" | Line-pattern matrices are reported as unsupported by the image readers on purpose (they go to the Claude fallback when configured). Otherwise crop the screenshot to the matrix plus the answer options, use a larger/sharper screenshot, or choose the question type manually. The detector expects equally sized, bordered cells. |
 | An answer is "Uncertain – inspect manually" | Check the detected objects table and overlays; low extraction quality or two equally valid rules lower confidence on purpose. |
 | OCR language data missing | `npm install` (installs `@tesseract.js-data/swe` and `/eng`); OCR runs offline |
 | `Environment variable not found: DATABASE_URL` | `cp .env.example .env` |

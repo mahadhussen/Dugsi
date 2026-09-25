@@ -17,8 +17,9 @@ import { Label, Select } from "@/components/ui/field";
 import { Progress } from "@/components/ui/progress";
 import { Alert } from "@/components/ui/alert";
 import { cn, pct, secs } from "@/lib/utils";
+import { abilityReport, nextItem, type ItemType, type TestResponse } from "@/lib/statistics/ability-test";
 
-type Mode = "adaptive" | "category" | "timed";
+type Mode = "adaptive" | "category" | "timed" | "test";
 
 interface Q {
   id: string;
@@ -48,7 +49,7 @@ export function MatrigmaPractice() {
   const [mode, setMode] = useState<Mode>(initialCategory ? "category" : "adaptive");
   const [category, setCategory] = useState<MatrigmaCategory>(initialCategory ?? "rotation");
   const [difficulty, setDifficulty] = useState<Difficulty | "auto">("auto");
-  const [count, setCount] = useState<5 | 10 | 20>(10);
+  const [count, setCount] = useState<number>(10);
   const [perQuestion, setPerQuestion] = useState(60);
 
   const [phase, setPhase] = useState<"setup" | "loading" | "running" | "summary">("setup");
@@ -69,10 +70,21 @@ export function MatrigmaPractice() {
   const qPaused = useRef(0);
   const sPaused = useRef(0);
   const submitting = useRef(false);
+  // Adaptive test: responses so far and the item type of the current question.
+  const testResponses = useRef<TestResponse[]>([]);
+  const testItem = useRef<ItemType | null>(null);
 
-  const timed = mode === "timed";
-  const totalLimitMs = timed ? count * perQuestion * 1000 : null;
+  const isTest = mode === "test";
+  const timed = mode === "timed" || isTest;
+  const totalLimitMs = mode === "timed" ? count * perQuestion * 1000 : null;
   const qLimitMs = timed ? perQuestion * 1000 : null;
+  const total = isTest ? count : questions.length;
+
+  async function fetchQuestions(body: Record<string, unknown>): Promise<Q[]> {
+    const res = await fetch("/api/questions/generate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error((await res.json()).error ?? "Could not generate questions");
+    return res.json();
+  }
 
   const now = () => (pausedAt.current ?? Date.now());
   const qElapsed = () => now() - qStart.current - qPaused.current;
@@ -88,23 +100,23 @@ export function MatrigmaPractice() {
     setErr(null);
     setPhase("loading");
     try {
-      const n = timed ? count : mode === "category" ? count : count;
-      const res = await fetch("/api/questions/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          count: n,
+      let qs: Q[];
+      if (isTest) {
+        testResponses.current = [];
+        testItem.current = nextItem([]);
+        qs = await fetchQuestions({ count: 1, category: testItem.current.category, difficulty: testItem.current.difficulty });
+      } else {
+        qs = await fetchQuestions({
+          count,
           adaptive: mode === "adaptive" || (timed && difficulty === "auto"),
           category: mode === "category" ? category : undefined,
           difficulty: difficulty === "auto" ? undefined : difficulty,
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Could not generate questions");
-      const qs: Q[] = await res.json();
+        });
+      }
       const s = await fetch("/api/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "matrigma", mode, questionCount: qs.length, perQuestionSeconds: qLimitMs ? perQuestion : null, totalSeconds: totalLimitMs ? totalLimitMs / 1000 : null }),
+        body: JSON.stringify({ kind: "matrigma", mode, questionCount: isTest ? count : qs.length, perQuestionSeconds: qLimitMs ? perQuestion : null, totalSeconds: totalLimitMs ? totalLimitMs / 1000 : null }),
       }).then((r) => r.json());
       setSessionId(s.id);
       setQuestions(qs);
@@ -143,15 +155,32 @@ export function MatrigmaPractice() {
           body: JSON.stringify({ questionId: q.id, selectedAnswer: answer, responseTime: timeMs, sessionId }),
         }).then((x) => x.json());
         const fb: Feedback = { ...r, selected: answer, timeMs };
-        setFeedback(fb);
         setResults((prev) => [...prev, { ...fb, q }]);
+        if (isTest) {
+          // Test mode: no feedback between questions; the next item depends on this answer.
+          const it = testItem.current!;
+          testResponses.current = [...testResponses.current, { category: it.category, difficulty: it.difficulty, b: it.b, correct: !!r.isCorrect, timeMs }];
+          if (testResponses.current.length >= count) {
+            await finish();
+            return;
+          }
+          testItem.current = nextItem(testResponses.current);
+          const [nq] = await fetchQuestions({ count: 1, category: testItem.current.category, difficulty: testItem.current.difficulty });
+          setQuestions((prev) => [...prev, nq]);
+          setIdx((i) => i + 1);
+          setSelected(null);
+          qPaused.current = 0;
+          qStart.current = Date.now();
+          return;
+        }
+        setFeedback(fb);
         pausedAt.current = Date.now(); // stop the question clock while reviewing
       } finally {
         submitting.current = false;
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [feedback, phase, questions, idx, sessionId],
+    [feedback, phase, questions, idx, sessionId, isTest, count],
   );
 
   const next = useCallback(() => {
@@ -227,6 +256,7 @@ export function MatrigmaPractice() {
                 <option value="adaptive">Adaptive (weak areas)</option>
                 <option value="category">Single category</option>
                 <option value="timed">Timed test</option>
+                <option value="test">Adaptive test (level estimate)</option>
               </Select>
             </div>
             {mode === "category" && (
@@ -241,7 +271,7 @@ export function MatrigmaPractice() {
                 </Select>
               </div>
             )}
-            <div className="space-y-1.5">
+            {!isTest && (<div className="space-y-1.5">
               <Label htmlFor="difficulty">Difficulty</Label>
               <Select id="difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value as Difficulty | "auto")}>
                 <option value="auto">Automatic</option>
@@ -251,22 +281,29 @@ export function MatrigmaPractice() {
                   </option>
                 ))}
               </Select>
-            </div>
+            </div>)}
             <div className="space-y-1.5">
               <Label htmlFor="count">Questions</Label>
-              <Select id="count" value={count} onChange={(e) => setCount(Number(e.target.value) as 5 | 10 | 20)}>
+              <Select id="count" value={count} onChange={(e) => setCount(Number(e.target.value))}>
                 <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={20}>20</option>
+                <option value={30}>30</option>
               </Select>
             </div>
+            {isTest && (
+              <p className="text-sm text-muted-foreground sm:col-span-2 lg:col-span-4">
+                One question at a time, no going back and no feedback until the end. Each answer moves the next question up or down in difficulty. The result is a
+                level estimate on this tool&apos;s own questions, not a score from any real test.
+              </p>
+            )}
             {timed && (
               <div className="space-y-1.5">
                 <Label htmlFor="perq">Seconds per question</Label>
                 <Select id="perq" value={perQuestion} onChange={(e) => setPerQuestion(Number(e.target.value))}>
                   {[30, 45, 60, 90, 120].map((s) => (
                     <option key={s} value={s}>
-                      {s} s (session {Math.round((s * count) / 60)} min)
+                      {s} s{isTest ? "" : ` (session ${Math.round((s * count) / 60)} min)`}
                     </option>
                   ))}
                 </Select>
@@ -293,16 +330,46 @@ export function MatrigmaPractice() {
       g.c += r.isCorrect ? 1 : 0;
       byCat.set(r.q.category, g);
     }
+    const report = isTest && testResponses.current.length ? abilityReport(testResponses.current) : null;
     return (
       <>
-        <PageHeader title="Session results" />
+        <PageHeader title={report ? "Adaptive test results" : "Session results"} />
+        {report && (
+          <Card className="mb-3">
+            <CardHeader>
+              <CardTitle>Estimated level: {report.stanine} of 9</CardTitle>
+              <CardDescription>
+                Ability {report.theta.toFixed(2)} ± {report.se.toFixed(2)} on this tool&apos;s own scale (5 = middle). Hardest level solved: {report.hardestSolved ?? "none"}.
+                This is an estimate from {report.total} synthetic questions, not a norm-referenced test score.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex gap-1" aria-label={`Level ${report.stanine} of 9`}>
+                {Array.from({ length: 9 }, (_, i) => (
+                  <div key={i} className={cn("h-3 flex-1 rounded-sm", i < report.stanine ? "bg-primary" : "bg-muted")} />
+                ))}
+              </div>
+              {report.weakest.length > 0 && (
+                <p>
+                  Practise next:{" "}
+                  {report.weakest.map((c, i) => (
+                    <a key={c} className="text-primary underline" href={`/practice/matrigma?category=${c}`}>
+                      {CATEGORY_LABELS[c]}
+                      {i < report.weakest.length - 1 ? ", " : ""}
+                    </a>
+                  ))}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           <Card className="p-5">
             <p className="text-xs text-muted-foreground">Score</p>
             <p className="text-3xl font-semibold tabular-nums">
-              {correct} / {questions.length}
+              {correct} / {total}
             </p>
-            <p className="text-sm text-muted-foreground">{results.length < questions.length ? `${questions.length - results.length} not reached (time ran out)` : "all answered"}</p>
+            <p className="text-sm text-muted-foreground">{results.length < total ? `${total - results.length} not reached (time ran out)` : "all answered"}</p>
           </Card>
           <Card className="p-5">
             <p className="text-xs text-muted-foreground">Accuracy</p>
@@ -355,11 +422,12 @@ export function MatrigmaPractice() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">
-            Question {idx + 1} of {questions.length}
+            Question {idx + 1} of {total}
           </h1>
           <div className="mt-1 flex gap-2">
-            <Badge>{CATEGORY_LABELS[q.category]}</Badge>
-            <Badge variant="outline">{q.difficulty}</Badge>
+            {!isTest && <Badge>{CATEGORY_LABELS[q.category]}</Badge>}
+            {!isTest && <Badge variant="outline">{q.difficulty}</Badge>}
+            {isTest && <Badge variant="outline">Adaptive test</Badge>}
           </div>
         </div>
         <div className="flex items-center gap-3 text-sm tabular-nums">
@@ -372,7 +440,7 @@ export function MatrigmaPractice() {
           </Button>
         </div>
       </div>
-      <Progress value={(idx + (feedback ? 1 : 0)) / questions.length} className="mb-5" />
+      <Progress value={(idx + (feedback ? 1 : 0)) / total} className="mb-5" />
 
       <div className="relative">
         {paused && (

@@ -196,14 +196,53 @@ function classify(s: Shape, cellSize: number) {
 }
 
 /** Segment objects inside a cell box (processed-image coordinates). */
-export function extractObjects(g: Gray, box: { x: number; y: number; w: number; h: number }): { objects: JsObject[]; quality: number } {
+/** Count background regions enclosed by one component (4-connected), capped at `cap`. */
+function countHoles(local: Uint8Array, outside: Uint8Array, bw: number, bh: number, cap: number, minPx: number): number {
+  const seen = new Uint8Array(bw * bh);
+  let holes = 0;
+  for (let i = 0; i < bw * bh; i++) {
+    if (local[i] || outside[i] || seen[i]) continue;
+    const stack = [i];
+    seen[i] = 1;
+    let n = 0;
+    while (stack.length) {
+      const p = stack.pop()!;
+      n++;
+      const px = p % bw;
+      const py = (p - px) / bw;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = px + dx;
+        const ny = py + dy;
+        if (nx < 0 || ny < 0 || nx >= bw || ny >= bh) continue;
+        const q = ny * bw + nx;
+        if (!seen[q] && !local[q] && !outside[q]) {
+          seen[q] = 1;
+          stack.push(q);
+        }
+      }
+    }
+    // Ignore specks from compression noise.
+    if (n >= minPx && ++holes >= cap) return holes;
+  }
+  return holes;
+}
+
+/**
+ * Line-pattern (texture) cells, e.g. families of thin parallel lines or a
+ * cross-hatched mesh, cannot be described as a few shapes. They are flagged so
+ * the pipeline reports "unsupported" instead of misreading them as objects.
+ */
+export function extractObjects(
+  g: Gray,
+  box: { x: number; y: number; w: number; h: number },
+): { objects: JsObject[]; quality: number; texture: boolean } {
   const size = Math.min(box.w, box.h);
   const inset = Math.max(3, Math.round(0.04 * size));
   const x0 = box.x + inset;
   const y0 = box.y + inset;
   const cw = box.w - 2 * inset;
   const ch = box.h - 2 * inset;
-  if (cw <= 2 || ch <= 2) return { objects: [], quality: 0 };
+  if (cw <= 2 || ch <= 2) return { objects: [], quality: 0, texture: false };
   const crop = new Uint8Array(cw * ch);
   let lo = 255;
   let hi = 0;
@@ -214,13 +253,14 @@ export function extractObjects(g: Gray, box: { x: number; y: number; w: number; 
       if (v < lo) lo = v;
       if (v > hi) hi = v;
     }
-  if (hi - lo < 40) return { objects: [], quality: 1 };
+  if (hi - lo < 40) return { objects: [], quality: 1, texture: false };
   const t = otsu(crop);
   const ink = new Uint8Array(cw * ch);
   for (let i = 0; i < ink.length; i++) ink[i] = crop[i] <= t ? 1 : 0;
   const { labels, comps } = label(ink, cw, ch, 1, 8);
   const minArea = 0.0015 * size * size;
   const objects: JsObject[] = [];
+  let meshes = 0;
   for (const c of comps) {
     // Filled mask of this component (component + enclosed holes).
     const bw = c.maxx - c.minx + 3;
@@ -263,6 +303,7 @@ export function extractObjects(g: Gray, box: { x: number; y: number; w: number; 
       }
     const area = pixels.length;
     if (area < minArea) continue;
+    if (countHoles(local, outside, bw, bh, 4, Math.max(4, 0.0006 * size * size)) >= 4) meshes++;
     const bbw = c.maxx - c.minx + 1;
     const bbh = c.maxy - c.miny + 1;
     const touches = c.minx <= 0 || c.miny <= 0 || c.maxx >= cw - 1 || c.maxy >= ch - 1;
@@ -330,5 +371,7 @@ export function extractObjects(g: Gray, box: { x: number; y: number; w: number; 
   }
   let quality = objects.length ? objects.reduce((s, o) => s + o.confidence, 0) / objects.length : 1;
   if (objects.some((o) => o.shape === "unknown")) quality *= 0.5;
-  return { objects, quality };
+  const thinLines = objects.filter((o) => o.shape === "line").length;
+  const texture = meshes > 0 || thinLines >= 4;
+  return { objects, quality, texture };
 }

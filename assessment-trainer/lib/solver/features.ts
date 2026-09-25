@@ -21,7 +21,15 @@ export interface CellFeatures {
   slotRow: number | null;
   objects: string; // sorted object keys
   shapes: string; // sorted multiset of shapes
+  /** Texture layers (null when the cell has no pattern). */
+  lines: string | null;
+  bars: string | null;
+  dots: string | null;
+  /** True for a texture-only cell (pattern, no objects). */
+  patternOnly: boolean;
 }
+
+const layer = (v: string[] | undefined) => (v ? [...new Set(v)].sort().join(";") : null);
 
 export function objectKey(o: MatrixObject): string {
   const rot = Math.round(normRotation(o.shape, o.rotation) / 15) * 15;
@@ -79,5 +87,9 @@ export function cellFeatures(cell: Cell): CellFeatures {
     positions: [...new Set(all.map((o) => slotOf(o.x, o.y)))].sort((a, b) => a - b).join(","),
     objects: all.map(objectKey).sort().join(";"),
     shapes: all.map((o) => o.shape).sort().join(","),
+    lines: cell.pattern ? layer(cell.pattern.lines) : null,
+    bars: cell.pattern ? layer(cell.pattern.bars) : null,
+    dots: cell.pattern ? layer(cell.pattern.dots) : null,
+    patternOnly: !!cell.pattern && all.length === 0,
   };
 }

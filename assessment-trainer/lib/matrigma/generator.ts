@@ -16,6 +16,9 @@ import { COUNT_LAYOUT_SLOTS } from "./layouts";
 import { cellSimilarity, cellSimilarityStrict } from "../solver/similarity";
 import { cellFeatures } from "../solver/features";
 import { TRANSFORMS } from "../solver/transforms";
+import { solveMatrix } from "../solver/solve";
+import { LINE_TOKENS, BAR_TOKENS } from "./types";
+import type { CellPattern } from "./types";
 
 /**
  * Synthetic Matrigma-like question generator.
@@ -382,6 +385,7 @@ function signature(c: Cell, ignorePositions: boolean): string {
   const f = cellFeatures(c);
   const parts = [f.count, f.shapes, f.fill, f.size === null ? "x" : Math.round(f.size * 20), f.rotation === null ? "x" : Math.round(f.rotation)];
   if (!ignorePositions) parts.push(f.objects);
+  if (c.pattern) parts.push(f.lines ?? "", f.bars ?? "", f.dots ?? "");
   return parts.join("|");
 }
 
@@ -641,6 +645,114 @@ function generateAlternation(seed: number, difficulty: Difficulty, rng: Rng) {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Overlay ("line pattern") questions: texture layers combined along rows or
+// columns, e.g. background lines add up down each column while thick bars add
+// up along each row.
+
+type Layer = "lines" | "bars" | "dots";
+type LayerOp = "union" | "xor" | "difference";
+type LAxis = "row" | "col";
+
+const LAYER_WORD: Record<Layer, string> = { lines: "background lines", bars: "thick bars", dots: "dots" };
+const DOT_PAIRS: string[][] = [["tl", "br"], ["tr", "bl"], ["c"], ["tl", "tr"], ["bl", "br"]];
+
+/** Values of one layer for the 9 cells (row-major). */
+function buildLayer(layer: Layer, axis: LAxis, op: LayerOp, rng: Rng, onlyLines: number[] | null, depth = 0): string[][] {
+  const out: string[][] = Array.from({ length: 9 }, () => []);
+  const pool: readonly string[] = layer === "lines" ? LINE_TOKENS : BAR_TOKENS;
+  const usedPairs = new Set<string>();
+  for (let line = 0; line < 3; line++) {
+    let A: string[] = [];
+    let B: string[] = [];
+    if (onlyLines === null || onlyLines.includes(line)) {
+      if (layer === "dots") {
+        const [p, q] = rng.sample(DOT_PAIRS, 2);
+        const disjoint = !p.some((t) => q.includes(t));
+        if (!disjoint) return depth > 20 ? out : buildLayer(layer, axis, op, rng, onlyLines, depth + 1);
+        A = p;
+        B = q;
+      } else if (op === "union") {
+        [A, B] = rng.sample(pool, 2).map((t) => [t]);
+      } else if (op === "xor") {
+        const [a, b, x] = rng.sample(pool, 3);
+        A = [a, x];
+        B = [b, x];
+      } else {
+        const [a, b] = rng.sample(pool, 2);
+        A = [a, b];
+        B = [b];
+      }
+    }
+    // Each line uses different elements, so the intended rule is the only simple one.
+    const key = [...A, ...B].sort().join("|");
+    if (key && usedPairs.has(key)) {
+      if (depth > 20) return out;
+      return buildLayer(layer, axis, op, rng, onlyLines, depth + 1);
+    }
+    usedPairs.add(key);
+    const setA = new Set(A);
+    const setB = new Set(B);
+    const C =
+      op === "union"
+        ? [...new Set([...A, ...B])]
+        : op === "xor"
+          ? [...A.filter((t) => !setB.has(t)), ...B.filter((t) => !setA.has(t))]
+          : A.filter((t) => !setB.has(t));
+    const idx = (k: number) => (axis === "row" ? line * 3 + k : k * 3 + line);
+    out[idx(0)] = A;
+    out[idx(1)] = B;
+    out[idx(2)] = C;
+  }
+  return out;
+}
+
+const OP_TEXT: Record<LayerOp, string> = {
+  union: "are the first two cells laid on top of each other",
+  xor: "keep only what appears in exactly one of the first two cells",
+  difference: "are the first cell with the second cell's elements removed",
+};
+
+function generateOverlay(seed: number, difficulty: Difficulty, rng: Rng, unchecked = false): GeneratedMatrixQuestion | null {
+  const axisA: LAxis = rng.bool() ? "row" : "col";
+  const axisB: LAxis = axisA === "row" ? "col" : "row";
+  const plan: { layer: Layer; axis: LAxis; op: LayerOp; only: number[] | null }[] = [{ layer: "lines", axis: axisA, op: difficulty === "expert" ? rng.pick(["xor", "difference"] as LayerOp[]) : "union", only: null }];
+  if (difficulty !== "easy") plan.push({ layer: "bars", axis: axisB, op: "union", only: difficulty === "medium" ? null : [1, 2] });
+  if (difficulty === "hard" || difficulty === "expert") plan.push({ layer: "dots", axis: axisB, op: "union", only: [0] });
+  const layers: Record<Layer, string[][]> = { lines: Array.from({ length: 9 }, () => []), bars: Array.from({ length: 9 }, () => []), dots: Array.from({ length: 9 }, () => []) };
+  for (const p of plan) layers[p.layer] = buildLayer(p.layer, p.axis, p.op, rng, p.only);
+  // Every cell must show something.
+  for (let i = 0; i < 9; i++) if (!layers.lines[i].length && !layers.bars[i].length && !layers.dots[i].length) return null;
+  const cellAt = (i: number): Cell => ({ objects: [], pattern: { lines: [...layers.lines[i]], bars: [...layers.bars[i]], dots: [...layers.dots[i]] } });
+  const grid = Array.from({ length: 9 }, (_, i) => cellAt(i));
+  const correct = grid[8].pattern!;
+  const mk = (patch: Partial<CellPattern>): Cell => ({ objects: [], pattern: { ...correct, ...patch } });
+  const other = (pool: readonly string[], have: string[]) => rng.pick(pool.filter((t) => !have.includes(t)));
+  const wrong: Cell[] = rng.shuffle([
+    mk({ lines: correct.lines.slice(0, Math.max(0, correct.lines.length - 1)) }),
+    mk({ lines: [...correct.lines, other(LINE_TOKENS, correct.lines)] }),
+    mk({ lines: [...grid[5].pattern!.lines] }),
+    mk({ lines: [...grid[7].pattern!.lines] }),
+    mk({ bars: correct.bars.length ? correct.bars.slice(1) : [rng.pick(BAR_TOKENS)] }),
+    mk({ bars: [...correct.bars, other(BAR_TOKENS, correct.bars)] }),
+    mk({ bars: [...grid[5].pattern!.bars] }),
+    mk({ dots: correct.dots.length ? [] : ["tl", "tr", "bl", "br"] }),
+    mk({ dots: correct.dots.length ? [] : ["tl", "br"], lines: [...grid[2].pattern!.lines] }),
+  ]);
+  const rules: RuleDescriptor[] = plan.map((p) => ({
+    attribute: p.layer,
+    kind: p.op,
+    axis: p.axis,
+    description: `In each ${p.axis === "row" ? "row" : "column"} the ${LAYER_WORD[p.layer]} of the last cell ${OP_TEXT[p.op]}.`,
+  }));
+  const q = finish(seed, "overlay", difficulty, grid, wrong, rules, rng);
+  if (!q || unchecked) return q;
+  // Only keep questions the solver answers unambiguously with the intended option.
+  const s = solveMatrix(q.problem);
+  return s.status === "solved" && s.answer === q.correctAnswer ? q : null;
+}
+
 // ---------------------------------------------------------------------------
 
 export interface GenerateOptions {
@@ -660,6 +772,7 @@ const DEFAULT_DIFFICULTY: Record<MatrigmaCategory, Difficulty> = {
   direction: "easy",
   composition: "medium",
   alternation: "easy",
+  overlay: "medium",
   "multi-rule": "hard",
 };
 
@@ -681,6 +794,9 @@ export function generateQuestion(opts: GenerateOptions = {}): GeneratedMatrixQue
       case "alternation":
         q = generateAlternation(seed, difficulty, rng);
         break;
+      case "overlay":
+        q = generateOverlay(seed, difficulty, rng);
+        break;
       default:
         q = generateAttributeQuestion(seed, category, difficulty, rng);
     }
@@ -693,3 +809,6 @@ export function generateBatch(n: number, opts: Omit<GenerateOptions, "seed"> & {
   const start = opts.seedStart ?? Math.floor(Math.random() * 2 ** 30);
   return Array.from({ length: n }, (_, i) => generateQuestion({ ...opts, seed: start + i * 7919 }));
 }
+
+/** Test hook: overlay question without the solver check. */
+export const __generateOverlayUnchecked = (seed: number, difficulty: Difficulty, rng: Rng) => generateOverlay(seed, difficulty, rng, true);

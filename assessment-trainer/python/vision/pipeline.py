@@ -6,7 +6,7 @@ import time
 import numpy as np
 
 from .detect import Box, DetectionError, detect_layout
-from .objects import extract_objects
+from .objects import extract_objects, is_texture_cell
 from .preprocess import preprocess
 
 
@@ -59,6 +59,17 @@ def analyze(data: bytes) -> dict:
             "timings": timings,
         }
     t2 = time.perf_counter()
+    texture = sum(1 for b in [*lat.cells.values(), *layout.options] if is_texture_cell(pre.gray, (b.x, b.y, b.w, b.h)))
+    if texture >= 2:
+        return {
+            **base,
+            "ok": False,
+            "stage": "objects",
+            "error": f"{texture} cells contain line patterns (textures), which the rule solver cannot read from an image.",
+            "region": _to_original(lat.bbox, scale),
+            "candidateBoxes": [_to_original(b, scale) for b in lat.cells.values()],
+            "timings": timings,
+        }
     cells: list[dict | None] = []
     debug_cells = []
     qualities = []

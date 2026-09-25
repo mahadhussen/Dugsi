@@ -17,7 +17,7 @@ export type RuleKind =
   | "intersection";
 
 export interface AttrSpec {
-  name: "count" | "shape" | "sides" | "fill" | "size" | "rotation" | "positions" | "objects" | "shapes" | "slotCol" | "slotRow";
+  name: "count" | "shape" | "sides" | "fill" | "size" | "rotation" | "positions" | "objects" | "shapes" | "slotCol" | "slotRow" | "lines" | "bars" | "dots";
   /** Fixed modular period for "angle" attributes that are not rotations. */
   period?: number;
   label: string;
@@ -133,7 +133,44 @@ export const ATTRIBUTES: AttrSpec[] = [
     kinds: ["constant", "distribute", "alternation"],
     get: (f) => f.shapes,
   },
+  // Texture layers of overlay questions (null for ordinary cells, so they are skipped there).
+  {
+    name: "lines",
+    label: "background lines",
+    kind: "set",
+    weight: 1,
+    tol: 0,
+    kinds: ["constant", "distribute", "alternation", ...SET_OPS],
+    get: (f) => f.lines,
+  },
+  {
+    name: "bars",
+    label: "thick bars",
+    kind: "set",
+    weight: 1,
+    tol: 0,
+    kinds: ["constant", "distribute", "alternation", ...SET_OPS],
+    get: (f) => f.bars,
+  },
+  {
+    name: "dots",
+    label: "dots",
+    kind: "set",
+    weight: 1,
+    tol: 0,
+    kinds: ["constant", "distribute", "alternation", ...SET_OPS],
+    get: (f) => f.dots,
+  },
 ];
+
+// Object attributes say nothing about pure texture cells (0 objects everywhere
+// would "prove" rules like 0 + 0 = 0), so they are skipped for those cells.
+const LAYER_ATTRS = new Set(["lines", "bars", "dots"]);
+for (const a of ATTRIBUTES) {
+  if (LAYER_ATTRS.has(a.name)) continue;
+  const get = a.get;
+  a.get = (f) => (f.patternOnly ? null : get(f));
+}
 
 export const RULE_COMPLEXITY: Record<RuleKind, number> = {
   constant: 1,

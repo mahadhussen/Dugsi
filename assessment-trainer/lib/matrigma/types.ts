@@ -35,8 +35,25 @@ export interface MatrixObject {
   y: number;
 }
 
+/**
+ * Texture layers used by overlay ("line pattern") questions. Each layer is a
+ * set of tokens; rules combine them along rows or columns (union, XOR, …).
+ */
+export const LINE_TOKENS = ["v", "h", "d", "a", "arc-up", "arc-down"] as const;
+export const BAR_TOKENS = ["v", "h", "d", "a"] as const;
+export const DOT_TOKENS = ["tl", "tr", "bl", "br", "c"] as const;
+export interface CellPattern {
+  /** Thin line families filling the cell: vertical, horizontal, diagonal (/), anti-diagonal (\\), arcs. */
+  lines: string[];
+  /** Thick bars through the centre. */
+  bars: string[];
+  /** Solid dots: corners (tl, tr, bl, br) and centre (c). */
+  dots: string[];
+}
+
 export interface Cell {
   objects: MatrixObject[];
+  pattern?: CellPattern;
 }
 
 export interface MatrixProblem {
@@ -61,6 +78,7 @@ export const MATRIGMA_CATEGORIES = [
   "direction",
   "composition",
   "alternation",
+  "overlay",
   "multi-rule",
 ] as const;
 export type MatrigmaCategory = (typeof MATRIGMA_CATEGORIES)[number];
@@ -76,6 +94,7 @@ export const CATEGORY_LABELS: Record<MatrigmaCategory, string> = {
   direction: "Direction",
   composition: "Composition",
   alternation: "Alternation",
+  overlay: "Line patterns",
   "multi-rule": "Multi-rule",
 };
 

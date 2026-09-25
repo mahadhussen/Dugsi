@@ -16,6 +16,7 @@ import { AXIS_WORD, buildLines, type Axis, type Line } from "./lines";
  */
 
 const BIG = 99;
+const LAYER_ATTR_NAMES = new Set(["lines", "bars", "dots"]);
 
 export interface FittedRule {
   attr: AttrSpec;
@@ -129,8 +130,9 @@ function lineError(kind: RuleKind, vals: AttrValue[], spec: AttrSpec, ctx: Ctx, 
     case "intersection": {
       if (n !== 3) return BIG;
       const res = applySetOp(kind, vals[0], vals[1], spec);
-      // Degenerate cases (e.g. union where B ⊆ A) are allowed but the result must be non-empty.
-      if (!res) return BIG;
+      // Degenerate cases (e.g. union where B ⊆ A) are allowed but the result must be non-empty,
+      // except for texture layers where a row without bars or dots is normal (empty + empty = empty).
+      if (!res) return LAYER_ATTR_NAMES.has(spec.name) && String(vals[2]) === "" ? 0 : BIG;
       return res === String(vals[2]) ? 0 : BIG;
     }
   }
@@ -313,6 +315,19 @@ export function selectBestPerAttribute(rules: FittedRule[]): FittedRule[] {
 
 const SHAPE_WORD = (v: AttrValue) => String(v);
 
+const LAYER_WORDS: Record<string, Record<string, string>> = {
+  lines: { v: "vertical lines", h: "horizontal lines", d: "diagonal lines (/)", a: "diagonal lines (\\)", "arc-up": "arcs curving up", "arc-down": "arcs curving down" },
+  bars: { v: "vertical bar", h: "horizontal bar", d: "diagonal bar (/)", a: "diagonal bar (\\)" },
+  dots: { tl: "top-left", tr: "top-right", bl: "bottom-left", br: "bottom-right", c: "centre" },
+};
+
+export function describeLayer(name: "lines" | "bars" | "dots", v: string): string {
+  const tokens = v.split(";").filter(Boolean);
+  if (!tokens.length) return "none";
+  const words = tokens.map((t) => LAYER_WORDS[name][t] ?? t);
+  return name === "dots" ? `dots at ${words.join(", ")}` : words.join(" + ");
+}
+
 function fmtVal(spec: AttrSpec, v: AttrValue | null): string {
   if (v === null) return "?";
   if (spec.name === "fill") return v === 0 ? "empty" : v === 1 ? "solid" : "half-filled";
@@ -323,6 +338,7 @@ function fmtVal(spec: AttrSpec, v: AttrValue | null): string {
   if (spec.name === "slotRow") return ["top", "middle", "bottom"][Number(v)] ?? String(v);
   if (spec.name === "objects") return `${String(v).split(";").filter(Boolean).length} elements`;
   if (spec.name === "shape") return SHAPE_WORD(v);
+  if (spec.name === "lines" || spec.name === "bars" || spec.name === "dots") return describeLayer(spec.name, String(v));
   return String(v);
 }
 

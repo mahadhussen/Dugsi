@@ -68,6 +68,7 @@ export function analyzeRgba(img: RgbaImage): VisionResult {
       timings: { total_ms: Date.now() - t0 },
     };
   }
+  let textureCells = 0;
   const cells: (Cell | null)[] = [];
   const debugCells = [];
   const qualities: number[] = [];
@@ -79,7 +80,8 @@ export function analyzeRgba(img: RgbaImage): VisionResult {
         debugCells.push({ row: r, col: c, box: orig(slotBox(lat, r, c)), missing: true, objects: [] });
         continue;
       }
-      const { objects, quality } = extractObjects(g, box);
+      const { objects, quality, texture } = extractObjects(g, box);
+      if (texture) textureCells++;
       qualities.push(quality);
       cells.push({ objects: objects.map(({ shape, fill, size, rotation, x, y }) => ({ shape, fill, size, rotation, x, y })) } as Cell);
       debugCells.push({
@@ -93,10 +95,22 @@ export function analyzeRgba(img: RgbaImage): VisionResult {
   const options: Cell[] = [];
   const debugOptions = [];
   for (const b of layout.options) {
-    const { objects, quality } = extractObjects(g, b);
+    const { objects, quality, texture } = extractObjects(g, b);
+    if (texture) textureCells++;
     qualities.push(quality);
     options.push({ objects: objects.map(({ shape, fill, size, rotation, x, y }) => ({ shape, fill, size, rotation, x, y })) } as Cell);
     debugOptions.push({ box: orig(b), objects: objects.map((o) => ({ ...o, bbox: orig([b.x + o.bbox[0], b.y + o.bbox[1], o.bbox[2], o.bbox[3]]) })) });
+  }
+  if (textureCells >= 2) {
+    return {
+      ...base,
+      ok: false,
+      stage: "objects",
+      error: `${textureCells} cells contain line patterns (textures), which the rule solver cannot read from an image.`,
+      region: orig(latticeBox(lat)),
+      candidateBoxes: [...lat.cells.values()].map((b) => orig(b)),
+      timings: { total_ms: Date.now() - t0 },
+    };
   }
   const sizes = [...lat.cells.values()].map((b) => b.w);
   const mean = sizes.reduce((s, v) => s + v, 0) / sizes.length;

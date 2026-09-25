@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/database/client";
 import { clearAllData, deleteHistory, ensureSeeded, getSettings, getStats, recordAttempt, saveGenerated, updateSettings, saveScreenshotQuestion, deleteImage } from "@/lib/database/repo";
 import { generateQuestion } from "@/lib/matrigma/generator";
+import { MATRIGMA_CATEGORIES } from "@/lib/matrigma/types";
 import fs from "node:fs";
 
 describe("database", () => {
@@ -12,7 +13,7 @@ describe("database", () => {
 
   it("seeds the MAP statement bank and categories", async () => {
     expect(await prisma.mAPStatement.count({ where: { source: "bank" } })).toBe(75);
-    expect(await prisma.questionCategory.count({ where: { kind: "matrigma" } })).toBe(11);
+    expect(await prisma.questionCategory.count({ where: { kind: "matrigma" } })).toBe(MATRIGMA_CATEGORIES.length);
   });
 
   it("stores generated questions with solver verdict and records attempts", async () => {

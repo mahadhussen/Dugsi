@@ -14,6 +14,9 @@ const ATTR_LABEL: Record<string, string> = {
   slotCol: "position",
   slotRow: "position",
   objects: "arrangement",
+  lines: "background lines",
+  bars: "thick bars",
+  dots: "dots",
 };
 
 export function questionTypeLabel(p: MatrixProblem): string {
@@ -24,7 +27,8 @@ export function questionTypeLabel(p: MatrixProblem): string {
 /** Turn a solution into the pedagogical QUESTION TYPE / RULE / VALIDATION / ANSWER block. */
 export function buildExplanation(problem: MatrixProblem, s: Solution): Explanation {
   const informative = s.rules.filter((r) => r.informative);
-  const constants = s.rules.filter((r) => !r.informative);
+  // "Unchanged: no dots" is noise when a texture layer is simply absent.
+  const constants = s.rules.filter((r) => !r.informative && !(["lines", "bars", "dots"].includes(r.attribute) && /= none$/.test(r.prediction ?? "")));
   const rules = informative.map((r) => r.text);
   if (constants.length) {
     const byAxis = new Map<string, string[]>();
