@@ -78,4 +78,8 @@ describe("MAP OCR text extraction", () => {
     const ocr = "Question 3 of 40\nI enjoy solving complex problems.\nStrongly disagree Disagree Neutral Agree Strongly agree\nNext";
     expect(extractStatement(ocr).statement).toBe("I enjoy solving complex problems.");
   });
+  it("finds no statement in OCR noise from a picture", () => {
+    // tesseract output for a matrix puzzle screenshot
+    expect(extractStatement("Wm % E\n\nZ NH\n\n=E)\n® (®) (2) [#\n[DEDE\n").statement).toBe("");
+  });
 });

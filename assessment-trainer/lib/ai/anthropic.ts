@@ -7,8 +7,9 @@ import { analyzeMatrixLocal } from "../vision/local";
 
 /**
  * Anthropic (Claude) providers. Used only when configured via env and an API
- * key is present. Images are sent only for OCR (MAP statements); Matrigma
- * matrices are always read by the local OpenCV pipeline and solved locally.
+ * key is present. Images are sent for OCR (MAP statements) and, as a fallback,
+ * for matrix layouts the local pipeline cannot read (see ./matrix-reading.ts).
+ * Matrices the local pipeline can read are always solved locally.
  */
 const MODEL = () => process.env.ANTHROPIC_MODEL || "claude-opus-5";
 
@@ -20,13 +21,17 @@ function getClient(): Anthropic {
 
 type ImageMime = "image/png" | "image/jpeg" | "image/webp" | "image/gif";
 
-async function jsonCall<T>(content: Anthropic.Beta.BetaContentBlockParam[], schema: Record<string, unknown>): Promise<T> {
+export async function jsonCall<T>(
+  content: Anthropic.Beta.BetaContentBlockParam[],
+  schema: Record<string, unknown>,
+  opts: { effort?: "low" | "medium" | "high"; maxTokens?: number } = {},
+): Promise<T> {
   const response = await getClient().beta.messages.create({
     model: MODEL(),
-    max_tokens: 4000,
+    max_tokens: opts.maxTokens ?? 4000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    output_config: { effort: "low", format: { type: "json_schema", schema } },
+    output_config: { effort: opts.effort ?? "low", format: { type: "json_schema", schema } },
     messages: [{ role: "user", content }],
   });
   if (response.stop_reason === "refusal") throw new Error("The model declined this request.");

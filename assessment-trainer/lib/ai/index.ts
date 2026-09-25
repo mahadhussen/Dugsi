@@ -1,6 +1,7 @@
 import type { Providers } from "./types";
 import { localReasoning, localText, localVision } from "./local";
 import { anthropicReasoning, anthropicText, anthropicVision } from "./anthropic";
+import { aiMatrixFallbackEnabled } from "./matrix-reading";
 
 export type { Providers, VisionProvider, TextProvider, ReasoningProvider } from "./types";
 
@@ -19,5 +20,10 @@ export function getProviders(): Providers {
 
 export function providerSummary() {
   const p = getProviders();
-  return { vision: p.vision.name, text: p.text.name, reasoning: p.reasoning.name };
+  return {
+    vision: p.vision.name,
+    text: p.text.name,
+    reasoning: p.reasoning.name,
+    matrixFallback: aiMatrixFallbackEnabled() ? "Claude reads layouts the rule solver does not know" : "off (set ANTHROPIC_API_KEY to enable)",
+  };
 }

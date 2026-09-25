@@ -14,6 +14,13 @@ const NOISE = [
   /\b\d+\s*%/g,
 ];
 
+/** At least three real words, and real words make up most of the line (OCR of pictures gives "Wm % E"). */
+function looksLikeSentence(l: string): boolean {
+  const tokens = l.split(" ").filter(Boolean);
+  const words = tokens.filter((t) => /^[A-Za-zÅÄÖåäöÉé'’-]{2,}[.,!?:;]?$/.test(t));
+  return words.length >= 3 && words.length / tokens.length >= 0.6;
+}
+
 export function extractStatement(ocr: string): { statement: string; candidates: string[] } {
   const lines = ocr
     .split(/\n+/)
@@ -32,7 +39,7 @@ export function extractStatement(ocr: string): { statement: string; candidates: 
   }
   const candidates = merged
     .map((l) => l.replace(/^[^A-Za-zÅÄÖåäö]+/, "").trim())
-    .filter((l) => l.split(" ").length >= 3 && /[a-zåäö]/i.test(l));
+    .filter(looksLikeSentence);
   const scored = candidates
     .map((c) => {
       const words = c.split(" ").length;

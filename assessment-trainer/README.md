@@ -255,11 +255,23 @@ interface ReasoningProvider{ explain(problem, solution) }
 - `local` (default): OpenCV + tesseract.js + keyword lexicon. Nothing leaves your computer.
 - `anthropic`: set `ANTHROPIC_API_KEY` and e.g. `TEXT_PROVIDER=anthropic`. Claude
   is used for OCR of personality statements, statement classification and
-  plain-language rewrites of verified explanations. **Matrices are always read by
-  OpenCV and solved by the local verifier**. An image is only sent to Claude for
-  OCR, i.e. when it is analysed as a personality statement (explicitly, or in
-  auto mode after no matrix was found). Requests use structured JSON output and
-  the API's server-side refusal fallback.
+  plain-language rewrites of verified explanations. Requests use structured JSON
+  output and the API's server-side refusal fallback.
+
+### Matrix layouts the local pipeline cannot read
+
+Matrices the local pipeline can read are always solved by the local verifier.
+When it cannot read a layout (no cell borders, line textures, 8 numbered
+options, …) or is not certain, and `ANTHROPIC_API_KEY` is set, the screenshot is
+sent to Claude (`lib/ai/matrix-reading.ts`). Claude describes every cell, tests
+rules along rows and columns, checks every option and returns structured JSON.
+The UI labels this as an unverified AI reading, shows the rules and the
+option-by-option check, and gives **no answer** unless exactly one option fits,
+the answer agrees with that check and the confidence is at least 60 %. Set
+`AI_MATRIX_FALLBACK=off` to never send matrix screenshots to Claude.
+
+Analysis starts as soon as an image is dropped, chosen or pasted (Ctrl+V / ⌘V
+anywhere on the page, or the *Paste image* button).
 
 To add another provider, implement the interfaces in `lib/ai/<name>.ts` and select
 it in `lib/ai/index.ts`.

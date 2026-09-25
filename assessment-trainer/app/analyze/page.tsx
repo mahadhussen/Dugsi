@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ImageUp, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import { Check, ClipboardPaste, ImageUp, Loader2, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import type { Cell, MatrixProblem } from "@/lib/matrigma/types";
 import { OPTION_LABELS } from "@/lib/matrigma/types";
 import type { Solution } from "@/lib/solver/types";
 import type { StatementAnalysis } from "@/lib/map/classify";
 import type { VisionSuccess } from "@/lib/vision/types";
+import type { AiMatrixReading, AiMatrixVerdict } from "@/lib/ai/matrix-reading";
 import { LIKERT } from "@/lib/map/model";
 import { PageHeader } from "@/components/page-header";
 import { MatrixGrid, OptionGrid } from "@/components/matrix-view";
@@ -41,7 +42,10 @@ type MatrigmaResult = {
   solution: Solution;
   narrative: string | null;
   unknownObjects: number;
+  ai: AiReading | null;
 };
+type AiReading = { reading: AiMatrixReading; verdict: AiMatrixVerdict; durationMs: number };
+type AiMatrixResult = { type: "ai-matrix"; localProblem: string } & AiReading;
 type MapResult = { type: "map"; statementId: string; ocrText: string; ocrConfidence: number; analysis: StatementAnalysis; candidates: string[] };
 type ErrorResult = {
   type: "error";
@@ -53,7 +57,7 @@ type ErrorResult = {
   candidateBoxes: number[][];
   imageSize: [number, number] | null;
 };
-type Result = MatrigmaResult | MapResult | ErrorResult;
+type Result = MatrigmaResult | MapResult | ErrorResult | AiMatrixResult;
 
 export default function AnalyzePage() {
   const [file, setFile] = useState<File | null>(null);
@@ -70,34 +74,59 @@ export default function AnalyzePage() {
     if (preview) URL.revokeObjectURL(preview);
   }, [preview]);
 
+  const [pasteNote, setPasteNote] = useState<string | null>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const runningRef = useRef(false);
+
+  // Dropping, pasting or choosing a file starts the analysis straight away.
   const pick = useCallback((f: File | undefined | null) => {
     setErr(null);
     setResult(null);
     setStages({});
+    setPasteNote(null);
     if (!f) return;
     if (!ACCEPT.includes(f.type)) return setErr("Unsupported file type. Use PNG, JPG or WEBP.");
     if (f.size > MAX) return setErr("File is larger than 10 MB.");
     setFile(f);
     setPreview(URL.createObjectURL(f));
+    if (!runningRef.current) void analyze(f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith("image/"));
-      if (item) pick(item.getAsFile());
+      if (item) {
+        e.preventDefault();
+        pick(item.getAsFile());
+      }
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
   }, [pick]);
 
-  async function analyze() {
-    if (!file) return;
+  async function pasteFromClipboard() {
+    try {
+      for (const it of await navigator.clipboard.read()) {
+        const t = it.types.find((x) => x.startsWith("image/"));
+        if (t) return pick(new File([await it.getType(t)], `clipboard.${t.split("/")[1]}`, { type: t }));
+      }
+      setPasteNote("There is no image on the clipboard. Copy a screenshot or an image first.");
+    } catch {
+      setPasteNote("The browser did not allow direct clipboard access. Press Ctrl+V (⌘V on Mac) instead.");
+    }
+  }
+
+  async function analyze(target: File | null = file) {
+    if (!target) return;
+    runningRef.current = true;
     setRunning(true);
     setResult(null);
     setStages({ uploading: { status: "active" } });
     const fd = new FormData();
-    fd.append("file", file);
-    fd.append("mode", mode);
+    fd.append("file", target);
+    fd.append("mode", modeRef.current);
     try {
       const res = await fetch("/api/analyze", { method: "POST", body: fd });
       if (!res.ok || !res.body) {
@@ -123,6 +152,7 @@ export default function AnalyzePage() {
     } catch (e) {
       setErr((e as Error).message);
     } finally {
+      runningRef.current = false;
       setRunning(false);
     }
   }
@@ -166,10 +196,17 @@ export default function AnalyzePage() {
                 )}
               >
                 <ImageUp className="h-8 w-8 text-muted-foreground" aria-hidden />
-                <p className="text-sm font-medium">Drop a screenshot here, click, or paste</p>
+                <p className="text-sm font-medium">Drop a screenshot here, click, or paste (Ctrl+V / ⌘V)</p>
                 <p className="text-xs text-muted-foreground">PNG, JPG or WEBP · max 10 MB</p>
                 <input ref={inputRef} type="file" accept={ACCEPT.join(",")} className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" onClick={pasteFromClipboard} disabled={running}>
+                  <ClipboardPaste className="h-4 w-4" /> Paste image
+                </Button>
+                <span className="text-xs text-muted-foreground">Analysis starts as soon as an image is added.</span>
+              </div>
+              {pasteNote && <p className="mt-2 text-xs text-muted-foreground">{pasteNote}</p>}
               {err && <p className="mt-3 text-sm text-bad">{err}</p>}
               {preview && !result && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -184,8 +221,8 @@ export default function AnalyzePage() {
                 </Select>
               </div>
               <div className="mt-4 flex gap-2">
-                <Button onClick={analyze} disabled={!file || running}>
-                  {running && <Loader2 className="h-4 w-4 animate-spin" />} Analyze
+                <Button onClick={() => analyze()} disabled={!file || running}>
+                  {running && <Loader2 className="h-4 w-4 animate-spin" />} {result ? "Analyze again" : "Analyze"}
                 </Button>
                 {file && (
                   <Button variant="outline" onClick={clear} disabled={running}>
@@ -234,7 +271,8 @@ export default function AnalyzePage() {
               Results appear here: detected matrix, objects, verified rule, predicted cell and the selected answer.
             </Card>
           )}
-          {result?.type === "error" && <ErrorView result={result} preview={preview} onRetry={analyze} />}
+          {result?.type === "error" && <ErrorView result={result} preview={preview} onRetry={() => analyze()} />}
+          {result?.type === "ai-matrix" && <AiMatrixView result={result} preview={preview} />}
           {result?.type === "matrigma" && <MatrigmaView result={result} preview={preview} />}
           {result?.type === "map" && <MapView result={result} />}
         </div>
@@ -365,6 +403,7 @@ function MatrigmaView({ result, preview }: { result: MatrigmaResult; preview: st
       </Card>
 
       <ExplanationPanel explanation={s.explanation} narrative={result.narrative} />
+      {result.ai && <AiReadingCard ai={result.ai} title="Second opinion from Claude" />}
 
       <Card>
         <CardHeader>
@@ -455,5 +494,101 @@ function MapView({ result }: { result: MapResult }) {
         <pre className="mt-2 whitespace-pre-wrap rounded-md bg-muted p-3">{result.ocrText}</pre>
       </details>
     </>
+  );
+}
+
+function AiMatrixView({ result, preview }: { result: AiMatrixResult; preview: string | null }) {
+  const v = result.verdict;
+  return (
+    <>
+      <Alert
+        tone={v.status === "solved" ? "good" : "warn"}
+        title={v.status === "solved" ? `Answer ${v.answer} · Claude's confidence ${Math.round(v.confidence * 100)}%` : "Uncertain – inspect manually"}
+      >
+        {v.status === "solved"
+          ? "Read by Claude because the rule solver does not know this layout. Not verified by the rule solver: follow the explanation below and check it yourself."
+          : v.reason}{" "}
+        <span className="text-xs">({result.localProblem})</span>
+      </Alert>
+      {preview && (
+        <Card>
+          <CardContent className="pt-5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={preview} alt="Analysed screenshot" className="mx-auto max-h-96 rounded-md border border-border" />
+          </CardContent>
+        </Card>
+      )}
+      <AiReadingCard ai={result} title="How Claude read it" />
+    </>
+  );
+}
+
+function AiReadingCard({ ai, title }: { ai: AiReading; title: string }) {
+  const r = ai.reading;
+  const v = ai.verdict;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4" aria-hidden /> {title}
+        </CardTitle>
+        <CardDescription>
+          {v.status === "solved" ? `Suggests ${v.answer} (${Math.round(v.confidence * 100)}%)` : "No answer: " + v.reason} · {(ai.durationMs / 1000).toFixed(0)} s · not verified by the rule
+          solver
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <p>
+          {r.layout.rows}×{r.layout.cols} matrix, empty cell at row {r.layout.emptyRow}, column {r.layout.emptyCol}, {r.options.length} options.
+          {r.layout.notes && <span className="text-muted-foreground"> {r.layout.notes}</span>}
+        </p>
+        {r.explanation && <p className="font-medium">{r.explanation}</p>}
+        {r.rules.length > 0 && (
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Rules</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {r.rules.map((x, i) => (
+                <li key={i}>
+                  {x.holds ? "✓" : "✗"} {x.description} <span className="text-muted-foreground">({[x.part, x.appliesTo].filter(Boolean).join(", ")})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {r.prediction && (
+          <p>
+            <b>Missing cell:</b> {r.prediction}
+          </p>
+        )}
+        {r.options.length > 0 && (
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Every option checked</p>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {r.options.map((o) => (
+                <div key={o.label} className={cn("rounded-md border px-3 py-2 text-xs", o.matches ? "border-good bg-good/10" : "border-border")}>
+                  <b className="mr-1.5">{o.label}</b>
+                  {o.matches ? "fits" : o.difference || o.description}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {r.cells.length > 0 && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground">All {r.cells.length} cell descriptions</summary>
+            <ul className="mt-2 space-y-1">
+              {r.cells.map((c) => (
+                <li key={`${c.row}-${c.col}`}>
+                  <b>
+                    R{c.row}C{c.col}
+                  </b>{" "}
+                  {c.description}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </CardContent>
+    </Card>
   );
 }

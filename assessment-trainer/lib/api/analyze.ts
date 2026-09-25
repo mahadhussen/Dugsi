@@ -5,6 +5,7 @@ import { extractStatement } from "../map/ocr-text";
 import { getCalibration, saveScreenshotQuestion } from "../database/repo";
 import { prisma } from "../database/client";
 import type { VisionFailure } from "../vision/types";
+import { aiMatrixFallbackEnabled, readMatrixWithClaude } from "../ai/matrix-reading";
 
 export const ACCEPTED_TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
 export const MAX_BYTES = 10 * 1024 * 1024;
@@ -38,6 +39,24 @@ function failure(v: VisionFailure) {
     candidateBoxes: v.candidateBoxes ?? [],
     imageSize: v.imageSize ?? null,
   };
+}
+
+/**
+ * Claude fallback for matrix layouts the local pipeline cannot read. Returns
+ * null when the fallback is disabled; errors are folded into the result.
+ */
+async function aiMatrix(buffer: Buffer, mime: string, emit: Emit, why: string) {
+  if (!aiMatrixFallbackEnabled()) return null;
+  emit({ stage: "analyzing", status: "active", detail: `${why} Asking Claude to read the layout…` });
+  try {
+    const r = await readMatrixWithClaude(buffer, mime);
+    emit({ stage: "analyzing", status: "done", detail: `Claude read the matrix in ${(r.durationMs / 1000).toFixed(0)} s` });
+    emit({ stage: "validating", status: "done", detail: r.verdict.status === "solved" ? "one option fits" : "not certain, no answer given" });
+    return { ...r, error: null as string | null };
+  } catch (e) {
+    emit({ stage: "analyzing", status: "done", detail: `Claude fallback failed: ${(e as Error).message}` });
+    return { reading: null, verdict: null, durationMs: 0, error: (e as Error).message };
+  }
 }
 
 /**
@@ -77,7 +96,9 @@ export async function analyzeImage(buffer: Buffer, mime: string, mode: "auto" | 
         image: { buffer, ext },
       });
       emit({ stage: "validating", status: "done", detail: solution.validated ? "rules verified" : "not fully verified" });
+      const ai = solution.status === "solved" ? null : await aiMatrix(buffer, mime, emit, "The rule solver was not certain.");
       return {
+        ai: ai?.reading ? { reading: ai.reading, verdict: ai.verdict!, durationMs: ai.durationMs } : null,
         type: "matrigma" as const,
         questionId: saved.id,
         imageStored: saved.imageStored,
@@ -89,10 +110,13 @@ export async function analyzeImage(buffer: Buffer, mime: string, mode: "auto" | 
       };
     }
     emit({ stage: "detecting", status: "done", detail: vision.error });
-    if (mode === "matrigma") return failure(vision);
     // Auto mode: a screenshot without a matrix may be a MAP statement.
-    const ocr = await tryMap(buffer, mime, emit);
-    return ocr ?? failure(vision);
+    const ocr = mode === "auto" ? await tryMap(buffer, mime, emit) : null;
+    if (ocr) return ocr;
+    const ai = await aiMatrix(buffer, mime, emit, "This layout is unknown to the rule solver.");
+    if (ai?.reading) return { type: "ai-matrix" as const, reading: ai.reading, verdict: ai.verdict!, durationMs: ai.durationMs, localProblem: failure(vision).problem };
+    const f = failure(vision);
+    return ai?.error ? { ...f, detail: `${f.detail} · Claude fallback failed: ${ai.error}` } : f;
   }
   emit({ stage: "processing", status: "done" });
   const ocr = await tryMap(buffer, mime, emit);

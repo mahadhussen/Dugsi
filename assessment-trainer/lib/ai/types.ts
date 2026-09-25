@@ -7,9 +7,11 @@ import type { VisionResult } from "../vision/types";
  * Provider interfaces. The rest of the system depends only on these, so an AI
  * provider can be swapped (local, Anthropic, …) without other changes.
  *
- * Design rule: Matrigma answers are always decided by the verified solver.
- * AI providers may help *read* an image or *phrase* an explanation, but never
- * pick the answer.
+ * Design rule: whenever the local pipeline can read a matrix, the answer is
+ * decided by the verified solver; AI providers may only help *read* an image or
+ * *phrase* an explanation. For layouts it cannot read, an optional Claude
+ * reading (./matrix-reading.ts) is shown, labelled as unverified, and it
+ * abstains unless exactly one option fits with enough confidence.
  */
 export interface VisionProvider {
   readonly name: string;

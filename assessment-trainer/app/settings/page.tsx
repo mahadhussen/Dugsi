@@ -15,7 +15,7 @@ interface Settings {
 }
 interface Health {
   python: { ok: boolean; opencv?: string; error?: string };
-  providers: { vision: string; text: string; reasoning: string };
+  providers: { vision: string; text: string; reasoning: string; matrixFallback?: string };
 }
 
 export default function SettingsPage() {
@@ -62,7 +62,7 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Vision & AI providers</CardTitle>
-            <CardDescription>Configured with environment variables (see README). Matrix answers are always decided by the local rule verifier.</CardDescription>
+            <CardDescription>Configured with environment variables (see README). Matrices the local pipeline can read are always decided by the rule verifier.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             {!health ? (
@@ -77,6 +77,7 @@ export default function SettingsPage() {
                 <p>Vision: {health.providers.vision}</p>
                 <p>Text: {health.providers.text}</p>
                 <p>Reasoning: {health.providers.reasoning}</p>
+                {health.providers.matrixFallback && <p>Unknown matrix layouts: {health.providers.matrixFallback}</p>}
               </>
             )}
           </CardContent>
