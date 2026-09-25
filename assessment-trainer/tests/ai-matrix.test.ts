@@ -18,7 +18,7 @@ const reading = (over: Partial<AiMatrixReading> = {}): AiMatrixReading => ({
 const jsonCall = vi.fn(async () => reading());
 vi.mock("@/lib/ai/anthropic", async (orig) => ({ ...(await orig<object>()), jsonCall: (...a: unknown[]) => jsonCall(...(a as [])) }));
 
-const { judgeReading } = await import("@/lib/ai/matrix-reading");
+const { judgeReading, combineVerdicts } = await import("@/lib/ai/matrix-reading");
 const { POST: analyze } = await import("@/app/api/analyze/route");
 
 describe("Claude reading of unknown matrix layouts", () => {
@@ -32,6 +32,15 @@ describe("Claude reading of unknown matrix layouts", () => {
     expect(judgeReading(reading({ answer: "5" })).status).toBe("uncertain"); // disagrees with the option check
     expect(judgeReading(reading({ isMatrixQuestion: false })).status).toBe("uncertain");
     expect(judgeReading(reading({ rules: [{ appliesTo: "rows", part: "whole", description: "x", holds: false }] })).status).toBe("uncertain");
+  });
+
+  it("combines independent readings: all must agree and be certain", () => {
+    const ok = judgeReading(reading());
+    expect(combineVerdicts([ok, ok, ok])).toMatchObject({ status: "solved", answer: "7" });
+    const other = judgeReading(reading({ answer: "5", options: reading().options.map((o) => ({ ...o, matches: o.label === "5" })) }));
+    expect(combineVerdicts([ok, other, ok])).toMatchObject({ status: "uncertain", answer: null });
+    expect(combineVerdicts([ok, judgeReading(reading({ confidence: 0.3 })), ok]).status).toBe("uncertain");
+    expect(combineVerdicts([]).status).toBe("uncertain");
   });
 
   describe("analyze route", () => {
@@ -59,7 +68,8 @@ describe("Claude reading of unknown matrix layouts", () => {
       const r = await upload();
       expect(r.type).toBe("ai-matrix");
       expect(r.verdict).toMatchObject({ status: "solved", answer: "7" });
-      expect(jsonCall).toHaveBeenCalled();
+      expect(r.votes).toHaveLength(3);
+      expect(jsonCall).toHaveBeenCalledTimes(3);
     }, 60_000);
 
     it("keeps the normal error when the fallback is switched off", async () => {
@@ -71,11 +81,21 @@ describe("Claude reading of unknown matrix layouts", () => {
       delete process.env.AI_MATRIX_FALLBACK;
     }, 60_000);
 
+    it("gives no answer when the independent readings disagree", async () => {
+      jsonCall.mockClear();
+      jsonCall.mockResolvedValueOnce(reading({ answer: "5", options: reading().options.map((o) => ({ ...o, matches: o.label === "5" })) }));
+      const r = await upload();
+      expect(r.type).toBe("ai-matrix");
+      expect(r.verdict).toMatchObject({ status: "uncertain", answer: null });
+    }, 60_000);
+
     it("reports a failed Claude call without inventing an answer", async () => {
-      jsonCall.mockRejectedValueOnce(new Error("network down"));
+      jsonCall.mockRejectedValue(new Error("network down"));
       const r = await upload();
       expect(r.type).toBe("error");
       expect(r.detail).toContain("network down");
+      jsonCall.mockReset();
+      jsonCall.mockImplementation(async () => reading());
     }, 60_000);
   });
 });

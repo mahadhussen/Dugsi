@@ -50,12 +50,12 @@ async function aiMatrix(buffer: Buffer, mime: string, emit: Emit, why: string) {
   emit({ stage: "analyzing", status: "active", detail: `${why} Asking Claude to read the layout…` });
   try {
     const r = await readMatrixWithClaude(buffer, mime);
-    emit({ stage: "analyzing", status: "done", detail: `Claude read the matrix in ${(r.durationMs / 1000).toFixed(0)} s` });
+    emit({ stage: "analyzing", status: "done", detail: `${r.votes.length} independent Claude readings in ${(r.durationMs / 1000).toFixed(0)} s: ${r.votes.map((v) => v.answer ?? "unsure").join(", ")}` });
     emit({ stage: "validating", status: "done", detail: r.verdict.status === "solved" ? "one option fits" : "not certain, no answer given" });
     return { ...r, error: null as string | null };
   } catch (e) {
     emit({ stage: "analyzing", status: "done", detail: `Claude fallback failed: ${(e as Error).message}` });
-    return { reading: null, verdict: null, durationMs: 0, error: (e as Error).message };
+    return { reading: null, verdict: null, durationMs: 0, votes: null, error: (e as Error).message };
   }
 }
 
@@ -98,7 +98,7 @@ export async function analyzeImage(buffer: Buffer, mime: string, mode: "auto" | 
       emit({ stage: "validating", status: "done", detail: solution.validated ? "rules verified" : "not fully verified" });
       const ai = solution.status === "solved" ? null : await aiMatrix(buffer, mime, emit, "The rule solver was not certain.");
       return {
-        ai: ai?.reading ? { reading: ai.reading, verdict: ai.verdict!, durationMs: ai.durationMs } : null,
+        ai: ai?.reading ? { reading: ai.reading, verdict: ai.verdict!, durationMs: ai.durationMs, votes: ai.votes! } : null,
         type: "matrigma" as const,
         questionId: saved.id,
         imageStored: saved.imageStored,
@@ -114,7 +114,7 @@ export async function analyzeImage(buffer: Buffer, mime: string, mode: "auto" | 
     const ocr = mode === "auto" ? await tryMap(buffer, mime, emit) : null;
     if (ocr) return ocr;
     const ai = await aiMatrix(buffer, mime, emit, "This layout is unknown to the rule solver.");
-    if (ai?.reading) return { type: "ai-matrix" as const, reading: ai.reading, verdict: ai.verdict!, durationMs: ai.durationMs, localProblem: failure(vision).problem };
+    if (ai?.reading) return { type: "ai-matrix" as const, reading: ai.reading, verdict: ai.verdict!, durationMs: ai.durationMs, votes: ai.votes!, localProblem: failure(vision).problem };
     const f = failure(vision);
     return ai?.error ? { ...f, detail: `${f.detail} · Claude fallback failed: ${ai.error}` } : f;
   }

@@ -269,6 +269,13 @@ The UI labels this as an unverified AI reading, shows the rules and the
 option-by-option check, and gives **no answer** unless exactly one option fits,
 the answer agrees with that check and the confidence is at least 60 %. Set
 `AI_MATRIX_FALLBACK=off` to never send matrix screenshots to Claude.
+Each image is read `AI_MATRIX_VOTES` times independently (default 3); an answer
+is only shown when every reading is certain and all name the same option, so a
+disagreement gives "Uncertain" instead of a possibly wrong answer.
+
+Tick **Let me answer first** on the Analyze page to use screenshots from other
+practice sites as training: the solution stays hidden until you pick an option
+(keys 1–8), then your choice is compared with it.
 
 Analysis starts as soon as an image is dropped, chosen or pasted (Ctrl+V / ⌘V
 anywhere on the page, or the *Paste image* button).

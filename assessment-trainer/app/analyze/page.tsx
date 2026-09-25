@@ -44,7 +44,7 @@ type MatrigmaResult = {
   unknownObjects: number;
   ai: AiReading | null;
 };
-type AiReading = { reading: AiMatrixReading; verdict: AiMatrixVerdict; durationMs: number };
+type AiReading = { reading: AiMatrixReading; verdict: AiMatrixVerdict; durationMs: number; votes: { answer: string | null; confidence: number }[] };
 type AiMatrixResult = { type: "ai-matrix"; localProblem: string } & AiReading;
 type MapResult = { type: "map"; statementId: string; ocrText: string; ocrConfidence: number; analysis: StatementAnalysis; candidates: string[] };
 type ErrorResult = {
@@ -75,6 +75,12 @@ export default function AnalyzePage() {
   }, [preview]);
 
   const [pasteNote, setPasteNote] = useState<string | null>(null);
+  const [answerFirst, setAnswerFirst] = useState(false);
+  useEffect(() => {
+    try {
+      setAnswerFirst(localStorage.getItem("at-answer-first") === "1");
+    } catch {}
+  }, []);
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const runningRef = useRef(false);
@@ -212,6 +218,23 @@ export default function AnalyzePage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={preview} alt="Screenshot preview" className="mt-4 w-full rounded-md border border-border" />
               )}
+              <label className="mt-4 flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={answerFirst}
+                  onChange={(e) => {
+                    setAnswerFirst(e.target.checked);
+                    try {
+                      localStorage.setItem("at-answer-first", e.target.checked ? "1" : "0");
+                    } catch {}
+                  }}
+                />
+                <span>
+                  Let me answer first
+                  <span className="block text-xs text-muted-foreground">Practice mode: choose your answer, then see the solution and explanation.</span>
+                </span>
+              </label>
               <div className="mt-4 space-y-1.5">
                 <Label htmlFor="mode">Question type</Label>
                 <Select id="mode" value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
@@ -272,8 +295,11 @@ export default function AnalyzePage() {
             </Card>
           )}
           {result?.type === "error" && <ErrorView result={result} preview={preview} onRetry={() => analyze()} />}
-          {result?.type === "ai-matrix" && <AiMatrixView result={result} preview={preview} />}
-          {result?.type === "matrigma" && <MatrigmaView result={result} preview={preview} />}
+          {(result?.type === "ai-matrix" || result?.type === "matrigma") && (
+            <AnswerFirst key={result.type === "matrigma" ? result.questionId : result.durationMs} enabled={answerFirst} result={result} preview={preview}>
+              {result.type === "ai-matrix" ? <AiMatrixView result={result} preview={preview} /> : <MatrigmaView result={result} preview={preview} />}
+            </AnswerFirst>
+          )}
           {result?.type === "map" && <MapView result={result} />}
         </div>
       </div>
@@ -533,8 +559,9 @@ function AiReadingCard({ ai, title }: { ai: AiReading; title: string }) {
           <Sparkles className="h-4 w-4" aria-hidden /> {title}
         </CardTitle>
         <CardDescription>
-          {v.status === "solved" ? `Suggests ${v.answer} (${Math.round(v.confidence * 100)}%)` : "No answer: " + v.reason} · {(ai.durationMs / 1000).toFixed(0)} s · not verified by the rule
-          solver
+          {v.status === "solved" ? `Suggests ${v.answer} (${Math.round(v.confidence * 100)}%)` : "No answer: " + v.reason} ·{" "}
+          {ai.votes.length > 1 ? `${ai.votes.length} independent readings: ${ai.votes.map((x) => x.answer ?? "unsure").join(", ")} · ` : ""}
+          {(ai.durationMs / 1000).toFixed(0)} s · not verified by the rule solver
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
@@ -590,5 +617,63 @@ function AiReadingCard({ ai, title }: { ai: AiReading; title: string }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Practice mode: hide the solution until the user has picked an option. */
+function AnswerFirst({ enabled, result, preview, children }: { enabled: boolean; result: MatrigmaResult | AiMatrixResult; preview: string | null; children: React.ReactNode }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const labels =
+    result.type === "matrigma" ? result.problem.options.map((_, i) => OPTION_LABELS[i]) : result.reading.options.map((o) => o.label.trim()).filter(Boolean);
+  const answer =
+    result.type === "matrigma"
+      ? result.solution.status === "solved" && result.solution.answer !== null
+        ? OPTION_LABELS[result.solution.answer]
+        : null
+      : result.verdict.answer;
+  useEffect(() => {
+    if (!enabled || picked) return;
+    const onKey = (e: KeyboardEvent) => {
+      const i = Number(e.key) - 1;
+      const t = e.target;
+      const typing = t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && !["checkbox", "radio", "button", "file"].includes(t.type));
+      if (i >= 0 && i < labels.length && !typing) setPicked(labels[i]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [enabled, picked, labels]);
+  if (!enabled || picked === "__reveal") return <>{children}</>;
+  if (!picked)
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Your answer first</CardTitle>
+          <CardDescription>Which option completes the matrix? The solution stays hidden until you choose (keys 1–{labels.length}).</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {preview && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt="Question" className="mx-auto max-h-96 rounded-md border border-border" />
+          )}
+          <div className="flex flex-wrap gap-2">
+            {labels.map((l) => (
+              <Button key={l} variant="outline" onClick={() => setPicked(l)} className="min-w-12">
+                {l}
+              </Button>
+            ))}
+            <Button variant="ghost" onClick={() => setPicked("__reveal")}>
+              Just show the solution
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  return (
+    <>
+      <Alert tone={answer === null ? "warn" : picked === answer ? "good" : "bad"} title={answer === null ? `You chose ${picked}` : picked === answer ? `Correct: ${answer}` : `You chose ${picked}, the solution is ${answer}`}>
+        {answer === null ? "The analysis was not certain enough to give a reliable answer, so check the explanation below yourself." : "Read the explanation below to see the rule."}
+      </Alert>
+      {children}
+    </>
   );
 }

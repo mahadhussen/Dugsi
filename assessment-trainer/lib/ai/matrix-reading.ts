@@ -121,9 +121,33 @@ export function judgeReading(r: AiMatrixReading): AiMatrixVerdict {
   return { answer, confidence, status: "solved", reason: null };
 }
 
-export async function readMatrixWithClaude(image: Buffer, mime: string): Promise<{ reading: AiMatrixReading; verdict: AiMatrixVerdict; durationMs: number }> {
-  const t0 = Date.now();
-  const reading = await jsonCall<AiMatrixReading>(
+/**
+ * Combine independent readings: an answer is shown only when every reading that
+ * finished is confident and they all name the same option. Any disagreement
+ * turns the result into "uncertain" (fewer answers, but far fewer wrong ones).
+ */
+export function combineVerdicts(verdicts: AiMatrixVerdict[]): AiMatrixVerdict {
+  if (!verdicts.length) return { answer: null, confidence: 0, status: "uncertain", reason: "No reading finished." };
+  const answers = verdicts.map((v) => v.answer);
+  const confidence = Math.min(...verdicts.map((v) => v.confidence));
+  if (verdicts.some((v) => v.status !== "solved")) {
+    const firstReason = verdicts.find((v) => v.status !== "solved")?.reason ?? "";
+    return { answer: null, confidence, status: "uncertain", reason: verdicts.length > 1 ? `Not all ${verdicts.length} independent readings were certain. ${firstReason}` : firstReason };
+  }
+  if (new Set(answers).size > 1) {
+    return { answer: null, confidence, status: "uncertain", reason: `Independent readings disagree (${answers.join(", ")}), so no answer is given.` };
+  }
+  return { answer: answers[0], confidence, status: "solved", reason: null };
+}
+
+/** Number of independent readings per image (AI_MATRIX_VOTES, default 3, max 5). */
+export function voteCount(): number {
+  const n = Number(process.env.AI_MATRIX_VOTES ?? 3);
+  return Number.isFinite(n) ? Math.max(1, Math.min(5, Math.round(n))) : 3;
+}
+
+async function readOnce(image: Buffer, mime: string): Promise<AiMatrixReading> {
+  return jsonCall<AiMatrixReading>(
     [
       { type: "image", source: { type: "base64", media_type: mime as "image/png" | "image/jpeg" | "image/webp", data: image.toString("base64") } },
       { type: "text", text: MATRIX_PROMPT },
@@ -131,5 +155,19 @@ export async function readMatrixWithClaude(image: Buffer, mime: string): Promise
     SCHEMA as unknown as Record<string, unknown>,
     { effort: "high", maxTokens: 16000 },
   );
-  return { reading, verdict: judgeReading(reading), durationMs: Date.now() - t0 };
+}
+
+export async function readMatrixWithClaude(
+  image: Buffer,
+  mime: string,
+): Promise<{ reading: AiMatrixReading; verdict: AiMatrixVerdict; durationMs: number; votes: { answer: string | null; confidence: number }[] }> {
+  const t0 = Date.now();
+  const settled = await Promise.allSettled(Array.from({ length: voteCount() }, () => readOnce(image, mime)));
+  const readings = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  if (!readings.length) throw (settled.find((r) => r.status === "rejected") as PromiseRejectedResult).reason;
+  const verdicts = readings.map(judgeReading);
+  const verdict = combineVerdicts(verdicts);
+  // Show the reading that matches the combined answer (or the first one).
+  const shown = readings[Math.max(0, verdicts.findIndex((v) => v.answer === verdict.answer))];
+  return { reading: shown, verdict, durationMs: Date.now() - t0, votes: verdicts.map((v) => ({ answer: v.answer, confidence: v.confidence })) };
 }
