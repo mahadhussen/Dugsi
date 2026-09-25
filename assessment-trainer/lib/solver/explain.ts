@@ -1,6 +1,7 @@
 import type { MatrixProblem } from "../matrigma/types";
 import { OPTION_LABELS } from "../matrigma/types";
 import type { Explanation, Solution } from "./types";
+import { GLYPH_ATTR_LABELS } from "./attributes";
 
 const ATTR_LABEL: Record<string, string> = {
   count: "number of objects",
@@ -17,6 +18,8 @@ const ATTR_LABEL: Record<string, string> = {
   lines: "background lines",
   bars: "thick bars",
   dots: "dots",
+  points: "dots",
+  segments: "lines",
   petalCount: "number of petals",
   petalStart: "counter-clockwise end of the flower",
   petalEnd: "clockwise end of the flower",
@@ -31,7 +34,7 @@ export function questionTypeLabel(p: MatrixProblem): string {
 export function buildExplanation(problem: MatrixProblem, s: Solution): Explanation {
   const informative = s.rules.filter((r) => r.informative);
   // "Unchanged: no dots" is noise when a texture layer is simply absent.
-  const constants = s.rules.filter((r) => !r.informative && !(["lines", "bars", "dots"].includes(r.attribute) && /= none$/.test(r.prediction ?? "")));
+  const constants = s.rules.filter((r) => !r.informative && !(["lines", "bars", "dots", "points", "segments"].includes(r.attribute) && /= none$/.test(r.prediction ?? "")));
   const rules = informative.map((r) => r.text);
   if (constants.length) {
     const byAxis = new Map<string, string[]>();
@@ -42,7 +45,7 @@ export function buildExplanation(problem: MatrixProblem, s: Solution): Explanati
         rules.push(`Within ${where} all figures are identical.`);
         continue;
       }
-      const labels = [...new Set(attrs.map((a) => ATTR_LABEL[a] ?? a))];
+      const labels = [...new Set(attrs.map((a) => ATTR_LABEL[a] ?? GLYPH_ATTR_LABELS[a] ?? a))];
       rules.push(`Unchanged within ${where}: ${labels.join(", ")}.`);
     }
   }

@@ -29,9 +29,10 @@ describe("adaptive ability test", () => {
 
   it("recovers a simulated ability within about half a logit after 20 questions", () => {
     for (const truth of [-1.5, 0, 1.2]) {
-      const errs = [1, 2, 3, 4, 5, 6].map((k) => estimateAbility(simulate(truth, 20, k * 977)).theta - truth);
+      // 40 simulated test takers: a few would be noisy; EAP pulls slightly towards the middle.
+      const errs = Array.from({ length: 40 }, (_, k) => estimateAbility(simulate(truth, 20, (k + 1) * 977)).theta - truth);
       const mean = errs.reduce((a, b) => a + b, 0) / errs.length;
-      expect(Math.abs(mean)).toBeLessThan(0.6);
+      expect(Math.abs(mean)).toBeLessThan(0.4);
     }
   });
 
@@ -91,6 +92,20 @@ describe("growing petal questions", () => {
     const sameCount = q.problem.options.filter((o, i) => i !== q.correctAnswer && o.petals!.length === correct);
     expect(sameCount.length).toBeGreaterThan(0);
     expect(s.answer).toBe(q.correctAnswer);
+  });
+});
+
+describe("new question types (glyphs, lines and dots, overlay anywhere)", () => {
+  const cats = ["linesdots", "hatch", "swap", "dotpath", "orbit", "emblem", "strip", "lined", "bands"] as const;
+  it.each(cats)("%s: generated at every level and solved with the intended answer", (category) => {
+    for (const d of ["easy", "medium", "hard", "expert"] as const) {
+      for (let i = 0; i < 12; i++) {
+        const q = generateQuestion({ category, difficulty: d, seed: 4400 + i * 29 });
+        const s = solveMatrix(q.problem);
+        expect(s.answer).toBe(q.correctAnswer);
+        expect(s.explanation.rules.length).toBeGreaterThan(0);
+      }
+    }
   });
 });
 

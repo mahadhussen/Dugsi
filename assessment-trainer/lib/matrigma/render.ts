@@ -1,6 +1,7 @@
 import type { Cell, CellPattern, GeneratedMatrixQuestion, MatrixObject, MatrixProblem } from "./types";
 import { OPTION_LABELS } from "./types";
 import { rotatePoint, shapePolygon } from "./geometry";
+import { glyphSvg } from "./glyphs";
 
 /**
  * Pure SVG-string renderer. Used by the React UI (inline SVG), by the test-data
@@ -124,8 +125,28 @@ function petalsSvg(petals: number[], x0: number, y0: number, size: number): stri
     .join("");
 }
 
+const GRAPH_XY: Record<string, [number, number]> = { tl: [0.25, 0.25], tr: [0.75, 0.25], bl: [0.25, 0.75], br: [0.75, 0.75] };
+const SEGMENT_ENDS: Record<string, [string, string]> = { top: ["tl", "tr"], bottom: ["bl", "br"], left: ["tl", "bl"], right: ["tr", "br"], d: ["bl", "tr"], a: ["tl", "br"] };
+
+/** Corner dots and the thin lines between corners. */
+function graphSvg(g: { points: string[]; segments: string[] }, x0: number, y0: number, size: number): string {
+  const at = (p: string) => [x0 + GRAPH_XY[p][0] * size, y0 + GRAPH_XY[p][1] * size];
+  const sw = Math.max(1.5, size * 0.018);
+  const lines = g.segments.map((s) => {
+    const [a, b] = SEGMENT_ENDS[s];
+    const [ax, ay] = at(a);
+    const [bx, by] = at(b);
+    return `<line x1="${fmt(ax)}" y1="${fmt(ay)}" x2="${fmt(bx)}" y2="${fmt(by)}" stroke="${INK}" stroke-width="${fmt(sw)}"/>`;
+  });
+  const dots = g.points.map((p) => {
+    const [x, y] = at(p);
+    return `<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(size * 0.045)}" fill="${INK}"/>`;
+  });
+  return lines.join("") + dots.join("");
+}
+
 export function cellSvgContent(cell: Cell, x0: number, y0: number, size: number, uid: string): string {
-  const pattern = (cell.pattern ? patternSvg(cell.pattern, x0, y0, size, uid) : "") + (cell.blocks?.length ? blocksSvg(cell.blocks, x0, y0, size) : "") + (cell.petals?.length ? petalsSvg(cell.petals, x0, y0, size) : "");
+  const pattern = (cell.pattern ? patternSvg(cell.pattern, x0, y0, size, uid) : "") + (cell.blocks?.length ? blocksSvg(cell.blocks, x0, y0, size) : "") + (cell.petals?.length ? petalsSvg(cell.petals, x0, y0, size) : "") + (cell.graph ? graphSvg(cell.graph, x0, y0, size) : "") + (cell.glyph ? glyphSvg(cell.glyph, x0, y0, size, uid) : "");
   return pattern + cell.objects.map((o, i) => objectSvg(o, x0, y0, size, `${uid}_${i}`)).join("");
 }
 

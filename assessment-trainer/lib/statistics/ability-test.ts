@@ -27,6 +27,15 @@ const CATEGORY_OFFSET: Partial<Record<MatrigmaCategory, number>> = {
   overlay: 0.4,
   rolling: 0.2,
   petals: 0.1,
+  linesdots: 0.3,
+  hatch: 0.4,
+  swap: 0.3,
+  dotpath: 0.3,
+  orbit: 0.1,
+  emblem: 0.2,
+  strip: -0.3,
+  lined: 0.1,
+  bands: 0.4,
   "multi-rule": 0.5,
 };
 

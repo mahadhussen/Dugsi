@@ -269,3 +269,81 @@ def is_texture_cell(gray: np.ndarray, box: tuple[int, int, int, int]) -> bool:
         if classify(c, size)[0] == "line":
             thin_lines += 1
     return thin_lines >= 4
+
+
+def has_container(gray: np.ndarray, box: tuple[int, int, int, int]) -> bool:
+    """True if a large figure (over 60 % of the cell) encloses other figures,
+    e.g. small shapes moving inside a big disc. Ordinary matrix cells hold
+    figures side by side, never inside each other."""
+    x, y, w, h = box
+    size = float(min(w, h))
+    inset = max(3, int(round(0.04 * size)))
+    crop = gray[y + inset:y + h - inset, x + inset:x + w - inset]
+    if crop.size == 0 or float(crop.max()) - float(crop.min()) < 40:
+        return False
+    _, bin_ = cv2.threshold(crop, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    contours, hierarchy = cv2.findContours(bin_, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+    if hierarchy is None:
+        return False
+    ch, cw = bin_.shape
+    min_area = 0.0015 * size * size
+    boxes = [cv2.boundingRect(c) for i, c in enumerate(contours) if hierarchy[0][i][3] == -1 and cv2.contourArea(c) >= min_area]
+    # Mid-grey filled figures (e.g. squares of a rolling-block figure):
+    # ordinary shapes are black, white or half-filled.
+    for i, c in enumerate(contours):
+        if hierarchy[0][i][3] != -1 or cv2.contourArea(c) < 4 * min_area:
+            continue
+        mask = np.zeros_like(bin_)
+        cv2.drawContours(mask, [c], -1, 255, -1)
+        sel = (mask > 0) & (bin_ > 0)
+        if not np.count_nonzero(sel):
+            continue
+        # Median grey level relative to the cell's contrast; outlines stay dark.
+        lo, hi = float(crop.min()), float(crop.max())
+        rel = (float(np.median(crop[sel])) - lo) / max(1.0, hi - lo)
+        bx, by, bw, bh = cv2.boundingRect(c)
+        # Only filled figures count: blurred outlines can look grey but cover little of their box.
+        if 0.2 < rel < 0.8 and np.count_nonzero(sel) / float(bw * bh) > 0.5:
+            return True
+    # Figures wider or taller than ordinary shapes ever get (e.g. long lines through a shape).
+    for bx, by, bw, bh in boxes:
+        if not (bx <= 0 or by <= 0 or bx + bw >= cw or by + bh >= ch) and (bw > 0.8 * size or bh > 0.8 * size):
+            return True
+    for bx, by, bw, bh in boxes:
+        if bw < 0.6 * size or bh < 0.6 * size or bx <= 0 or by <= 0 or bx + bw >= cw or by + bh >= ch:
+            continue
+        for ox, oy, ow, oh in boxes:
+            if (ox, oy, ow, oh) != (bx, by, bw, bh) and ox > bx and oy > by and ox + ow < bx + bw and oy + oh < by + bh:
+                return True
+    return False
+
+
+def has_open_wire(gray: np.ndarray, box: tuple[int, int, int, int]) -> bool:
+    """True if the cell contains a thin, open stroke (no enclosed hole) that
+    spans a large part of the cell, e.g. the lines of a lines-and-dots puzzle.
+    Shapes in ordinary matrix questions are closed outlines or solid."""
+    x, y, w, h = box
+    size = float(min(w, h))
+    inset = max(3, int(round(0.04 * size)))
+    crop = gray[y + inset:y + h - inset, x + inset:x + w - inset]
+    if crop.size == 0 or float(crop.max()) - float(crop.min()) < 40:
+        return False
+    _, bin_ = cv2.threshold(crop, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    contours, hierarchy = cv2.findContours(bin_, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+    if hierarchy is None:
+        return False
+    ch, cw = bin_.shape
+    min_hole = max(4.0, 0.0006 * size * size)
+    has_hole = {hierarchy[0][i][3] for i, c in enumerate(contours) if hierarchy[0][i][3] != -1 and cv2.contourArea(c) >= min_hole}
+    for i, c in enumerate(contours):
+        if hierarchy[0][i][3] != -1 or i in has_hole:
+            continue
+        bx, by, bw, bh = cv2.boundingRect(c)
+        if bx <= 0 or by <= 0 or bx + bw >= cw or by + bh >= ch:
+            continue  # border remnant
+        mask = np.zeros_like(bin_)
+        cv2.drawContours(mask, [c], -1, 255, -1)
+        ink = float(np.count_nonzero(mask & bin_))
+        if max(bw, bh) > 0.35 * size and ink / (bw + bh) < 0.04 * size:
+            return True
+    return False

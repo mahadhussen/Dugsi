@@ -13,7 +13,7 @@ import { toProblem } from "../lib/vision/problem";
 import { solveMatrix } from "../lib/solver/solve";
 import { generateQuestion } from "../lib/matrigma/generator";
 import { renderScreenshotSvg } from "../lib/matrigma/render";
-import { MATRIGMA_CATEGORIES, type Difficulty, type Cell } from "../lib/matrigma/types";
+import { MATRIGMA_CATEGORIES, type Difficulty, type Cell, type MatrigmaCategory } from "../lib/matrigma/types";
 import { rotationDistance } from "../lib/matrigma/geometry";
 
 export async function decode(buf: Buffer) {
@@ -60,7 +60,7 @@ export async function fixtureAccuracy(verbose = false) {
   return stats;
 }
 
-export async function endToEnd(per: number, seedBase = 91000, verbose = false) {
+export async function endToEnd(per: number, seedBase = 91000, verbose = false, categories: readonly MatrigmaCategory[] = MATRIGMA_CATEGORIES) {
   const variants = [
     { name: "png", scale: 1, jpeg: false, chrome: true },
     { name: "jpeg q70", scale: 1, jpeg: true, chrome: true },
@@ -68,7 +68,7 @@ export async function endToEnd(per: number, seedBase = 91000, verbose = false) {
   ];
   const diffs: Difficulty[] = ["easy", "medium", "hard", "expert"];
   const tot = { n: 0, correct: 0, wrong: 0, abstain: 0, fail: 0 };
-  for (const category of MATRIGMA_CATEGORIES)
+  for (const category of categories)
     for (const v of variants)
       for (let i = 0; i < per; i++) {
         const q = generateQuestion({ category, difficulty: category === "multi-rule" ? "hard" : diffs[i % 4], seed: seedBase + i * 613 });

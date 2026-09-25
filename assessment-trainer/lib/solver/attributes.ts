@@ -1,4 +1,6 @@
 import type { CellFeatures } from "./features";
+import type { MatrixProblem } from "../matrigma/types";
+import { GLYPH_PROPS } from "../matrigma/glyphs";
 
 export type AttrKind = "numeric" | "angle" | "category" | "set";
 export type AttrValue = number | string;
@@ -14,10 +16,19 @@ export type RuleKind =
   | "union"
   | "difference"
   | "xor"
-  | "intersection";
+  | "intersection"
+  /** Every cell of a row/column has a different value (several options may fit). */
+  | "alldiff"
+  /** One cell (any position) is the overlay of the other two. */
+  | "union_any";
 
 export interface AttrSpec {
-  name: "count" | "shape" | "sides" | "fill" | "size" | "rotation" | "positions" | "objects" | "shapes" | "slotCol" | "slotRow" | "lines" | "bars" | "dots" | "petalCount" | "petalStart" | "petalEnd";
+  /** Built-in attribute name, or "g:<prop>" for a glyph property. */
+  name: string;
+  /** Human-readable value (glyph properties). */
+  format?: (v: AttrValue) => string;
+  /** Phrase for a progression step (glyph properties). */
+  describeStep?: (d: number) => string;
   /** Fixed modular period for "angle" attributes that are not rotations. */
   period?: number;
   label: string;
@@ -140,7 +151,7 @@ export const ATTRIBUTES: AttrSpec[] = [
     kind: "set",
     weight: 1,
     tol: 0,
-    kinds: ["constant", "distribute", "alternation", ...SET_OPS],
+    kinds: ["constant", "distribute", "alternation", ...SET_OPS, "union_any"],
     get: (f) => f.lines,
   },
   {
@@ -158,8 +169,27 @@ export const ATTRIBUTES: AttrSpec[] = [
     kind: "set",
     weight: 1,
     tol: 0,
-    kinds: ["constant", "distribute", "alternation", ...SET_OPS],
+    kinds: ["constant", "distribute", "alternation", ...SET_OPS, "union_any"],
     get: (f) => f.dots,
+  },
+  // Lines-and-dots cells.
+  {
+    name: "segments",
+    label: "lines",
+    kind: "set",
+    weight: 1,
+    tol: 0,
+    kinds: ["constant", "distribute", "alternation", ...SET_OPS],
+    get: (f) => f.segments,
+  },
+  {
+    name: "points",
+    label: "dots",
+    kind: "set",
+    weight: 1,
+    tol: 0,
+    kinds: ["constant", "distribute", "alternation", ...SET_OPS],
+    get: (f) => f.points,
   },
   // Growing-petal flowers.
   {
@@ -195,7 +225,7 @@ export const ATTRIBUTES: AttrSpec[] = [
 
 // Object attributes say nothing about pure texture cells (0 objects everywhere
 // would "prove" rules like 0 + 0 = 0), so they are skipped for those cells.
-const LAYER_ATTRS = new Set(["lines", "bars", "dots", "petalCount", "petalStart", "petalEnd"]);
+const LAYER_ATTRS = new Set(["lines", "bars", "dots", "petalCount", "petalStart", "petalEnd", "points", "segments"]);
 for (const a of ATTRIBUTES) {
   if (LAYER_ATTRS.has(a.name)) continue;
   const get = a.get;
@@ -214,4 +244,37 @@ export const RULE_COMPLEXITY: Record<RuleKind, number> = {
   difference: 2.5,
   xor: 2.5,
   intersection: 3,
+  alldiff: 2.2,
+  union_any: 2.8,
 };
+
+/** Attribute specs for the glyph properties used in a problem. */
+export function glyphAttributes(problem: MatrixProblem): AttrSpec[] {
+  const g = [...problem.cells, ...problem.options].find((c) => c?.glyph)?.glyph;
+  if (!g) return [];
+  return GLYPH_PROPS[g.kind].map((p) => ({
+    name: `g:${p.prop}`,
+    label: p.label,
+    kind: p.kind,
+    period: p.period,
+    weight: 1,
+    tol: p.tol,
+    format: p.format,
+    describeStep: p.describeStep,
+    kinds:
+      p.kind === "numeric"
+        ? ["constant", "progression", "progression_line", "distribute", "alternation"]
+        : p.kind === "angle"
+          ? ["constant", "progression", "distribute", "alternation"]
+          : ["constant", "distribute", "alternation", ...(p.alldiff ? (["alldiff"] as RuleKind[]) : [])],
+    get: (f: CellFeatures) => {
+      const v = f.glyph?.[p.prop];
+      return v === undefined ? null : v;
+    },
+  }));
+}
+
+/** Labels of all glyph properties, keyed by attribute name. */
+export const GLYPH_ATTR_LABELS: Record<string, string> = Object.fromEntries(
+  Object.values(GLYPH_PROPS).flatMap((ps) => ps.map((p) => [`g:${p.prop}`, p.label])),
+);

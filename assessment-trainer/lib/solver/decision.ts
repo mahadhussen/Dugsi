@@ -5,6 +5,7 @@ import { describeTransformRule, fitAlternation, fitTransformRules, type Transfor
 import type { ExplainedRule } from "./types";
 import type { Axis } from "./lines";
 import { fitRolling } from "./rolling";
+import { fitSwap } from "./swap";
 
 /**
  * Decision engine: builds the most complete *consistent* explanation.
@@ -106,6 +107,8 @@ export function collectCandidates(problem: MatrixProblem, missing: number, attri
   }
   const alt = fitAlternation(problem, missing);
   if (alt) out.push(fromTransform(alt, "alternation"));
+  const sw = fitSwap(problem, missing);
+  if (sw) out.push({ key: "cell/swap/row", explained: sw.explained, optionScores: sw.optionScores, coverage: CELL_COVERAGE, complexity: 2.5, validatedLines: sw.validated.length, weight: 2 });
   for (const r of fitRolling(problem, missing)) {
     out.push({
       key: `cell/rolling${r.step}/${r.axis}`,

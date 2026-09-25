@@ -2,6 +2,7 @@ import type { MatrixProblem } from "../matrigma/types";
 import { missingIndex, OPTION_LABELS } from "../matrigma/types";
 import { cellFeatures } from "./features";
 import { fitAttributeRules, selectBestPerAttribute } from "./rules";
+import { ATTRIBUTES, glyphAttributes } from "./attributes";
 import { collectCandidates, coveredBy, decide } from "./decision";
 import { STRATEGIES, type StrategyContext } from "./strategies";
 import { synthesizeCell } from "./synthesize";
@@ -37,7 +38,7 @@ export function solveMatrix(problem: MatrixProblem, opts: SolveOptions = {}): So
   }
   const features = problem.cells.map((c) => (c ? cellFeatures(c) : null));
   const optionFeatures = problem.options.map(cellFeatures);
-  const attributeRules = fitAttributeRules({ problem, features, optionFeatures, missing });
+  const attributeRules = fitAttributeRules({ problem, features, optionFeatures, missing }, [...ATTRIBUTES, ...glyphAttributes(problem)]);
   const ctx: StrategyContext = { problem, missing, features, optionFeatures, attributeRules };
 
   // Strategies are independent pure functions; run each and time it.

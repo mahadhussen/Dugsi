@@ -17,8 +17,9 @@ import { cellSimilarity, cellSimilarityStrict } from "../solver/similarity";
 import { cellFeatures } from "../solver/features";
 import { TRANSFORMS } from "../solver/transforms";
 import { solveMatrix } from "../solver/solve";
+import * as G from "./glyph-generators";
 import { rollPositions, shapeKey, type Pt } from "../solver/rolling";
-import { LINE_TOKENS, BAR_TOKENS } from "./types";
+import { LINE_TOKENS, BAR_TOKENS, GRAPH_POINTS, GRAPH_SEGMENTS } from "./types";
 import type { CellPattern } from "./types";
 
 /**
@@ -388,6 +389,8 @@ function signature(c: Cell, ignorePositions: boolean): string {
   if (!ignorePositions) parts.push(f.objects);
   if (c.pattern) parts.push(f.lines ?? "", f.bars ?? "", f.dots ?? "");
   if (c.blocks?.length) parts.push(shapeKey(c.blocks));
+  if (c.glyph) parts.push(JSON.stringify(Object.entries(c.glyph.props).sort()));
+  if (c.graph) parts.push([...c.graph.points].sort().join(","), [...c.graph.segments].sort().join(","));
   if (c.petals?.length) parts.push([...c.petals].map((a) => ((a % 360) + 360) % 360).sort((a, b) => a - b).join(","));
   return parts.join("|");
 }
@@ -882,6 +885,88 @@ function generatePetals(seed: number, difficulty: Difficulty, rng: Rng): Generat
 }
 
 // ---------------------------------------------------------------------------
+// Lines-and-dots questions: corner dots and the lines between them follow
+// separate set rules, e.g. lines XOR (shared lines disappear) while only the
+// dots found in both cells remain.
+
+type GOp = "union" | "xor" | "difference" | "intersection";
+const G_OP_TEXT: Record<GOp, string> = {
+  union: "everything from the first two cells is combined",
+  xor: "only what appears in exactly one of the first two cells remains (shared elements disappear)",
+  difference: "what is in the second cell is removed from the first",
+  intersection: "only what appears in both of the first two cells remains",
+};
+
+function applyG(op: GOp, a: string[], b: string[]): string[] {
+  const A = new Set(a);
+  const B = new Set(b);
+  if (op === "union") return [...new Set([...a, ...b])];
+  if (op === "intersection") return a.filter((x) => B.has(x));
+  if (op === "difference") return a.filter((x) => !B.has(x));
+  return [...a.filter((x) => !B.has(x)), ...b.filter((x) => !A.has(x))];
+}
+
+/** Three lines (rows or columns) of [A, B, op(A, B)] with non-trivial, distinct results. */
+function buildGraphLayer(pool: readonly string[], op: GOp, rng: Rng, sizes: [number, number]): string[][][] | null {
+  const lines: string[][][] = [];
+  const seen = new Set<string>();
+  for (let line = 0; line < 3; line++) {
+    let ok = false;
+    for (let t = 0; t < 40 && !ok; t++) {
+      const a = rng.sample(pool, rng.int(sizes[0], sizes[1]));
+      const b = rng.sample(pool, rng.int(sizes[0], sizes[1]));
+      const shared = a.filter((x) => b.includes(x)).length;
+      if (!shared || shared === a.length || shared === b.length) continue; // needs overlap and differences
+      const c = applyG(op, a, b);
+      const key = (x: string[]) => [...x].sort().join(",");
+      if (!c.length || key(c) === key(a) || key(c) === key(b) || seen.has(key(a) + "|" + key(b))) continue;
+      seen.add(key(a) + "|" + key(b));
+      lines.push([a, b, c]);
+      ok = true;
+    }
+    if (!ok) return null;
+  }
+  return lines;
+}
+
+function generateLinesDots(seed: number, difficulty: Difficulty, rng: Rng): GeneratedMatrixQuestion | null {
+  const segOp: GOp = difficulty === "easy" || difficulty === "medium" ? "xor" : rng.pick(["xor", "difference", "union"] as GOp[]);
+  const ptOp: GOp | null = difficulty === "easy" ? null : difficulty === "medium" ? "intersection" : rng.pick(["intersection", "union", "xor"] as GOp[]);
+  const ptAxis: "row" | "col" = difficulty === "expert" ? "col" : "row";
+  const segs = buildGraphLayer(GRAPH_SEGMENTS, segOp, rng, [2, 3]);
+  const pts = ptOp ? buildGraphLayer(GRAPH_POINTS, ptOp, rng, [2, 3]) : null;
+  if (!segs || (ptOp && !pts)) return null;
+  const grid: Cell[] = [];
+  for (let r = 0; r < 3; r++)
+    for (let c = 0; c < 3; c++) {
+      const points = pts ? (ptAxis === "row" ? pts[r][c] : pts[c][r]) : [];
+      grid.push({ objects: [], graph: { points: [...points], segments: [...segs[r][c]] } });
+    }
+  const [sa, sb] = segs[2];
+  const correct = grid[8].graph!;
+  const [pa, pb] = pts ? pts[2] : [[], []];
+  const mk = (patch: Partial<{ points: string[]; segments: string[] }>): Cell => ({ objects: [], graph: { ...correct, ...patch } });
+  const otherOps = (["union", "xor", "difference", "intersection"] as GOp[]).filter((o) => o !== segOp);
+  const wrong: Cell[] = rng.shuffle([
+    ...otherOps.map((o) => mk({ segments: applyG(o, sa, sb) })),
+    ...(ptOp && ptAxis === "row" ? (["union", "xor", "intersection"] as GOp[]).filter((o) => o !== ptOp).map((o) => mk({ points: applyG(o, pa, pb) })) : []),
+    mk({ segments: correct.segments.slice(1) }),
+    mk({ points: [...correct.points, rng.pick(GRAPH_POINTS.filter((p) => !correct.points.includes(p)) as string[])].filter(Boolean) }),
+    mk({ points: correct.points.slice(1) }),
+    grid[7],
+    grid[6],
+  ]);
+  const rules: RuleDescriptor[] = [
+    { attribute: "segments", kind: segOp, axis: "row", description: `Lines: in each row ${G_OP_TEXT[segOp]}.` },
+    ...(ptOp ? [{ attribute: "points", kind: ptOp, axis: ptAxis, description: `Dots: in each ${ptAxis === "row" ? "row" : "column"} ${G_OP_TEXT[ptOp]}.` } as RuleDescriptor] : []),
+  ];
+  const q = finish(seed, "linesdots", difficulty, grid, wrong, rules, rng);
+  if (!q) return null;
+  const s = solveMatrix(q.problem);
+  return s.status === "solved" && s.answer === q.correctAnswer ? q : null;
+}
+
+// ---------------------------------------------------------------------------
 
 export interface GenerateOptions {
   category?: MatrigmaCategory;
@@ -903,6 +988,15 @@ const DEFAULT_DIFFICULTY: Record<MatrigmaCategory, Difficulty> = {
   overlay: "medium",
   rolling: "medium",
   petals: "medium",
+  linesdots: "medium",
+  hatch: "medium",
+  swap: "medium",
+  dotpath: "medium",
+  orbit: "medium",
+  emblem: "medium",
+  strip: "easy",
+  lined: "medium",
+  bands: "medium",
   "multi-rule": "hard",
 };
 
@@ -932,6 +1026,33 @@ export function generateQuestion(opts: GenerateOptions = {}): GeneratedMatrixQue
         break;
       case "petals":
         q = generatePetals(seed, difficulty, rng);
+        break;
+      case "linesdots":
+        q = generateLinesDots(seed, difficulty, rng);
+        break;
+      case "hatch":
+        q = G.generateHatch(seed, difficulty, rng, finish);
+        break;
+      case "swap":
+        q = G.generateSwap(seed, difficulty, rng, finish);
+        break;
+      case "dotpath":
+        q = G.generateDotpath(seed, difficulty, rng, finish);
+        break;
+      case "orbit":
+        q = G.generateOrbit(seed, difficulty, rng, finish);
+        break;
+      case "emblem":
+        q = G.generateEmblem(seed, difficulty, rng, finish);
+        break;
+      case "strip":
+        q = G.generateStrip(seed, difficulty, rng, finish);
+        break;
+      case "lined":
+        q = G.generateLined(seed, difficulty, rng, finish);
+        break;
+      case "bands":
+        q = G.generateBands(seed, difficulty, rng, finish);
         break;
       default:
         q = generateAttributeQuestion(seed, category, difficulty, rng);

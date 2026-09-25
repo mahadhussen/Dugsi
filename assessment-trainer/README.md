@@ -18,7 +18,7 @@ What it does:
   confidence, a step-by-step explanation and overlays. If the matrix can't be
   detected it says *"Unable to reliably detect the matrix."*, shows the detected
   region and the problem, and never guesses.
-- **Matrix practice** – synthetic questions with known solutions in 14 categories
+- **Matrix practice** – synthetic questions with known solutions in 23 categories
   and 4 difficulty levels; adaptive mode (more questions in weak categories),
   single-category mode, and timed tests (5/10/20 questions, per-question and
   session timers).
@@ -33,6 +33,12 @@ What it does:
   step; along the rows it grows at one end of the arc and down the columns at
   the other (or the whole flower turns). Solved with three attributes: number
   of petals and the clockwise / counter-clockwise ends of the arc.
+- **More question types** – lines and dots (lines XOR, dots in common), overlay in
+  any position, swap positions (the thick bar marks the symbol that stays),
+  moving dots around a grid edge, circle and square inside a disc, figure
+  combinations, shrinking bars, shapes with lines, and texture bands. The
+  figure-like types are "glyphs" (`lib/matrigma/glyphs.ts`): each declares its
+  properties, and the rule engine fits rules on them without special code.
 - **Adaptive test** – one question at a time, no going back and no feedback
   until the end. A Rasch model (`lib/statistics/ability-test.ts`) re-estimates
   ability after each answer and picks the next question where it is most
@@ -123,7 +129,7 @@ Measured results (this repository, September 2026):
 
 | Check | Result |
 |---|---|
-| Solver, 100 generated questions × 14 categories | 99.9 % correct, **0 wrong**, 1 abstention |
+| Solver, 100 generated questions × 23 categories | 99.9 % correct, **0 wrong**, 1 abstention |
 | Screenshot → vision → solver, 330 renders (PNG, JPEG q70, 0.7× scale) | 97.3 % correct, **0 wrong**, the rest abstained |
 | Same with the TypeScript (browser) vision, 198 renders | 96.5 % correct, **0 wrong**, the rest abstained, ~70 ms each |
 | Object extraction vs. ground truth on the fixtures | every shape, fill, rotation and count correct |
@@ -159,7 +165,7 @@ assessment-trainer/
   components/             UI (shadcn-style components in components/ui)
   lib/
     matrigma/             types, shape geometry, SVG renderer, generator
-    solver/               features, rule engine, transformations, 17 strategies,
+    solver/               features, rule engine, transformations, 18 strategies,
                           decision engine, confidence, explanations
     vision/               Python bridge (with cache), OCR, vision → problem
     vision/js/            the same vision pipeline in pure TypeScript (runs in a
@@ -327,7 +333,7 @@ responseTime, difficulty, category, confidence, solverStrategy and timestamp.
 | Symptom | Fix |
 |---|---|
 | Settings shows *Python / OpenCV: not available* | `pip install -r python/requirements.txt`, or set `PYTHON_BIN` to the interpreter that has OpenCV. Until then matrix screenshots use the TypeScript vision pipeline (slightly lower recall, same abstain behaviour). |
-| "Unable to reliably detect the matrix" | Line-pattern matrices are reported as unsupported by the image readers on purpose (they go to the Claude fallback when configured). Otherwise crop the screenshot to the matrix plus the answer options, use a larger/sharper screenshot, or choose the question type manually. The detector expects equally sized, bordered cells. |
+| "Unable to reliably detect the matrix" | Line patterns, open lines, figures inside figures and grey-filled figures are reported as unsupported by the image readers on purpose (they go to the Claude fallback when configured). Otherwise crop the screenshot to the matrix plus the answer options, use a larger/sharper screenshot, or choose the question type manually. The detector expects equally sized, bordered cells. |
 | An answer is "Uncertain – inspect manually" | Check the detected objects table and overlays; low extraction quality or two equally valid rules lower confidence on purpose. |
 | OCR language data missing | `npm install` (installs `@tesseract.js-data/swe` and `/eng`); OCR runs offline |
 | `Environment variable not found: DATABASE_URL` | `cp .env.example .env` |

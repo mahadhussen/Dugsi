@@ -235,7 +235,7 @@ function countHoles(local: Uint8Array, outside: Uint8Array, bw: number, bh: numb
 export function extractObjects(
   g: Gray,
   box: { x: number; y: number; w: number; h: number },
-): { objects: JsObject[]; quality: number; texture: boolean } {
+): { objects: JsObject[]; quality: number; texture: boolean; wire?: boolean; nested?: boolean } {
   const size = Math.min(box.w, box.h);
   const inset = Math.max(3, Math.round(0.04 * size));
   const x0 = box.x + inset;
@@ -261,6 +261,7 @@ export function extractObjects(
   const minArea = 0.0015 * size * size;
   const objects: JsObject[] = [];
   let meshes = 0;
+  let wires = 0;
   for (const c of comps) {
     // Filled mask of this component (component + enclosed holes).
     const bw = c.maxx - c.minx + 3;
@@ -303,7 +304,13 @@ export function extractObjects(
       }
     const area = pixels.length;
     if (area < minArea) continue;
-    if (countHoles(local, outside, bw, bh, 4, Math.max(4, 0.0006 * size * size)) >= 4) meshes++;
+    const holes = countHoles(local, outside, bw, bh, 4, Math.max(4, 0.0006 * size * size));
+    if (holes >= 4) meshes++;
+    // Thin open stroke spanning much of the cell (lines-and-dots puzzles); ordinary shapes are closed or solid.
+    const bbw0 = c.maxx - c.minx + 1;
+    const bbh0 = c.maxy - c.miny + 1;
+    const touches0 = c.minx <= 0 || c.miny <= 0 || c.maxx >= cw - 1 || c.maxy >= ch - 1;
+    if (!holes && !touches0 && Math.max(bbw0, bbh0) > 0.35 * size && c.count / (bbw0 + bbh0) < 0.04 * size) wires++;
     const bbw = c.maxx - c.minx + 1;
     const bbh = c.maxy - c.miny + 1;
     const touches = c.minx <= 0 || c.miny <= 0 || c.maxx >= cw - 1 || c.maxy >= ch - 1;
@@ -371,7 +378,33 @@ export function extractObjects(
   }
   let quality = objects.length ? objects.reduce((s, o) => s + o.confidence, 0) / objects.length : 1;
   if (objects.some((o) => o.shape === "unknown")) quality *= 0.5;
+  // A large figure enclosing others (small shapes moving inside a big disc).
+  const big = comps.filter((c) => c.count >= minArea && c.maxx - c.minx > 0.6 * size && c.maxy - c.miny > 0.6 * size && c.minx > 0 && c.miny > 0 && c.maxx < cw - 1 && c.maxy < ch - 1);
+  const nested = big.some((b) => comps.some((o) => o !== b && o.count >= minArea && o.minx > b.minx && o.miny > b.miny && o.maxx < b.maxx && o.maxy < b.maxy));
+  // Mid-grey filled figures (e.g. squares of a rolling-block figure): ordinary
+  // shapes are black, white or half-filled.
+  let grey = false;
+  for (const c of comps) {
+    if (c.count < 4 * minArea) continue;
+    // Median grey level of the figure, relative to the cell's darkest and
+    // lightest level (images are contrast-stretched); outlines stay dark.
+    const vals: number[] = [];
+    for (let y = c.miny; y <= c.maxy; y++) for (let x = c.minx; x <= c.maxx; x++) if (labels[y * cw + x] === c.label) vals.push(crop[y * cw + x]);
+    vals.sort((a, b) => a - b);
+    const rel = (vals[vals.length >> 1] - lo) / Math.max(1, hi - lo);
+    // Only filled figures count: blurred outlines can look grey but cover little of their box.
+    const solidity = c.count / ((c.maxx - c.minx + 1) * (c.maxy - c.miny + 1));
+    if (rel > 0.2 && rel < 0.8 && solidity > 0.5) grey = true;
+  }
+  // Figures wider or taller than ordinary shapes ever get (e.g. long lines through a shape).
+  const oversized = comps.some((c) => {
+    if (c.count < minArea) return false;
+    const w = c.maxx - c.minx + 1;
+    const h = c.maxy - c.miny + 1;
+    const touches = c.minx <= 0 || c.miny <= 0 || c.maxx >= cw - 1 || c.maxy >= ch - 1;
+    return !touches && (w > 0.8 * size || h > 0.8 * size);
+  });
   const thinLines = objects.filter((o) => o.shape === "line").length;
   const texture = meshes > 0 || thinLines >= 4;
-  return { objects, quality, texture };
+  return { objects, quality, texture, wire: wires > 0, nested: nested || grey || oversized };
 }

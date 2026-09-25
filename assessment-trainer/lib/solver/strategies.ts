@@ -5,6 +5,7 @@ import { describeTransformRule, fitAlternation, fitTransformRules, type Transfor
 import type { Axis } from "./lines";
 import type { ExplainedRule, StrategyId, StrategyResult } from "./types";
 import { fitRolling } from "./rolling";
+import { fitSwap } from "./swap";
 
 export interface StrategyContext {
   problem: MatrixProblem;
@@ -183,6 +184,16 @@ export const STRATEGIES: { id: StrategyId; label: string; run: StrategyFn }[] = 
         validatedLines: Math.min(...rules.map((r) => r.validated.length)),
         predicted: null,
       };
+    },
+  },
+  {
+    id: "swap_positions",
+    label: "Swap positions",
+    run: (c) => {
+      const r = fitSwap(c.problem, c.missing);
+      const n = c.problem.options.length;
+      if (!r) return { applicable: false, rules: [], optionScores: new Array(n).fill(0), complexity: 0, validatedLines: 0 };
+      return { applicable: true, rules: [r.explained], optionScores: r.optionScores, complexity: 2.5, validatedLines: r.validated.length, predicted: null };
     },
   },
   {

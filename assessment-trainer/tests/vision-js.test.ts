@@ -18,12 +18,18 @@ describe("browser vision (pure TypeScript)", () => {
     expect(s.count / s.cells).toBeGreaterThan(0.97);
   }, 60_000);
 
-  it("never gives a wrong answer on rendered screenshots (PNG, JPEG, scaled)", async () => {
+  it("never gives a wrong answer on rendered screenshots of any question type (PNG, JPEG, scaled)", async () => {
     const r = await endToEnd(1, 77000);
     expect(r.wrong).toBe(0);
-    // Line patterns and square figures are deliberately reported as unsupported
-    // or uncertain by the image reader, so they count as "not answered" here.
-    expect(r.correct / r.n).toBeGreaterThan(0.75);
+  }, 240_000);
+
+  it("answers most shape-based questions (the layouts it is built for)", async () => {
+    // Texture, line and glyph questions are deliberately reported as unsupported
+    // (they go to the Claude fallback), so recall is measured on shape questions.
+    const shapeCats = ["rotation", "reflection", "count", "position", "shape", "fill", "size", "direction", "composition", "alternation", "multi-rule"] as const;
+    const r = await endToEnd(1, 78000, false, shapeCats);
+    expect(r.wrong).toBe(0);
+    expect(r.correct / r.n).toBeGreaterThan(0.85);
   }, 120_000);
 
   it("reports line-pattern matrices as unsupported instead of misreading them", async () => {

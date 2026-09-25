@@ -16,7 +16,7 @@ import { AXIS_WORD, buildLines, type Axis, type Line } from "./lines";
  */
 
 const BIG = 99;
-const LAYER_ATTR_NAMES = new Set(["lines", "bars", "dots"]);
+const LAYER_ATTR_NAMES = new Set(["lines", "bars", "dots", "points", "segments"]);
 
 export interface FittedRule {
   attr: AttrSpec;
@@ -124,6 +124,20 @@ function lineError(kind: RuleKind, vals: AttrValue[], spec: AttrSpec, ctx: Ctx, 
       if (kind === "subtract" && expect <= 0) return BIG;
       return Math.abs(expect - c) / (spec.tol || 1);
     }
+    case "alldiff": {
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (eqVal(vals[i], vals[j], spec, ctx)) return BIG;
+      return 0;
+    }
+    case "union_any": {
+      if (n !== 3) return BIG;
+      const keys = vals.map((v) => setKey(toSet(v), ";"));
+      if (new Set(keys).size < 3) return BIG; // three different cells
+      for (let i = 0; i < 3; i++) {
+        const [a, b] = [0, 1, 2].filter((j) => j !== i);
+        if (applySetOp("union", vals[a], vals[b], spec) === keys[i]) return 0;
+      }
+      return BIG;
+    }
     case "union":
     case "difference":
     case "xor":
@@ -181,6 +195,19 @@ function predictValue(kind: RuleKind, vals: (AttrValue | null)[], k: number, spe
       const partner = known.find((x) => Math.abs(x.i - k) % 2 === 0);
       return partner ? partner.v : null;
     }
+    case "alldiff":
+      return null; // several values can fit; options are checked one by one
+    case "union_any": {
+      if (n !== 3) return null;
+      const [x, y] = known.map((q) => toSet(q.v));
+      if (!x || !y) return null;
+      const xy = [...x].every((e) => y.has(e));
+      const yx = [...y].every((e) => x.has(e));
+      // If one known cell contains the other, it is the overlay and the missing
+      // cell holds the difference; otherwise the missing cell is the overlay.
+      const res = yx && !xy ? [...x].filter((e) => !y.has(e)) : xy && !yx ? [...y].filter((e) => !x.has(e)) : [...new Set([...x, ...y])];
+      return setKey(new Set(res), spec.name === "positions" ? "," : ";");
+    }
     case "add":
     case "subtract":
       if (k !== 2 || n !== 3) return null;
@@ -231,7 +258,7 @@ export function fitAttributeRules(rc: RuleContext, attrs = ATTRIBUTES): FittedRu
 
       for (const kind of spec.kinds) {
         const lineLen = known[0].cells.length;
-        if ((kind === "alternation" && lineLen < 3) || (["add", "subtract", "union", "difference", "xor", "intersection"].includes(kind) && lineLen !== 3)) continue;
+        if ((kind === "alternation" && lineLen < 3) || (["add", "subtract", "union", "difference", "xor", "intersection", "union_any"].includes(kind) && lineLen !== 3)) continue;
         // Set operations and distribute rules only on rows/columns (not diagonals / windows).
         if ((axis === "diag" || axis === "sequence") && kind !== "constant" && kind !== "progression" && kind !== "alternation") continue;
         const param = fitParam(kind, knownVals[0] as AttrValue[], spec, knownCtx[0]!);
@@ -319,9 +346,10 @@ const LAYER_WORDS: Record<string, Record<string, string>> = {
   lines: { v: "vertical lines", h: "horizontal lines", d: "diagonal lines (/)", a: "diagonal lines (\\)", "arc-up": "arcs curving up", "arc-down": "arcs curving down" },
   bars: { v: "vertical bar", h: "horizontal bar", d: "diagonal bar (/)", a: "diagonal bar (\\)" },
   dots: { tl: "top-left", tr: "top-right", bl: "bottom-left", br: "bottom-right", c: "centre" },
+  segments: { top: "top line", bottom: "bottom line", left: "left line", right: "right line", d: "diagonal (/)", a: "diagonal (\\)" },
 };
 
-export function describeLayer(name: "lines" | "bars" | "dots", v: string): string {
+export function describeLayer(name: "lines" | "bars" | "dots" | "segments", v: string): string {
   const tokens = v.split(";").filter(Boolean);
   if (!tokens.length) return "none";
   const words = tokens.map((t) => LAYER_WORDS[name][t] ?? t);
@@ -330,6 +358,7 @@ export function describeLayer(name: "lines" | "bars" | "dots", v: string): strin
 
 function fmtVal(spec: AttrSpec, v: AttrValue | null): string {
   if (v === null) return "?";
+  if (spec.format) return spec.format(v);
   if (spec.name === "fill") return v === 0 ? "empty" : v === 1 ? "solid" : "half-filled";
   if (spec.name === "size") return `${Math.round((v as number) * 100)}%`;
   if (spec.name === "rotation") return `${Math.round(v as number)}°`;
@@ -339,6 +368,8 @@ function fmtVal(spec: AttrSpec, v: AttrValue | null): string {
   if (spec.name === "objects") return `${String(v).split(";").filter(Boolean).length} elements`;
   if (spec.name === "shape") return SHAPE_WORD(v);
   if (spec.name === "lines" || spec.name === "bars" || spec.name === "dots") return describeLayer(spec.name, String(v));
+  if (spec.name === "points") return describeLayer("dots", String(v));
+  if (spec.name === "segments") return describeLayer("segments", String(v));
   if (spec.name === "petalStart" || spec.name === "petalEnd") return `${Math.round(Number(v))}°`;
   if (spec.name === "petalCount") return String(Math.round(Number(v)));
   return String(v);
@@ -352,6 +383,7 @@ export function describeRule(r: FittedRule): string {
       return `${where} the ${L} stays the same.`;
     case "progression": {
       const d = r.param as number;
+      if (r.attr.describeStep) return `${where} the ${L} ${r.attr.describeStep(d)} per step.`;
       if (r.attr.name === "rotation") return `${where} the figure rotates ${Math.abs(Math.round(d))}° ${d > 0 ? "clockwise" : "counter-clockwise"} per step.`;
       if (r.attr.name === "fill") return `${where} the fill ${d > 0 ? "increases" : "decreases"} one step at a time (empty → half → solid).`;
       if (r.attr.name === "size") return `${where} the size ${d > 0 ? "grows" : "shrinks"} by the same amount each step.`;
@@ -380,6 +412,10 @@ export function describeRule(r: FittedRule): string {
       return `${where} the last cell keeps only elements that appear in exactly one of the first two cells (XOR on ${L}).`;
     case "intersection":
       return `${where} the last cell keeps only elements common to the first two cells (${L}).`;
+    case "alldiff":
+      return `${where} every cell has a different ${L}.`;
+    case "union_any":
+      return `${where} one of the three cells (in any position) is the other two laid on top of each other (${L}).`;
   }
 }
 

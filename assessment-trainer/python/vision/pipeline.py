@@ -6,7 +6,7 @@ import time
 import numpy as np
 
 from .detect import Box, DetectionError, detect_layout
-from .objects import extract_objects, is_texture_cell
+from .objects import extract_objects, has_container, has_open_wire, is_texture_cell
 from .preprocess import preprocess
 
 
@@ -59,8 +59,12 @@ def analyze(data: bytes) -> dict:
             "timings": timings,
         }
     t2 = time.perf_counter()
-    texture = sum(1 for b in [*lat.cells.values(), *layout.options] if is_texture_cell(pre.gray, (b.x, b.y, b.w, b.h)))
-    if texture >= 2:
+    boxes = [*lat.cells.values(), *layout.options]
+    texture = sum(1 for b in boxes if is_texture_cell(pre.gray, (b.x, b.y, b.w, b.h)))
+    wires = sum(1 for b in boxes if has_open_wire(pre.gray, (b.x, b.y, b.w, b.h)))
+    nested = sum(1 for b in boxes if has_container(pre.gray, (b.x, b.y, b.w, b.h)))
+    if texture >= 2 or wires >= 3 or nested >= 3:
+        texture = max(texture, wires, nested)
         return {
             **base,
             "ok": False,

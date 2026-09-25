@@ -29,6 +29,11 @@ export interface CellFeatures {
   petalCount: number | null;
   petalStart: number | null;
   petalEnd: number | null;
+  /** Lines-and-dots cells: sets of corner points and segments (null otherwise). */
+  points: string | null;
+  segments: string | null;
+  /** Properties of a glyph cell (null otherwise). */
+  glyph: Record<string, string | number> | null;
   /** True for a texture-only cell (pattern, no objects). */
   patternOnly: boolean;
 }
@@ -114,6 +119,9 @@ export function cellFeatures(cell: Cell): CellFeatures {
     bars: cell.pattern ? layer(cell.pattern.bars) : null,
     dots: cell.pattern ? layer(cell.pattern.dots) : null,
     ...petalArc(cell.petals),
-    patternOnly: (!!cell.pattern || !!cell.blocks?.length || !!cell.petals?.length) && all.length === 0,
+    points: cell.graph ? layer(cell.graph.points) : null,
+    segments: cell.graph ? layer(cell.graph.segments) : null,
+    glyph: cell.glyph ? { ...cell.glyph.props } : null,
+    patternOnly: (!!cell.pattern || !!cell.blocks?.length || !!cell.petals?.length || !!cell.graph || !!cell.glyph) && all.length === 0,
   };
 }

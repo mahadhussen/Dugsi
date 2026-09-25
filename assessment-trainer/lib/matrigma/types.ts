@@ -1,3 +1,4 @@
+import type { Glyph } from "./glyphs";
 /**
  * Structured representation of Matrigma-like matrix problems.
  *
@@ -58,7 +59,15 @@ export interface Cell {
   blocks?: [number, number][];
   /** Petals radiating from the centre, as angles in degrees clockwise from up (growing-petal questions). */
   petals?: number[];
+  /** Corner points and the segments between them (lines-and-dots questions). */
+  graph?: { points: string[]; segments: string[] };
+  /** A small composite figure described by named properties (see ./glyphs.ts). */
+  glyph?: Glyph;
 }
+
+/** Corner points and the segments that can join them. */
+export const GRAPH_POINTS = ["tl", "tr", "bl", "br"] as const;
+export const GRAPH_SEGMENTS = ["top", "bottom", "left", "right", "d", "a"] as const;
 
 export interface MatrixProblem {
   rows: number;
@@ -85,6 +94,15 @@ export const MATRIGMA_CATEGORIES = [
   "overlay",
   "rolling",
   "petals",
+  "linesdots",
+  "hatch",
+  "swap",
+  "dotpath",
+  "orbit",
+  "emblem",
+  "strip",
+  "lined",
+  "bands",
   "multi-rule",
 ] as const;
 export type MatrigmaCategory = (typeof MATRIGMA_CATEGORIES)[number];
@@ -103,6 +121,15 @@ export const CATEGORY_LABELS: Record<MatrigmaCategory, string> = {
   overlay: "Line patterns",
   rolling: "Rolling block",
   petals: "Growing petals",
+  linesdots: "Lines and dots",
+  hatch: "Overlay in any position",
+  swap: "Swap positions",
+  dotpath: "Moving dots",
+  orbit: "Circle and square",
+  emblem: "Figure combinations",
+  strip: "Shrinking bars",
+  lined: "Shapes and lines",
+  bands: "Texture bands",
   "multi-rule": "Multi-rule",
 };
 

@@ -17,6 +17,7 @@ export const STRATEGY_IDS = [
   "xor",
   "alternating_pattern",
   "rolling_block",
+  "swap_positions",
   "two_rule_combination",
 ] as const;
 export type StrategyId = (typeof STRATEGY_IDS)[number];

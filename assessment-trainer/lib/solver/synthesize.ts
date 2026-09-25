@@ -11,6 +11,18 @@ import { countLayout } from "../matrigma/layouts";
  */
 export function synthesizeCell(profile: Record<string, AttrValue | null>, template: Cell | null): Cell | null {
   if (template?.blocks?.length) return null; // shown via the rolling rule's own prediction
+  if (template?.glyph) {
+    const props = { ...template.glyph.props };
+    for (const k of Object.keys(props)) {
+      const v = profile[`g:${k}`];
+      if (v !== undefined && v !== null) props[k] = v;
+    }
+    return { objects: [], glyph: { kind: template.glyph.kind, props } };
+  }
+  if (template?.graph) {
+    const layer = (k: "points" | "segments") => (typeof profile[k] === "string" ? String(profile[k]).split(";").filter(Boolean) : template.graph![k]);
+    return { objects: [], graph: { points: layer("points"), segments: layer("segments") } };
+  }
   if (template?.petals?.length) {
     const n = typeof profile.petalCount === "number" ? Math.round(profile.petalCount) : null;
     const s = typeof profile.petalStart === "number" ? profile.petalStart : null;

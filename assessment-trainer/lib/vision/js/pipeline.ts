@@ -69,6 +69,8 @@ export function analyzeRgba(img: RgbaImage): VisionResult {
     };
   }
   let textureCells = 0;
+  let wireCells = 0;
+  let nestedCells = 0;
   const cells: (Cell | null)[] = [];
   const debugCells = [];
   const qualities: number[] = [];
@@ -80,8 +82,10 @@ export function analyzeRgba(img: RgbaImage): VisionResult {
         debugCells.push({ row: r, col: c, box: orig(slotBox(lat, r, c)), missing: true, objects: [] });
         continue;
       }
-      const { objects, quality, texture } = extractObjects(g, box);
+      const { objects, quality, texture, wire, nested } = extractObjects(g, box);
       if (texture) textureCells++;
+      if (wire) wireCells++;
+      if (nested) nestedCells++;
       qualities.push(quality);
       cells.push({ objects: objects.map(({ shape, fill, size, rotation, x, y }) => ({ shape, fill, size, rotation, x, y })) } as Cell);
       debugCells.push({
@@ -95,13 +99,16 @@ export function analyzeRgba(img: RgbaImage): VisionResult {
   const options: Cell[] = [];
   const debugOptions = [];
   for (const b of layout.options) {
-    const { objects, quality, texture } = extractObjects(g, b);
+    const { objects, quality, texture, wire, nested } = extractObjects(g, b);
     if (texture) textureCells++;
+    if (wire) wireCells++;
+    if (nested) nestedCells++;
     qualities.push(quality);
     options.push({ objects: objects.map(({ shape, fill, size, rotation, x, y }) => ({ shape, fill, size, rotation, x, y })) } as Cell);
     debugOptions.push({ box: orig(b), objects: objects.map((o) => ({ ...o, bbox: orig([b.x + o.bbox[0], b.y + o.bbox[1], o.bbox[2], o.bbox[3]]) })) });
   }
-  if (textureCells >= 2) {
+  if (textureCells >= 2 || wireCells >= 3 || nestedCells >= 3) {
+    textureCells = Math.max(textureCells, wireCells, nestedCells);
     return {
       ...base,
       ok: false,
