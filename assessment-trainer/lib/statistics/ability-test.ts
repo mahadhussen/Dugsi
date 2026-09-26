@@ -57,13 +57,21 @@ export interface TestResponse {
 const GRID = Array.from({ length: 161 }, (_, i) => -4 + i * 0.05);
 const p = (theta: number, b: number) => 1 / (1 + Math.exp(-(theta - b)));
 
+/**
+ * Where the test starts. "hard" only moves item selection (a prior centred on a
+ * high ability, so the first items are hard or expert); the reported level
+ * always uses the neutral prior so it stays comparable between modes.
+ */
+export type TestStart = "standard" | "hard";
+export const START_PRIOR_MEAN: Record<TestStart, number> = { standard: 0, hard: 1.6 };
+
 /** Expected a posteriori ability and its standard error. */
-export function estimateAbility(responses: TestResponse[]): { theta: number; se: number } {
+export function estimateAbility(responses: TestResponse[], priorMean = 0): { theta: number; se: number } {
   let sw = 0;
   let s1 = 0;
   let s2 = 0;
   for (const t of GRID) {
-    let lw = -0.5 * t * t;
+    let lw = -0.5 * (t - priorMean) * (t - priorMean);
     for (const r of responses) lw += Math.log(r.correct ? p(t, r.b) : 1 - p(t, r.b));
     const w = Math.exp(lw);
     sw += w;
@@ -79,8 +87,8 @@ export function estimateAbility(responses: TestResponse[]): { theta: number; se:
  * little randomness among near-equal items and no category twice in a row
  * (and not more than twice in the whole test when avoidable).
  */
-export function nextItem(responses: TestResponse[], rand: () => number = Math.random): ItemType {
-  const { theta } = estimateAbility(responses);
+export function nextItem(responses: TestResponse[], rand: () => number = Math.random, start: TestStart = "standard"): ItemType {
+  const { theta } = estimateAbility(responses, START_PRIOR_MEAN[start]);
   const last = responses[responses.length - 1]?.category;
   const used = new Map<string, number>();
   for (const r of responses) used.set(r.category, (used.get(r.category) ?? 0) + 1);

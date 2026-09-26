@@ -45,6 +45,15 @@ describe("adaptive ability test", () => {
     expect(rep.total).toBe(20);
   });
 
+  it("a hard start asks hard or expert questions first but reports on the neutral scale", () => {
+    const first = nextItem([], () => 0, "hard");
+    expect(["hard", "expert"]).toContain(first.difficulty);
+    const wrong: TestResponse = { ...first, correct: false, timeMs: 1 };
+    // Same answers, same reported level whatever the start.
+    expect(abilityReport([wrong]).theta).toBeCloseTo(estimateAbility([wrong]).theta);
+    expect(estimateAbility([wrong]).theta).toBeLessThan(0.5);
+  });
+
   it("every item type can be generated and is solved by the verifier", () => {
     for (const it of ITEM_TYPES) {
       const q = generateQuestion({ category: it.category, difficulty: it.difficulty, seed: 321 });

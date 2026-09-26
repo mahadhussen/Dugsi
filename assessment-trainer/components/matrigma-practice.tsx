@@ -18,7 +18,7 @@ import { Progress } from "@/components/ui/progress";
 import { Alert } from "@/components/ui/alert";
 import { cn, pct, secs } from "@/lib/utils";
 import { FOCUS_LABELS, type RuleFocus } from "@/lib/matrigma/types";
-import { abilityReport, nextItem, type ItemType, type TestResponse } from "@/lib/statistics/ability-test";
+import { abilityReport, nextItem, type ItemType, type TestResponse, type TestStart } from "@/lib/statistics/ability-test";
 
 type Mode = "adaptive" | "category" | "timed" | "test";
 
@@ -53,6 +53,7 @@ export function MatrigmaPractice() {
   const [difficulty, setDifficulty] = useState<Difficulty | "auto">("auto");
   const [count, setCount] = useState<number>(10);
   const [perQuestion, setPerQuestion] = useState(60);
+  const [testStart, setTestStart] = useState<TestStart>("standard");
 
   const [phase, setPhase] = useState<"setup" | "loading" | "running" | "summary">("setup");
   const [err, setErr] = useState<string | null>(null);
@@ -105,7 +106,7 @@ export function MatrigmaPractice() {
       let qs: Q[];
       if (isTest) {
         testResponses.current = [];
-        testItem.current = nextItem([]);
+        testItem.current = nextItem([], Math.random, testStart);
         qs = await fetchQuestions({ count: 1, category: testItem.current.category, difficulty: testItem.current.difficulty });
       } else {
         qs = await fetchQuestions({
@@ -167,7 +168,7 @@ export function MatrigmaPractice() {
             await finish();
             return;
           }
-          testItem.current = nextItem(testResponses.current);
+          testItem.current = nextItem(testResponses.current, Math.random, testStart);
           const [nq] = await fetchQuestions({ count: 1, category: testItem.current.category, difficulty: testItem.current.difficulty });
           setQuestions((prev) => [...prev, nq]);
           setIdx((i) => i + 1);
@@ -183,7 +184,7 @@ export function MatrigmaPractice() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [feedback, phase, questions, idx, sessionId, isTest, count],
+    [feedback, phase, questions, idx, sessionId, isTest, count, testStart],
   );
 
   const next = useCallback(() => {
@@ -295,10 +296,20 @@ export function MatrigmaPractice() {
               <Select id="count" value={count} onChange={(e) => setCount(Number(e.target.value))}>
                 <option value={5}>5</option>
                 <option value={10}>10</option>
+                <option value={12}>12</option>
                 <option value={20}>20</option>
                 <option value={30}>30</option>
               </Select>
             </div>
+            {isTest && (
+              <div className="space-y-1.5">
+                <Label htmlFor="teststart">Start level</Label>
+                <Select id="teststart" value={testStart} onChange={(e) => setTestStart(e.target.value as TestStart)}>
+                  <option value="standard">Standard · starts in the middle</option>
+                  <option value="hard">Hard · starts at hard/expert</option>
+                </Select>
+              </div>
+            )}
             {isTest && (
               <p className="text-sm text-muted-foreground sm:col-span-2 lg:col-span-4">
                 One question at a time, no going back and no feedback until the end. Each answer moves the next question up or down in difficulty. The result is a
