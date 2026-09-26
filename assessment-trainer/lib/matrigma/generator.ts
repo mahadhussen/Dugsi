@@ -235,7 +235,7 @@ function compatibleExtras(active: AttrName[]): AttrName[] {
   });
 }
 
-function planAttributes(category: MatrigmaCategory, difficulty: Difficulty, rng: Rng): Plan {
+function planAttributes(category: MatrigmaCategory, difficulty: Difficulty, rng: Rng, noise = false): Plan {
   const active: AttrName[] = [];
   if (category === "multi-rule") {
     const n = difficulty === "expert" ? 3 : 2;
@@ -268,7 +268,7 @@ function planAttributes(category: MatrigmaCategory, difficulty: Difficulty, rng:
     rules.push(ruleFor(a, rng, base, a === active[0] ? "main" : "extra"));
   }
   let decoration: MatrixObject | null = null;
-  if (difficulty === "medium") {
+  if (difficulty === "medium" || noise) {
     // Distracting elements: a second attribute that is constant within each
     // row but differs between rows, and/or a constant decorative element.
     const free = (["shape", "fill"] as AttrName[]).filter(
@@ -448,8 +448,10 @@ function scatterSlots(count: number, rng: Rng): number[] {
   return rng.sample([0, 1, 2, 3, 4, 5, 6, 7, 8], count);
 }
 
-function generateAttributeQuestion(seed: number, category: MatrigmaCategory, difficulty: Difficulty, rng: Rng) {
-  const plan = planAttributes(category, difficulty, rng);
+function generateAttributeQuestion(seed: number, category: MatrigmaCategory, difficulty: Difficulty, rng: Rng, noise = false) {
+  const plan = planAttributes(category, difficulty, rng, noise);
+  // Noise was asked for but none fits this plan: try another seed.
+  if (noise && !plan.decoration && !plan.rules.some((r) => r.kind === "rowconst")) return null;
   const specs: CellSpec[] = [];
   for (let r = 0; r < ROWS; r++)
     for (let c = 0; c < COLS; c++) {
@@ -977,6 +979,8 @@ export interface GenerateOptions {
   focus?: RuleFocus;
   category?: MatrigmaCategory;
   difficulty?: Difficulty;
+  /** Add distracting elements on top of the rules (attribute categories only). */
+  noise?: boolean;
   seed?: number;
 }
 
@@ -1066,7 +1070,7 @@ export function generateQuestion(opts: GenerateOptions = {}): GeneratedMatrixQue
         q = G.generateCutout(seed, difficulty, rng, finish);
         break;
       default:
-        q = generateAttributeQuestion(seed, category, difficulty, rng);
+        q = generateAttributeQuestion(seed, category, difficulty, rng, opts.noise);
     }
     if (q) return q;
   }

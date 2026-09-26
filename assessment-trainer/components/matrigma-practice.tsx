@@ -107,7 +107,7 @@ export function MatrigmaPractice() {
       if (isTest) {
         testResponses.current = [];
         testItem.current = nextItem([], Math.random, testStart);
-        qs = await fetchQuestions({ count: 1, category: testItem.current.category, difficulty: testItem.current.difficulty });
+        qs = await fetchQuestions({ count: 1, category: testItem.current.category, difficulty: testItem.current.difficulty, noise: testItem.current.noise });
       } else {
         qs = await fetchQuestions({
           count,
@@ -169,7 +169,7 @@ export function MatrigmaPractice() {
             return;
           }
           testItem.current = nextItem(testResponses.current, Math.random, testStart);
-          const [nq] = await fetchQuestions({ count: 1, category: testItem.current.category, difficulty: testItem.current.difficulty });
+          const [nq] = await fetchQuestions({ count: 1, category: testItem.current.category, difficulty: testItem.current.difficulty, noise: testItem.current.noise });
           setQuestions((prev) => [...prev, nq]);
           setIdx((i) => i + 1);
           setSelected(null);
@@ -306,7 +306,7 @@ export function MatrigmaPractice() {
                 <Label htmlFor="teststart">Start level</Label>
                 <Select id="teststart" value={testStart} onChange={(e) => setTestStart(e.target.value as TestStart)}>
                   <option value="standard">Standard · starts in the middle</option>
-                  <option value="hard">Hard · starts at hard/expert</option>
+                  <option value="hard">Expert ladder · 3 rules, each correct answer harder</option>
                 </Select>
               </div>
             )}

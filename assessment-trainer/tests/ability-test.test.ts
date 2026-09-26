@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { abilityReport, estimateAbility, ITEM_TYPES, nextItem, type TestResponse } from "@/lib/statistics/ability-test";
+import { abilityReport, estimateAbility, ITEM_TYPES, LADDER, nextItem, type TestResponse } from "@/lib/statistics/ability-test";
 import { generateQuestion } from "@/lib/matrigma/generator";
 import { solveMatrix } from "@/lib/solver/solve";
 
@@ -45,13 +45,24 @@ describe("adaptive ability test", () => {
     expect(rep.total).toBe(20);
   });
 
-  it("a hard start asks hard or expert questions first but reports on the neutral scale", () => {
-    const first = nextItem([], () => 0, "hard");
-    expect(["hard", "expert"]).toContain(first.difficulty);
-    const wrong: TestResponse = { ...first, correct: false, timeMs: 1 };
-    // Same answers, same reported level whatever the start.
-    expect(abilityReport([wrong]).theta).toBeCloseTo(estimateAbility([wrong]).theta);
-    expect(estimateAbility([wrong]).theta).toBeLessThan(0.5);
+  it("the expert ladder only uses three-rule questions and every correct answer moves up", () => {
+    const at = (rs: TestResponse[]) => nextItem(rs, () => 0, "hard");
+    const rs: TestResponse[] = [];
+    let prev = at(rs);
+    for (let i = 0; i < 12; i++) {
+      rs.push({ ...prev, correct: true, timeMs: 1 });
+      const nx = at(rs);
+      expect(nx.b).toBeGreaterThan(prev.b);
+      prev = nx;
+    }
+    rs.push({ ...prev, correct: false, timeMs: 1 });
+    expect(at(rs).b).toBeLessThan(prev.b);
+    for (const it of LADDER) {
+      expect(it.difficulty).toBe("expert");
+      const q = generateQuestion({ category: it.category, difficulty: "expert", noise: it.noise, seed: 99 });
+      expect(q.rules.length).toBeGreaterThanOrEqual(3);
+      expect(solveMatrix(q.problem).answer).toBe(q.correctAnswer);
+    }
   });
 
   it("every item type can be generated and is solved by the verifier", () => {

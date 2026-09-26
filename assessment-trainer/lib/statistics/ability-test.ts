@@ -15,6 +15,8 @@ export interface ItemType {
   category: MatrigmaCategory;
   difficulty: Difficulty;
   b: number;
+  /** Distracting elements on top of the rules (expert ladder only). */
+  noise?: boolean;
 }
 
 const BASE: Record<Difficulty, number> = { easy: -1.6, medium: -0.5, hard: 0.6, expert: 1.6 };
@@ -58,20 +60,44 @@ const GRID = Array.from({ length: 161 }, (_, i) => -4 + i * 0.05);
 const p = (theta: number, b: number) => 1 / (1 + Math.exp(-(theta - b)));
 
 /**
- * Where the test starts. "hard" only moves item selection (a prior centred on a
- * high ability, so the first items are hard or expert); the reported level
- * always uses the neutral prior so it stays comparable between modes.
+ * "standard" starts in the middle and picks the item closest to the current
+ * ability. "hard" is the expert ladder below. The reported level always uses
+ * the same neutral prior, so results stay comparable between the two.
  */
 export type TestStart = "standard" | "hard";
-export const START_PRIOR_MEAN: Record<TestStart, number> = { standard: 0, hard: 1.6 };
+
+/**
+ * Expert ladder: only item types whose expert questions are built from three
+ * rules, ordered from easier to harder. The second half repeats the types that
+ * can carry distracting elements on top of the three rules. A correct answer
+ * moves one rung up (always a harder item), a wrong answer one rung down.
+ */
+const LADDER_TYPES: [MatrigmaCategory, boolean][] = [
+  ["shape", false], ["fill", false], ["rotation", false], ["count", false], ["position", false], ["size", false],
+  ["direction", false], ["overlay", false], ["multi-rule", false],
+  ["shape", true], ["fill", true], ["rotation", true], ["size", true], ["direction", true], ["multi-rule", true],
+];
+export const LADDER: ItemType[] = LADDER_TYPES.map(([category, noise], i) => ({
+  category,
+  difficulty: "expert",
+  b: Math.round((1.3 + 0.12 * i) * 100) / 100,
+  ...(noise ? { noise } : {}),
+}));
+
+/** Rung reached after these answers (starts at the bottom rung). */
+export function ladderRung(responses: TestResponse[]): number {
+  let r = 0;
+  for (const x of responses) r = x.correct ? Math.min(LADDER.length - 1, r + 1) : Math.max(0, r - 1);
+  return r;
+}
 
 /** Expected a posteriori ability and its standard error. */
-export function estimateAbility(responses: TestResponse[], priorMean = 0): { theta: number; se: number } {
+export function estimateAbility(responses: TestResponse[]): { theta: number; se: number } {
   let sw = 0;
   let s1 = 0;
   let s2 = 0;
   for (const t of GRID) {
-    let lw = -0.5 * (t - priorMean) * (t - priorMean);
+    let lw = -0.5 * t * t;
     for (const r of responses) lw += Math.log(r.correct ? p(t, r.b) : 1 - p(t, r.b));
     const w = Math.exp(lw);
     sw += w;
@@ -88,7 +114,8 @@ export function estimateAbility(responses: TestResponse[], priorMean = 0): { the
  * (and not more than twice in the whole test when avoidable).
  */
 export function nextItem(responses: TestResponse[], rand: () => number = Math.random, start: TestStart = "standard"): ItemType {
-  const { theta } = estimateAbility(responses, START_PRIOR_MEAN[start]);
+  if (start === "hard") return LADDER[ladderRung(responses)];
+  const { theta } = estimateAbility(responses);
   const last = responses[responses.length - 1]?.category;
   const used = new Map<string, number>();
   for (const r of responses) used.set(r.category, (used.get(r.category) ?? 0) + 1);

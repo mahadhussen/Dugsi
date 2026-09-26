@@ -8,17 +8,17 @@ import { body, error, json } from "@/lib/api/http";
 export const dynamic = "force-dynamic";
 
 /**
- * POST { count, category?, difficulty?, adaptive? }
+ * POST { count, category?, difficulty?, adaptive?, focus?, noise? }
  * Returns questions WITHOUT the correct answer; correctness is checked by
  * POST /api/attempts.
  */
 export async function POST(req: Request) {
-  const b = await body<{ count?: number; category?: string; difficulty?: string; adaptive?: boolean; focus?: string }>(req);
+  const b = await body<{ count?: number; category?: string; difficulty?: string; adaptive?: boolean; focus?: string; noise?: boolean }>(req);
   if (b.focus && !(b.focus in FOCUS_CATEGORIES)) return error("Unknown focus");
   const count = Math.max(1, Math.min(50, Number(b.count ?? 5)));
   if (b.category && !(MATRIGMA_CATEGORIES as readonly string[]).includes(b.category)) return error("Unknown category");
   if (b.difficulty && !DIFFICULTIES.includes(b.difficulty as Difficulty)) return error("Unknown difficulty");
-  let plan: { category?: MatrigmaCategory; difficulty?: Difficulty; focus?: RuleFocus }[];
+  let plan: { category?: MatrigmaCategory; difficulty?: Difficulty; focus?: RuleFocus; noise?: boolean }[];
   if (b.adaptive) {
     const stats = computeStats(await getAttempts());
     plan = pickAdaptive(stats.byCategory, count);
@@ -27,6 +27,7 @@ export async function POST(req: Request) {
       category: b.focus ? undefined : (b.category as MatrigmaCategory | undefined),
       difficulty: b.difficulty as Difficulty | undefined,
       focus: b.focus as RuleFocus | undefined,
+      noise: b.noise === true,
     }));
   }
   const out = [];
