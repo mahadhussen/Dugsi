@@ -1,0 +1,197 @@
+{
+ "id": "rotation-hard-5039",
+ "category": "rotation",
+ "difficulty": "hard",
+ "correctAnswer": 3,
+ "rules": [
+  {
+   "attribute": "rotation",
+   "kind": "latin",
+   "axis": "row",
+   "description": "Each row contains the orientations up-left, right, left once each."
+  },
+  {
+   "attribute": "size",
+   "kind": "prog",
+   "axis": "row",
+   "description": "In each row the figure grows step by step."
+  }
+ ],
+ "problem": {
+  "rows": 3,
+  "cols": 3,
+  "cells": [
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.45,
+      "rotation": 90,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.65,
+      "rotation": 270,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.85,
+      "rotation": 315,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.45,
+      "rotation": 270,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.65,
+      "rotation": 315,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.85,
+      "rotation": 90,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.45,
+      "rotation": 315,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.65,
+      "rotation": 90,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   null
+  ],
+  "options": [
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.85,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.65,
+      "rotation": 90,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.85,
+      "rotation": 90,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.85,
+      "rotation": 270,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.65,
+      "rotation": 270,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 0,
+      "size": 0.85,
+      "rotation": 180,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   }
+  ]
+ }
+}

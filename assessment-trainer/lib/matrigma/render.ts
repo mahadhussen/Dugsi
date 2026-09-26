@@ -1,0 +1,236 @@
+import type { Cell, CellPattern, GeneratedMatrixQuestion, MatrixObject, MatrixProblem } from "./types";
+import { OPTION_LABELS } from "./types";
+import { rotatePoint, shapePolygon } from "./geometry";
+import { glyphSvg } from "./glyphs";
+
+/**
+ * Pure SVG-string renderer. Used by the React UI (inline SVG), by the test-data
+ * generator (SVG -> PNG screenshots for the vision tests) and nowhere else, so
+ * what the user practises on is exactly what the vision pipeline is tested on.
+ */
+
+const INK = "#111827";
+
+function fmt(n: number): string {
+  return (Math.round(n * 100) / 100).toString();
+}
+
+function objectSvg(o: MatrixObject, x0: number, y0: number, cell: number, uid: string): string {
+  const cx = x0 + o.x * cell;
+  const cy = y0 + o.y * cell;
+  const r = o.size * cell * 0.4;
+  const stroke = Math.max(2, cell * 0.025);
+  const fillColor = o.fill === 1 ? INK : "none";
+  const t = `translate(${fmt(cx)} ${fmt(cy)}) rotate(${fmt(o.rotation)})`;
+
+  if (o.shape === "line") {
+    return `<line x1="0" y1="${fmt(-r)}" x2="0" y2="${fmt(r)}" stroke="${INK}" stroke-width="${fmt(stroke * 1.6)}" stroke-linecap="butt" transform="${t}"/>`;
+  }
+  let outline: string;
+  let body: string;
+  if (o.shape === "circle") {
+    outline = `<circle cx="0" cy="0" r="${fmt(r)}"`;
+  } else {
+    const pts = shapePolygon(o.shape, r).map(([px, py]) => `${fmt(px)},${fmt(py)}`).join(" ");
+    outline = `<polygon points="${pts}"`;
+  }
+  body = `${outline} fill="${fillColor}" stroke="${INK}" stroke-width="${fmt(stroke)}" stroke-linejoin="miter"/>`;
+  if (o.fill === 0.5) {
+    // Left half solid, clipped to the shape. The half is defined in the
+    // object's own frame so it rotates with the object.
+    const clipId = `c${uid}`;
+    const clip = `<clipPath id="${clipId}">${outline}/></clipPath>`;
+    const half = `<rect x="${fmt(-r - 2)}" y="${fmt(-r - 2)}" width="${fmt(r + 2)}" height="${fmt(2 * r + 4)}" fill="${INK}" clip-path="url(#${clipId})"/>`;
+    return `<g transform="${t}"><defs>${clip}</defs>${half}${body}</g>`;
+  }
+  return `<g transform="${t}">${body}</g>`;
+}
+
+/** Texture layers of an overlay cell: thin line families, thick bars and dots, inside a square. */
+function patternSvg(p: CellPattern, x0: number, y0: number, size: number, uid: string): string {
+  const m = size * 0.16;
+  const L = x0 + m;
+  const T = y0 + m;
+  const W = size - 2 * m;
+  const R = L + W;
+  const B = T + W;
+  const thin = Math.max(1.2, size * 0.012);
+  const gap = W / 7;
+  const clipId = `p${uid}`;
+  const parts: string[] = [];
+  for (const t of p.lines) {
+    const seg: string[] = [];
+    if (t === "v" || t === "h") {
+      for (let i = 1; i < 7; i++) {
+        const q = (t === "v" ? L : T) + i * gap;
+        seg.push(t === "v" ? `M${fmt(q)} ${fmt(T)}V${fmt(B)}` : `M${fmt(L)} ${fmt(q)}H${fmt(R)}`);
+      }
+    } else if (t === "d" || t === "a") {
+      // Diagonal families: lines x + y = k (/) or x - y = k (\), clipped to the square.
+      for (let k = -6; k <= 6; k++) {
+        const o = k * gap * 1.1;
+        seg.push(t === "d" ? `M${fmt(L + o)} ${fmt(B)}L${fmt(R + o)} ${fmt(T)}` : `M${fmt(L + o)} ${fmt(T)}L${fmt(R + o)} ${fmt(B)}`);
+      }
+    } else if (t === "arc-up" || t === "arc-down") {
+      // Arcs curving up (∪-shaped, sagging) or down (∩-shaped).
+      const bend = W * 0.18 * (t === "arc-up" ? 1 : -1);
+      for (let i = 1; i < 6; i++) {
+        const y = T + (i * W) / 6;
+        seg.push(`M${fmt(L)} ${fmt(y - bend / 2)}Q${fmt(L + W / 2)} ${fmt(y + bend * 1.5)} ${fmt(R)} ${fmt(y - bend / 2)}`);
+      }
+    }
+    if (seg.length) parts.push(`<path d="${seg.join("")}" fill="none" stroke="${INK}" stroke-width="${fmt(thin)}" clip-path="url(#${clipId})"/>`);
+  }
+  const barW = size * 0.085;
+  const cx = x0 + size / 2;
+  const cy = y0 + size / 2;
+  const h = W / 2 + barW * 0.2;
+  for (const t of p.bars) {
+    const rot = t === "v" ? 0 : t === "h" ? 90 : t === "d" ? 45 : -45;
+    const len = t === "d" || t === "a" ? h * 1.3 : h;
+    parts.push(`<rect x="${fmt(-barW / 2)}" y="${fmt(-len)}" width="${fmt(barW)}" height="${fmt(2 * len)}" fill="${INK}" transform="translate(${fmt(cx)} ${fmt(cy)}) rotate(${rot})"/>`);
+  }
+  const DOT: Record<string, [number, number]> = { tl: [0.24, 0.24], tr: [0.76, 0.24], bl: [0.24, 0.76], br: [0.76, 0.76], c: [0.5, 0.5] };
+  for (const t of p.dots) {
+    const [dx, dy] = DOT[t] ?? [0.5, 0.5];
+    parts.push(`<circle cx="${fmt(x0 + dx * size)}" cy="${fmt(y0 + dy * size)}" r="${fmt(size * 0.055)}" fill="${INK}" stroke="#ffffff" stroke-width="${fmt(thin)}"/>`);
+  }
+  return `<defs><clipPath id="${clipId}"><rect x="${fmt(L)}" y="${fmt(T)}" width="${fmt(W)}" height="${fmt(W)}"/></clipPath></defs>${parts.join("")}`;
+}
+
+/** A figure of unit squares, centred, at a fixed scale so figures compare by size. */
+function blocksSvg(blocks: [number, number][], x0: number, y0: number, size: number): string {
+  const u = size * 0.15;
+  const xs = blocks.map((b) => b[0]);
+  const ys = blocks.map((b) => b[1]);
+  const w = (Math.max(...xs) - Math.min(...xs) + 1) * u;
+  const h = (Math.max(...ys) - Math.min(...ys) + 1) * u;
+  const ox = x0 + (size - w) / 2 - Math.min(...xs) * u;
+  const oy = y0 + (size - h) / 2 - Math.min(...ys) * u;
+  const sw = Math.max(1, size * 0.012);
+  return blocks
+    .map(([x, y]) => `<rect x="${fmt(ox + x * u)}" y="${fmt(oy + y * u)}" width="${fmt(u)}" height="${fmt(u)}" fill="#6b7280" stroke="${INK}" stroke-width="${fmt(sw)}"/>`)
+    .join("");
+}
+
+/** Rhombus petals radiating from the centre of the cell. */
+function petalsSvg(petals: number[], x0: number, y0: number, size: number): string {
+  const cx = x0 + size / 2;
+  const cy = y0 + size / 2;
+  const L = size * 0.3;
+  const W = size * 0.075;
+  const sw = Math.max(1.5, size * 0.02);
+  return petals
+    .map((a) => `<polygon points="0,0 ${fmt(W)},${fmt(-L / 2)} 0,${fmt(-L)} ${fmt(-W)},${fmt(-L / 2)}" fill="#ffffff" stroke="${INK}" stroke-width="${fmt(sw)}" stroke-linejoin="round" transform="translate(${fmt(cx)} ${fmt(cy)}) rotate(${fmt(a)})"/>`)
+    .join("");
+}
+
+const GRAPH_XY: Record<string, [number, number]> = { tl: [0.25, 0.25], tr: [0.75, 0.25], bl: [0.25, 0.75], br: [0.75, 0.75] };
+const SEGMENT_ENDS: Record<string, [string, string]> = { top: ["tl", "tr"], bottom: ["bl", "br"], left: ["tl", "bl"], right: ["tr", "br"], d: ["bl", "tr"], a: ["tl", "br"] };
+
+/** Corner dots and the thin lines between corners. */
+function graphSvg(g: { points: string[]; segments: string[] }, x0: number, y0: number, size: number): string {
+  const at = (p: string) => [x0 + GRAPH_XY[p][0] * size, y0 + GRAPH_XY[p][1] * size];
+  const sw = Math.max(1.5, size * 0.018);
+  const lines = g.segments.map((s) => {
+    const [a, b] = SEGMENT_ENDS[s];
+    const [ax, ay] = at(a);
+    const [bx, by] = at(b);
+    return `<line x1="${fmt(ax)}" y1="${fmt(ay)}" x2="${fmt(bx)}" y2="${fmt(by)}" stroke="${INK}" stroke-width="${fmt(sw)}"/>`;
+  });
+  const dots = g.points.map((p) => {
+    const [x, y] = at(p);
+    return `<circle cx="${fmt(x)}" cy="${fmt(y)}" r="${fmt(size * 0.045)}" fill="${INK}"/>`;
+  });
+  return lines.join("") + dots.join("");
+}
+
+export function cellSvgContent(cell: Cell, x0: number, y0: number, size: number, uid: string): string {
+  const pattern = (cell.pattern ? patternSvg(cell.pattern, x0, y0, size, uid) : "") + (cell.blocks?.length ? blocksSvg(cell.blocks, x0, y0, size) : "") + (cell.petals?.length ? petalsSvg(cell.petals, x0, y0, size) : "") + (cell.graph ? graphSvg(cell.graph, x0, y0, size) : "") + (cell.glyph ? glyphSvg(cell.glyph, x0, y0, size, uid) : "");
+  return pattern + cell.objects.map((o, i) => objectSvg(o, x0, y0, size, `${uid}_${i}`)).join("");
+}
+
+export function renderCellSvg(cell: Cell | null, size = 120, uid = "cell"): string {
+  const inner = cell ? cellSvgContent(cell, 0, 0, size, uid) : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${inner}</svg>`;
+}
+
+export interface ScreenshotOptions {
+  cell?: number;
+  /** Add browser chrome, timer, instructions and buttons around the task. */
+  chrome?: boolean;
+  seed?: number;
+}
+
+/**
+ * Render a full "test screen": optional browser chrome and UI noise, the
+ * matrix with a dashed missing cell containing "?", and a row of answer boxes.
+ */
+export function renderScreenshotSvg(problem: MatrixProblem, opts: ScreenshotOptions = {}): {
+  svg: string;
+  width: number;
+  height: number;
+} {
+  const cell = opts.cell ?? 110;
+  const gap = 0;
+  const chrome = opts.chrome ?? true;
+  const optCell = Math.round(cell * 0.85);
+  const optGap = Math.round(cell * 0.18);
+  const nOpt = problem.options.length;
+  const matrixW = problem.cols * cell + (problem.cols - 1) * gap;
+  const matrixH = problem.rows * cell;
+  const optionsW = nOpt * optCell + (nOpt - 1) * optGap;
+  const contentW = Math.max(matrixW, optionsW);
+  const width = contentW + (chrome ? 360 : 80);
+  const top = chrome ? 150 : 40;
+  const height = top + matrixH + 60 + optCell + (chrome ? 150 : 50);
+  const mx = (width - matrixW) / 2;
+  const my = top;
+  const ox = (width - optionsW) / 2;
+  const oy = my + matrixH + 60;
+  const parts: string[] = [];
+  parts.push(`<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>`);
+  if (chrome) {
+    parts.push(`<rect x="0" y="0" width="${width}" height="44" fill="#dfe1e5"/>`);
+    parts.push(`<circle cx="20" cy="22" r="6" fill="#ff5f57"/><circle cx="40" cy="22" r="6" fill="#febc2e"/><circle cx="60" cy="22" r="6" fill="#28c840"/>`);
+    parts.push(`<rect x="90" y="10" width="${width - 180}" height="24" rx="12" fill="#ffffff"/>`);
+    parts.push(`<text x="110" y="27" font-family="sans-serif" font-size="13" fill="#555">practice.local/matrix-training</text>`);
+    parts.push(`<text x="30" y="85" font-family="sans-serif" font-size="18" font-weight="bold" fill="#222">Question 7 of 20</text>`);
+    parts.push(`<text x="30" y="112" font-family="sans-serif" font-size="14" fill="#666">Which option completes the pattern?</text>`);
+    parts.push(`<rect x="${width - 130}" y="66" width="100" height="34" rx="6" fill="#f3f4f6" stroke="#9ca3af"/>`);
+    parts.push(`<text x="${width - 110}" y="89" font-family="monospace" font-size="16" fill="#111">00:42</text>`);
+  }
+  // Matrix cells
+  for (let r = 0; r < problem.rows; r++) {
+    for (let c = 0; c < problem.cols; c++) {
+      const idx = r * problem.cols + c;
+      const x = mx + c * (cell + gap);
+      const y = my + r * cell;
+      const cl = problem.cells[idx];
+      if (cl === null) {
+        parts.push(`<rect x="${x + 4}" y="${y + 4}" width="${cell - 8}" height="${cell - 8}" fill="#f9fafb" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 6"/>`);
+        parts.push(`<text x="${x + cell / 2}" y="${y + cell / 2 + 14}" text-anchor="middle" font-family="sans-serif" font-size="40" fill="#9ca3af">?</text>`);
+      } else {
+        parts.push(`<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="#ffffff" stroke="#4b5563" stroke-width="2"/>`);
+        parts.push(cellSvgContent(cl, x, y, cell, `m${idx}`));
+      }
+    }
+  }
+  // Answer options
+  problem.options.forEach((o, i) => {
+    const x = ox + i * (optCell + optGap);
+    parts.push(`<rect x="${x}" y="${oy}" width="${optCell}" height="${optCell}" fill="#ffffff" stroke="#4b5563" stroke-width="2"/>`);
+    parts.push(cellSvgContent(o, x, oy, optCell, `o${i}`));
+    parts.push(`<text x="${x + optCell / 2}" y="${oy + optCell + 24}" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#374151">${OPTION_LABELS[i]}</text>`);
+  });
+  if (chrome) {
+    parts.push(`<rect x="${width - 170}" y="${height - 70}" width="140" height="40" rx="8" fill="#2563eb"/>`);
+    parts.push(`<text x="${width - 100}" y="${height - 44}" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#fff">Next</text>`);
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${parts.join("")}</svg>`;
+  return { svg, width, height };
+}
+
+export function questionScreenshotSvg(q: GeneratedMatrixQuestion, opts?: ScreenshotOptions) {
+  return renderScreenshotSvg(q.problem, opts);
+}
