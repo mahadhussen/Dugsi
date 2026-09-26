@@ -5,7 +5,7 @@
  * kind-specific code, and how the glyph is drawn.
  */
 
-export type GlyphKind = "dotpath" | "emblem" | "strip" | "lined" | "seq" | "orbit" | "bands";
+export type GlyphKind = "dotpath" | "emblem" | "strip" | "lined" | "seq" | "orbit" | "bands" | "cutout";
 export type GlyphValue = string | number;
 
 export interface Glyph {
@@ -64,6 +64,11 @@ export const GLYPH_PROPS: Record<GlyphKind, GlyphPropSpec[]> = {
   orbit: [
     { prop: "square", label: "square", kind: "angle", period: 4, tol: 0.3, format: (v) => SIDE4[Number(v)] ?? String(v), describeStep: quarterStep },
     { prop: "circle", label: "small circle", kind: "angle", period: 4, tol: 0.3, format: (v) => SIDE4[Number(v)] ?? String(v), describeStep: quarterStep },
+  ],
+  cutout: [
+    { prop: "base", label: "shape", kind: "category", tol: 0 },
+    { prop: "cut", label: "corner that is cut off", kind: "category", tol: 0 },
+    { prop: "stage", label: "stage (whole, cut, fallen piece)", kind: "category", tol: 0, format: (v) => ({ whole: "whole shape", cut: "shape with a piece cut off", piece: "the cut-off piece, fallen to the bottom", inplace: "the cut-off piece, still in place" })[String(v)] ?? String(v) },
   ],
   bands: [
     { prop: "b1", label: "left band", kind: "category", tol: 0, alldiff: true, format: (v) => TEXTURE_WORDS[String(v)] ?? String(v) },
@@ -238,6 +243,74 @@ function bandsSvg(p: Record<string, GlyphValue>, x0: number, y0: number, s: numb
   return out.join("");
 }
 
+// Cut-out pieces: a shape, the shape with one corner (or a quarter of a circle)
+// cut off, and the cut-off piece fallen to the bottom with its tip up.
+
+type P2 = [number, number];
+const SIDES: Record<string, number> = { triangle: 3, square: 4, pentagon: 5, hexagon: 6 };
+
+/** Outline of the base shape (unit radius, centre 0,0, y down). Circles are fine polygons. */
+function basePoints(base: string): P2[] {
+  const n = SIDES[base] ?? 48;
+  const start = base === "square" ? -135 : -90; // square axis-aligned, others point up
+  return Array.from({ length: n }, (_, i) => {
+    const a = ((start + (360 / n) * i) * Math.PI) / 180;
+    return [Math.cos(a), Math.sin(a)] as P2;
+  });
+}
+
+/** Cut-off piece and remaining shape for cut index `k`. */
+export function cutoutParts(base: string, k: number): { piece: P2[]; rest: P2[]; tip: P2 } {
+  const pts = basePoints(base);
+  if (!SIDES[base]) {
+    // Circle: a quarter sector, pointing to one of four diagonal directions.
+    const from = ((k % 4) * 90 - 90 + 360) % 360; // degrees from the +x axis (y down)
+    const arc: P2[] = [];
+    for (let a = from; a <= from + 90; a += 7.5) arc.push([Math.cos((a * Math.PI) / 180), Math.sin((a * Math.PI) / 180)]);
+    const restArc: P2[] = [];
+    for (let a = from + 90; a <= from + 360; a += 7.5) restArc.push([Math.cos((a * Math.PI) / 180), Math.sin((a * Math.PI) / 180)]);
+    return { piece: [[0, 0], ...arc], rest: [[0, 0], ...restArc], tip: [0, 0] };
+  }
+  const n = pts.length;
+  const v = pts[k % n];
+  const prev = pts[(k - 1 + n) % n];
+  const next = pts[(k + 1) % n];
+  // Cut 65 % along both edges so the piece is clearly visible.
+  const t = 0.65;
+  const m1: P2 = [v[0] + t * (prev[0] - v[0]), v[1] + t * (prev[1] - v[1])];
+  const m2: P2 = [v[0] + t * (next[0] - v[0]), v[1] + t * (next[1] - v[1])];
+  const rest = pts.flatMap((p, i) => (i === k % n ? [m1, m2] : [p]));
+  return { piece: [m1, v, m2], rest, tip: v };
+}
+
+function cutoutSvg(p: Record<string, GlyphValue>, x0: number, y0: number, s: number): string {
+  const R = s * 0.33;
+  const cx = x0 + s / 2;
+  const cy = y0 + s / 2;
+  const sw = Math.max(1, s * 0.012);
+  const poly = (pts: P2[]) => `<polygon points="${pts.map(([x, y]) => `${f(x)},${f(y)}`).join(" ")}" fill="#ffffff" stroke="${INK}" stroke-width="${f(sw)}" stroke-linejoin="round"/>`;
+  const tile = `<rect x="${f(x0 + s * 0.06)}" y="${f(y0 + s * 0.06)}" width="${f(s * 0.88)}" height="${f(s * 0.88)}" fill="#4a78b5" stroke="${INK}" stroke-width="${f(sw)}"/>`;
+  const place = (pts: P2[]) => pts.map(([x, y]) => [cx + x * R, cy + y * R] as P2);
+  const base = String(p.base);
+  const stage = String(p.stage);
+  if (stage === "whole") return tile + poly(place(basePoints(base)));
+  const { piece, rest, tip } = cutoutParts(base, Number(p.cut));
+  if (stage === "cut") return tile + poly(place(rest));
+  if (stage === "inplace") return tile + poly(place(piece));
+  // Fallen piece: turn it so its tip points up, then let it rest on the bottom, centred.
+  const others = piece.filter((q) => q !== tip);
+  const bx = others.reduce((a, q) => a + q[0], 0) / others.length;
+  const by = others.reduce((a, q) => a + q[1], 0) / others.length;
+  const ang = Math.atan2(tip[1] - by, tip[0] - bx); // direction base -> tip
+  const rot = -Math.PI / 2 - ang; // make it point up (-y)
+  const turned = piece.map(([x, y]) => [x * Math.cos(rot) - y * Math.sin(rot), x * Math.sin(rot) + y * Math.cos(rot)] as P2);
+  const minX = Math.min(...turned.map((q) => q[0]));
+  const maxX = Math.max(...turned.map((q) => q[0]));
+  const maxY = Math.max(...turned.map((q) => q[1]));
+  const floor = y0 + s * 0.86;
+  return tile + poly(turned.map(([x, y]) => [cx + (x - (minX + maxX) / 2) * R, floor + (y - maxY) * R] as P2));
+}
+
 export function glyphSvg(g: Glyph, x0: number, y0: number, size: number, uid = "g"): string {
   switch (g.kind) {
     case "dotpath":
@@ -254,5 +327,7 @@ export function glyphSvg(g: Glyph, x0: number, y0: number, size: number, uid = "
       return orbitSvg(g.props, x0, y0, size);
     case "bands":
       return bandsSvg(g.props, x0, y0, size, uid);
+    case "cutout":
+      return cutoutSvg(g.props, x0, y0, size);
   }
 }

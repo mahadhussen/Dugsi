@@ -336,3 +336,53 @@ export function generateBands(seed: number, difficulty: Difficulty, rng: Rng, fi
   void correct;
   return verified(finish(seed, "bands", difficulty, grid, wrong, rules, rng));
 }
+
+// ---------------------------------------------------------------------------
+// Cut-out piece: whole shape → shape with a piece cut off → the piece, fallen
+// to the bottom with its tip up. Harder levels mix the order of the stages.
+
+const CUT_SHAPES: Record<Difficulty, string[]> = {
+  easy: ["square", "pentagon", "hexagon", "triangle"],
+  medium: ["square", "pentagon", "hexagon", "circle"],
+  hard: ["square", "pentagon", "hexagon", "triangle", "circle"],
+  expert: ["square", "pentagon", "hexagon", "triangle", "circle"],
+};
+const CORNERS: Record<string, number> = { triangle: 3, square: 4, pentagon: 5, hexagon: 6, circle: 4 };
+
+export function generateCutout(seed: number, difficulty: Difficulty, rng: Rng, finish: Finish) {
+  const bases = rng.sample(CUT_SHAPES[difficulty], 3);
+  const stages = ["whole", "cut", "piece"];
+  const order = difficulty === "hard" || difficulty === "expert" ? latin(rng, stages) : (_r: number, c: number) => stages[c];
+  const grid: Cell[] = [];
+  const cuts: number[] = [];
+  for (let r = 0; r < 3; r++) {
+    const cut = rng.int(0, CORNERS[bases[r]] - 1);
+    cuts.push(cut);
+    for (let c = 0; c < 3; c++) grid.push(glyph("cutout", { base: bases[r], cut, stage: order(r, c) }));
+  }
+  const { base, cut, stage } = grid[8].glyph!.props as { base: string; cut: number; stage: string };
+  const mk = (b: string, k: number, st: string) => glyph("cutout", { base: b, cut: mod(k, CORNERS[b]), stage: st });
+  const others = stages.filter((x) => x !== stage);
+  const wrong = rng.shuffle([
+    mk(base, cut, stage === "piece" ? "inplace" : "piece"), // right piece, not fallen (or the fallen piece where the cut shape belongs)
+    ...others.map((st) => mk(base, cut, st)),
+    // Another corner only looks different on the cut shape; a whole shape or a
+    // fallen piece looks the same whichever corner it came from.
+    ...(stage === "cut" ? [mk(base, cut + 1, stage), mk(base, cut - 1, stage)] : []),
+    ...bases.filter((b) => b !== base).map((b) => mk(b, 0, stage)),
+  ]);
+  const rules: RuleDescriptor[] = [
+    { attribute: "g:base", kind: "constant", axis: "row", description: "Each row uses one shape and cuts off the same corner." },
+    {
+      attribute: "g:stage",
+      kind: "distribute",
+      axis: "row",
+      description:
+        difficulty === "hard" || difficulty === "expert"
+          ? "Each row shows the whole shape, the shape with a piece cut off, and that piece fallen to the bottom (tip up), in varying order."
+          : "Along each row: the whole shape, then the shape with a piece cut off, then that piece fallen to the bottom with its tip up.",
+    },
+  ];
+  void cuts;
+  return verified(finish(seed, "cutout", difficulty, grid, wrong, rules, rng));
+}

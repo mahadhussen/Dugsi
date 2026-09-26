@@ -36,6 +36,7 @@ const CATEGORY_OFFSET: Partial<Record<MatrigmaCategory, number>> = {
   strip: -0.3,
   lined: 0.1,
   bands: 0.4,
+  cutout: 0.2,
   "multi-rule": 0.5,
 };
 

@@ -103,6 +103,7 @@ export const MATRIGMA_CATEGORIES = [
   "strip",
   "lined",
   "bands",
+  "cutout",
   "multi-rule",
 ] as const;
 export type MatrigmaCategory = (typeof MATRIGMA_CATEGORIES)[number];
@@ -130,6 +131,7 @@ export const CATEGORY_LABELS: Record<MatrigmaCategory, string> = {
   strip: "Shrinking bars",
   lined: "Shapes and lines",
   bands: "Texture bands",
+  cutout: "Cut-out piece",
   "multi-rule": "Multi-rule",
 };
 

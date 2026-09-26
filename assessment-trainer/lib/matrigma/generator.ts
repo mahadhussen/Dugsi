@@ -1003,6 +1003,7 @@ const DEFAULT_DIFFICULTY: Record<MatrigmaCategory, Difficulty> = {
   strip: "easy",
   lined: "medium",
   bands: "medium",
+  cutout: "medium",
   "multi-rule": "hard",
 };
 
@@ -1060,6 +1061,9 @@ export function generateQuestion(opts: GenerateOptions = {}): GeneratedMatrixQue
         break;
       case "bands":
         q = G.generateBands(seed, difficulty, rng, finish);
+        break;
+      case "cutout":
+        q = G.generateCutout(seed, difficulty, rng, finish);
         break;
       default:
         q = generateAttributeQuestion(seed, category, difficulty, rng);

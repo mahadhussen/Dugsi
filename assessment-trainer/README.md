@@ -18,7 +18,7 @@ What it does:
   confidence, a step-by-step explanation and overlays. If the matrix can't be
   detected it says *"Unable to reliably detect the matrix."*, shows the detected
   region and the problem, and never guesses.
-- **Matrix practice** – synthetic questions with known solutions in 23 categories
+- **Matrix practice** – synthetic questions with known solutions in 24 categories
   and 4 difficulty levels; adaptive mode (more questions in weak categories),
   single-category mode, and timed tests (5/10/20 questions, per-question and
   session timers).
@@ -36,7 +36,8 @@ What it does:
 - **More question types** – lines and dots (lines XOR, dots in common), overlay in
   any position, swap positions (the thick bar marks the symbol that stays),
   moving dots around a grid edge, circle and square inside a disc, figure
-  combinations, shrinking bars, shapes with lines, and texture bands. The
+  combinations, shrinking bars, shapes with lines, texture bands, and cut-out
+  pieces (a shape loses a corner, then the piece lies fallen at the bottom). The
   figure-like types are "glyphs" (`lib/matrigma/glyphs.ts`): each declares its
   properties, and the rule engine fits rules on them without special code.
 - **Rule focus** – *Focus: XOR* and *Focus: Construction (A + B = C)* mix
@@ -132,7 +133,7 @@ Measured results (this repository, September 2026):
 
 | Check | Result |
 |---|---|
-| Solver, 100 generated questions × 23 categories | 99.9 % correct, **0 wrong**, 1 abstention |
+| Solver, 100 generated questions × 24 categories | 99.9 % correct, **0 wrong**, 1 abstention |
 | Screenshot → vision → solver, 330 renders (PNG, JPEG q70, 0.7× scale) | 97.3 % correct, **0 wrong**, the rest abstained |
 | Same with the TypeScript (browser) vision, 198 renders | 96.5 % correct, **0 wrong**, the rest abstained, ~70 ms each |
 | Object extraction vs. ground truth on the fixtures | every shape, fill, rotation and count correct |

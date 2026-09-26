@@ -96,7 +96,7 @@ describe("growing petal questions", () => {
 });
 
 describe("new question types (glyphs, lines and dots, overlay anywhere)", () => {
-  const cats = ["linesdots", "hatch", "swap", "dotpath", "orbit", "emblem", "strip", "lined", "bands"] as const;
+  const cats = ["linesdots", "hatch", "swap", "dotpath", "orbit", "emblem", "strip", "lined", "bands", "cutout"] as const;
   it.each(cats)("%s: generated at every level and solved with the intended answer", (category) => {
     for (const d of ["easy", "medium", "hard", "expert"] as const) {
       for (let i = 0; i < 12; i++) {
