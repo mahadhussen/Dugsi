@@ -67,28 +67,62 @@ const p = (theta: number, b: number) => 1 / (1 + Math.exp(-(theta - b)));
 export type TestStart = "standard" | "hard";
 
 /**
- * Expert ladder: only item types whose expert questions are built from three
- * rules, ordered from easier to harder. The second half repeats the types that
- * can carry distracting elements on top of the three rules. A correct answer
- * moves one rung up (always a harder item), a wrong answer one rung down.
+ * Expert mix: every picture type whose expert questions combine two or three
+ * rules (plus, for six of them, a variant with distracting elements), ranked
+ * from easier to harder and cut into steps of three. A correct answer moves one
+ * step up, a wrong answer one step down, and the item is drawn at random from
+ * the step, avoiding picture types already used in the test. Every item in a
+ * higher step ranks above every item in a lower one, so a correct answer
+ * always leads to a harder question, but which one is not predictable.
  */
-const LADDER_TYPES: [MatrigmaCategory, boolean][] = [
-  ["shape", false], ["fill", false], ["rotation", false], ["count", false], ["position", false], ["size", false],
-  ["direction", false], ["overlay", false], ["multi-rule", false],
-  ["shape", true], ["fill", true], ["rotation", true], ["size", true], ["direction", true], ["multi-rule", true],
+const MIX: [MatrigmaCategory, number, boolean][] = [
+  // [category, rules at expert, distracting elements]
+  ["rotation", 3, false], ["count", 3, false], ["position", 3, false], ["shape", 3, false], ["fill", 3, false],
+  ["size", 3, false], ["direction", 3, false], ["overlay", 3, false], ["multi-rule", 3, false],
+  ["petals", 2, false], ["linesdots", 2, false], ["hatch", 2, false], ["dotpath", 2, false], ["orbit", 2, false],
+  ["emblem", 2, false], ["strip", 2, false], ["lined", 2, false], ["bands", 2, false], ["cutout", 2, false],
+  ["shape", 3, true], ["fill", 3, true], ["rotation", 3, true], ["size", 3, true], ["direction", 3, true], ["multi-rule", 3, true],
 ];
-export const LADDER: ItemType[] = LADDER_TYPES.map(([category, noise], i) => ({
-  category,
-  difficulty: "expert",
-  b: Math.round((1.3 + 0.12 * i) * 100) / 100,
-  ...(noise ? { noise } : {}),
-}));
+const STEP_SIZE = 3;
+export const LADDER: ItemType[] = MIX.map(([category, rules, noise]) => ({ category, rules, noise, score: (CATEGORY_OFFSET[category] ?? 0) + 0.25 * (rules - 2) + (noise ? 0.5 : 0) }))
+  .sort((x, y) => x.score - y.score || x.category.localeCompare(y.category))
+  .map(({ category, noise }, i) => ({ category, difficulty: "expert" as Difficulty, b: Math.round((1.2 + 0.07 * i) * 100) / 100, ...(noise ? { noise } : {}) }));
+export const LADDER_STEPS = Math.ceil(LADDER.length / STEP_SIZE);
+export const ladderStep = (step: number): ItemType[] => LADDER.slice(step * STEP_SIZE, (step + 1) * STEP_SIZE);
 
-/** Rung reached after these answers (starts at the bottom rung). */
+/** Step reached after these answers (starts at the bottom step). */
 export function ladderRung(responses: TestResponse[]): number {
   let r = 0;
-  for (const x of responses) r = x.correct ? Math.min(LADDER.length - 1, r + 1) : Math.max(0, r - 1);
+  for (const x of responses) r = x.correct ? Math.min(LADDER_STEPS - 1, r + 1) : Math.max(0, r - 1);
   return r;
+}
+
+function nextMixItem(responses: TestResponse[], rand: () => number): ItemType {
+  const rung = ladderRung(responses);
+  const used = new Set(responses.map((r) => r.category));
+  const lastR = responses[responses.length - 1];
+  const pick = (xs: ItemType[]) => xs[Math.min(xs.length - 1, Math.floor(rand() * xs.length))];
+  const step = ladderStep(rung);
+  const freshStep = step.filter((it) => !used.has(it.category));
+  if (lastR?.correct) {
+    // After a correct answer: always from the (higher) current step.
+    const other = step.filter((it) => it.category !== lastR.category);
+    return pick(freshStep.length ? freshStep : other.length ? other : step);
+  }
+  // At the start or after a wrong answer: a new picture type from this step or
+  // any easier one (the two lowest steps when at the bottom).
+  const below = LADDER.slice(0, Math.max(rung + 1, 2) * STEP_SIZE).filter((it) => !used.has(it.category));
+  if (freshStep.length) return pick(freshStep);
+  if (below.length) return pick(below);
+  // Every nearby type used already: the new types closest to this step.
+  const near = LADDER.map((it, i) => ({ it, d: Math.abs(Math.floor(i / STEP_SIZE) - rung) }))
+    .filter((x) => !used.has(x.it.category))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, STEP_SIZE)
+    .map((x) => x.it);
+  if (near.length) return pick(near);
+  const other = step.filter((it) => it.category !== lastR?.category);
+  return pick(other.length ? other : step);
 }
 
 /** Expected a posteriori ability and its standard error. */
@@ -114,7 +148,7 @@ export function estimateAbility(responses: TestResponse[]): { theta: number; se:
  * (and not more than twice in the whole test when avoidable).
  */
 export function nextItem(responses: TestResponse[], rand: () => number = Math.random, start: TestStart = "standard"): ItemType {
-  if (start === "hard") return LADDER[ladderRung(responses)];
+  if (start === "hard") return nextMixItem(responses, rand);
   const { theta } = estimateAbility(responses);
   const last = responses[responses.length - 1]?.category;
   const used = new Map<string, number>();

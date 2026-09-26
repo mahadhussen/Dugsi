@@ -47,23 +47,34 @@ describe("adaptive ability test", () => {
     expect(rep.total).toBe(20);
   });
 
-  it("the expert ladder only uses three-rule questions and every correct answer moves up", () => {
-    const at = (rs: TestResponse[]) => nextItem(rs, () => 0, "hard");
+  it("the expert mix moves to a harder step after every correct answer, with varied picture types", () => {
+    let seed = 7;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
     const rs: TestResponse[] = [];
-    let prev = at(rs);
-    for (let i = 0; i < 12; i++) {
+    let prev = nextItem(rs, rand, "hard");
+    for (let i = 0; i < 8; i++) {
       rs.push({ ...prev, correct: true, timeMs: 1 });
-      const nx = at(rs);
+      const nx = nextItem(rs, rand, "hard");
       expect(nx.b).toBeGreaterThan(prev.b);
       prev = nx;
     }
+    // No picture type twice while the steps still offer new ones.
+    expect(new Set(rs.map((r) => r.category)).size).toBe(rs.length);
     rs.push({ ...prev, correct: false, timeMs: 1 });
-    expect(at(rs).b).toBeLessThan(prev.b);
+    expect(nextItem(rs, rand, "hard").b).toBeLessThan(prev.b);
+    // Different test takers do not get the same sequence.
+    const firsts = new Set(Array.from({ length: 30 }, () => nextItem([], Math.random, "hard").category));
+    expect(firsts.size).toBeGreaterThan(1);
+  });
+
+  it("every expert mix item has at least two rules and is solved by the verifier", () => {
     for (const it of LADDER) {
       expect(it.difficulty).toBe("expert");
-      const q = generateQuestion({ category: it.category, difficulty: "expert", noise: it.noise, seed: 99 });
-      expect(q.rules.length).toBeGreaterThanOrEqual(3);
-      expect(solveMatrix(q.problem).answer).toBe(q.correctAnswer);
+      for (const seed of [99, 1234]) {
+        const q = generateQuestion({ category: it.category, difficulty: "expert", noise: it.noise, seed });
+        expect(q.rules.length).toBeGreaterThanOrEqual(2);
+        expect(solveMatrix(q.problem).answer).toBe(q.correctAnswer);
+      }
     }
   });
 

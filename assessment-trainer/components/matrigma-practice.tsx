@@ -306,7 +306,7 @@ export function MatrigmaPractice() {
                 <Label htmlFor="teststart">Start level</Label>
                 <Select id="teststart" value={testStart} onChange={(e) => setTestStart(e.target.value as TestStart)}>
                   <option value="standard">Standard · starts in the middle</option>
-                  <option value="hard">Expert ladder · 3 rules, each correct answer harder</option>
+                  <option value="hard">Expert mix · varied types, each correct answer harder</option>
                 </Select>
               </div>
             )}
