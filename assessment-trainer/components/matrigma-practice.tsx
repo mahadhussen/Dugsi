@@ -356,16 +356,18 @@ export function MatrigmaPractice() {
         {report && (
           <Card className="mb-3">
             <CardHeader>
-              <CardTitle>Estimated level: {report.stanine} of 9</CardTitle>
+              <CardTitle>Normalised score: {report.sten} of 10</CardTitle>
               <CardDescription>
-                Ability {report.theta.toFixed(2)} ± {report.se.toFixed(2)} on this tool&apos;s own scale (5 = middle). Hardest level solved: {report.hardestSolved ?? "none"}.
+                Ability {report.theta.toFixed(2)} ± {report.se.toFixed(2)} on this tool&apos;s own scale; 5–6 is the middle of a bell curve (mean 5.5, SD 2), not a comparison with other test takers. Hardest level solved: {report.hardestSolved ?? "none"}.
                 This is an estimate from {report.total} synthetic questions, not a norm-referenced test score.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <div className="flex gap-1" aria-label={`Level ${report.stanine} of 9`}>
-                {Array.from({ length: 9 }, (_, i) => (
-                  <div key={i} className={cn("h-3 flex-1 rounded-sm", i < report.stanine ? "bg-primary" : "bg-muted")} />
+              <div className="flex gap-1" aria-label={`Score ${report.sten} of 10`}>
+                {Array.from({ length: 10 }, (_, i) => (
+                  <div key={i} className={cn("flex h-8 flex-1 items-center justify-center rounded-full text-xs tabular-nums", i + 1 === report.sten ? "bg-primary font-semibold text-primary-foreground" : i < report.sten ? "bg-primary/25" : "bg-muted")}>
+                    {i + 1}
+                  </div>
                 ))}
               </div>
               {report.weakest.length > 0 && (

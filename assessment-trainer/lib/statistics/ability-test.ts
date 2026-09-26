@@ -131,6 +131,8 @@ export interface AbilityReport {
   se: number;
   /** 1-9, mean 5, SD 2 on this tool's own scale. */
   stanine: number;
+  /** 1-10 normalised score (sten: mean 5.5, SD 2) on the same scale. */
+  sten: number;
   /** Share of a standard-normal reference group below this ability (own scale, not a real norm). */
   percentile: number;
   correct: number;
@@ -170,6 +172,7 @@ export function abilityReport(responses: TestResponse[]): AbilityReport {
     theta,
     se,
     stanine: Math.max(1, Math.min(9, Math.round(2 * theta + 5))),
+    sten: Math.max(1, Math.min(10, Math.round(2 * theta + 5.5))),
     percentile: Math.round(normCdf(theta) * 100),
     correct: responses.filter((r) => r.correct).length,
     total: responses.length,

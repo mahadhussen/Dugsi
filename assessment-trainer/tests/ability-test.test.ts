@@ -42,6 +42,8 @@ describe("adaptive ability test", () => {
     const rep = abilityReport(r);
     expect(rep.stanine).toBeGreaterThanOrEqual(1);
     expect(rep.stanine).toBeLessThanOrEqual(9);
+    expect(rep.sten).toBeGreaterThanOrEqual(1);
+    expect(rep.sten).toBeLessThanOrEqual(10);
     expect(rep.total).toBe(20);
   });
 
