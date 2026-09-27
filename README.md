@@ -34,14 +34,21 @@ reading-progress marker.
    flags rushed ones (⏱) — e.g. the 6-count madd in *aḍ-ḍāāāllīn*.
 4. **Tajweed guide.** The surah is rendered with colour-coded tajweed rules
    (madd, sun/moon letters, leen, lām of Allah, tafkhīm, …) to learn as you read.
-5. **Listen to the whole Quran, in your Sheikh's voice.** Pick from a range of
-   beloved qaris (Alafasy, Al-Husary, Abdul Basit, Al-Minshawi, As-Sudais, …)
+5. **Listen to the whole Quran, in your Sheikh's voice.** A reciter library
+   of 40+ qaris, all Hafs ʿan ʿĀṣim, from Alafasy, Al-Husary, Abdul Basit and
+   Al-Minshawi (murattal, mujawwad and teaching recordings) to the imams of the
+   two Holy Mosques, with search, style and country filters, favourites,
+   recently used, a quality badge from the recording bitrate, a "word
+   highlighting" badge, and portraits from Wikipedia where available. Pick one
    and press play: Dugsi recites the surah verse by verse and flows straight
    into the next one, so you can listen to the entire Quran hands-free. It hooks
    into the phone's Media Session, so the lock-screen and headphone controls
    (play / pause / skip) work too — handy while driving or with the screen off.
-   Audio streams from the public everyayah.com archive at play time. Your chosen
-   Sheikh is remembered on the device and used everywhere audio plays.
+   Audio streams from the public everyayah.com archive at play time, with the
+   next verse always loaded ahead so nothing breaks between verses or between
+   surahs, and a surah can be saved to the device to play with no network at
+   all. Your chosen Sheikh is remembered on the device and used everywhere
+   audio plays.
 6. **Prayer times for Göteborg + adhan.** A dedicated page shows today's times
    (Fajr, Shuruq, Dhuhr, Asr, Maghrib, Isha) with the next prayer and a live
    countdown, computed **on-device** with the Muslim World League method and the
@@ -50,9 +57,97 @@ reading-progress marker.
    bright summer nights, offline and server-free. A built-in adhan player lets
    you choose a call-to-prayer recording and listen whenever you like.
 
-The three areas each live on their own page — **Recitera** (`/`), **Lyssna**
-(`/listen`) and **Bönetider** (`/prayer`) — reached from a slide-out side menu,
-so the recite, listen and prayer-time flows never get in each other's way.
+7. **Live mistake detection.** While you recite, skipped words turn grey and
+   substituted words red the moment the recogniser is sure you moved on; added
+   words are counted in a running tally. It is deliberately conservative (a
+   word is only flagged once a later word clearly matched), a re-read word turns
+   green again, and the full alignment at the end has the final say. Can be
+   switched off under *Goals & reminders → Reciting* for positive-only marking.
+8. **Memorisation (Hifz) tools.** Three hiding levels; hidden words reveal as
+   you recite them correctly. Stuck? **Peek next word** or **Peek verse** (peeks
+   are counted per attempt, so the summary stays honest), or tap any hidden
+   word. Transliteration and translation hide with the words so nothing gives
+   them away. Long surahs can be practised a **verse range** at a time, with
+   ◀ ▶ to step to the next range.
+9. **Mistake history.** Every word you slip on is saved, with what you said
+   instead. Per surah (with *You* vs *Correct* playback) and across all surahs
+   on the progress page, most frequent first, each with a one-tap **Practise**
+   that opens exactly that verse.
+10. **Your recordings.** Every recitation is recorded on the device. The
+    *Recordings* tab lists them per surah with playback at 0.75× / 1× / 1.25×,
+    download and delete. Audio never leaves the device.
+11. **Analytics dashboard** (`/progress`). Current and best streak, minutes
+    recited (today / week / all time), verses covered, score trend, minutes per
+    day against your goal, a 16-week activity calendar, all-time word totals,
+    and per-surah mastery with verses mastered.
+12. **Goals.** Minutes per day, recitations per day, verses per week and verses
+    memorised per month, each with a progress bar. Editable with +/−.
+13. **Study reminders.** A daily reminder at your time (and chosen weekdays):
+    a system notification while Dugsi is open or installed to the home screen,
+    plus an **.ics calendar file** with a repeating alarm for when it is not — a
+    static site has no push server, and we say so instead of pretending.
+14. **Bookmarks.** Mark any verse while reading; the list on the progress page
+    jumps straight back to it.
+15. **Local-first, cloud-synced.** All of the above works signed out, stored in
+    this browser. Sign in and history, goals, settings and bookmarks sync to
+    the account and merge across devices (each session carries a client id so
+    nothing is counted twice). Recordings stay on the device by design.
+16. **Installable.** A web manifest and a tiny service worker let Dugsi be
+    added to the home screen like an app.
+17. **Quran-tuned recognition.** The precise on-device check now prefers
+    Tarteel's open **whisper-base-ar-quran** (Apache-2.0), a Whisper fine-tuned
+    on recitation, through a community ONNX export. It is tried where the
+    device has headroom (WebGPU, or a non-iOS browser) and falls back to
+    whisper-tiny automatically if it can't load. Toggle under *Goals &
+    reminders → Reciting*.
+18. **Hesitation detection + auto-stop.** Silero VAD (MIT) runs on the device
+    while you recite: a pause longer than 2.5 s mid-recitation is noted with
+    the word you were stuck before, and shown after the attempt as your
+    memorisation weak spots. Optional auto-stop ends the recording after 6 s of
+    silence. Loads from a CDN only when reciting; silently absent otherwise.
+19. **Word-by-word qari timings.** Word-level timestamps from quran-align
+    (CC BY 4.0) for Alafasy, Al-Husary (Muallim), Ash-Shuraim and Al-Minshawi:
+    words light up as the Sheikh recites them on the Listen page (with 0.75× /
+    1× / 1.25× speed), and in the mistake review **Correct** plays *just that
+    word* in the qari's voice next to **You**.
+20. **The real mushaf pages.** The Quran is shown as the 604 pages of the
+    printed Madinah mushaf, 15 lines each, every word on the line the King Fahd
+    Complex printed it on (layout generated from the Complex's own typeset
+    document by `scripts/build-mushaf-layout.py`), set in the Complex's own
+    HAFS Uthmanic typeface so every mark reads as in print. Eight-lobed
+    rosette verse markers (tap one to hear the verse), the surah banner and
+    the basmala sit where the mushaf prints them; the page number follows in
+    the header and `/quran?page=N` opens any page.
+21. **One simple design.** A warm, old-fashioned book look on every page:
+    cream paper, brown ink, one deep green, big type and big buttons, built
+    so children and elders can follow it. The home page is three steps (pick
+    a surah, pick a Sheikh, then Listen or Recite); the Quran page has one
+    Listen/Recite switch, a docked player or mic, and an Options sheet of
+    plain switches. Recitation colours the letters themselves: green said
+    right, yellow nearly, red wrong, grey skipped; while listening, the word
+    the Sheikh is reciting turns green. Hidden verses in
+    memorisation mode become empty ruled lines with only the markers left.
+    Translation, transliteration and tajweed colouring are plain switches in
+    the Options sheet. Light theme by default, dark under *Options → Dark
+    screen*.
+22. **Gapless listening, saved for offline.** The recitation is driven by a
+    small engine outside the page (`lib/listen-engine.ts`) that keeps two
+    players: one sounds the current verse while the other quietly loads the
+    next one — across the surah boundary too — so the handover makes no gap.
+    Because the engine lives outside the reader, flowing into the next surah
+    no longer tears the player down mid-verse. *Save this surah to listen
+    without internet* keeps the Sheikh's recording in the browser's own cache
+    (`lib/audio-cache.ts`); a saved surah then plays straight from the device,
+    with nothing re-hosted and nothing bundled into the app.
+23. **Sources & licences page** (`/about`) crediting every text, audio, model
+    and library source; `THIRD_PARTY.md` has the full review.
+
+The areas each live on their own page — **Recitera** (`/`), **Lyssna**
+(`/listen`), **Framsteg** (`/progress`) and **Bönetider** (`/prayer`) — reached
+from a slide-out side menu, so the flows never get in each other's way.
+
+Deep links open the reader at a place: `/?surah=2&verse=255` scrolls to a
+verse, `/?surah=2&from=1&to=5` practises a range.
 
 ### Quran text integrity
 
@@ -82,11 +177,24 @@ updated.
 app/
   page.tsx                 Recite: recorder + surah + tajweed legend
   listen/page.tsx          Listen: full-Quran player + read-along
+  progress/page.tsx        Analytics dashboard, mistakes, recordings, goals
   prayer/page.tsx          Prayer times (Göteborg) + adhan
 components/
   AppNav.tsx               Slide-out side menu across all pages
-  Reciter.tsx              On-device recognition + results UI (client)
+  AppServices.tsx          Sign-in sync, service worker, reminder timer
+  Reciter.tsx              On-device recognition + live marking + results UI
+  QuranTrainer.tsx         Surah picker, verse range, deep links
+  VerseRange.tsx           Practise a verse range of a long surah
   SurahView.tsx            Ayah rendering with tajweed colours / result overlay
+  BookmarkButton.tsx       Per-verse bookmark toggle
+  ProgressPanel.tsx        Compact "today" card on the home page
+  ProgressDashboard.tsx    The /progress page (tabs)
+  GoalsPanel.tsx           Goal bars + editing
+  ReminderSettings.tsx     Notification + calendar reminders
+  MistakesPanel.tsx        All-time most-missed words
+  RecordingsPanel.tsx      Your recordings: play / download / delete
+  SurahMasteryList.tsx     Per-surah mastery + mistake review
+  charts/                  Streak calendar, score trend, minutes per day
   ReciterPicker.tsx        Choose which Sheikh (qari) to listen to
   ListenPlayer.tsx         Hands-free full-Quran player (auto-advance + MediaSession)
   ListenView.tsx           The /listen page: pickers + player + read-along
@@ -95,7 +203,18 @@ components/
   PlayButton.tsx           Per-verse listen button (uses the chosen Sheikh)
   Legend.tsx               Tajweed colour key
 lib/
+  speech/vad.ts            Silero VAD (CDN, on-device): hesitations, auto-stop
+  quran/timings.ts         Word-level qari timings loader (quran-align data)
+  quran/timings/<qari>/    Vendored per-surah timing JSON (CC BY 4.0)
+  history.ts               Local-first session history + cloud merge/sync
+  settings.ts              Goals, reminder and reciting settings (synced)
+  bookmarks.ts             Verse bookmarks (synced, with tombstones)
+  reminders.ts             Reminder timer, notifications, .ics export
+  live.ts                  Live tracking + mistake detection + sticky merge
+  recordings.ts            On-device recordings (IndexedDB), bounded
   audio-quran.ts           Reciter catalogue + per-ayah audio URLs (everyayah.com)
+  listen-engine.ts         Gapless recitation: two players, the next verse always ready
+  audio-cache.ts           Saving a surah to the device, and playing it from there
   reciter-store.ts         Shared, persisted "current Sheikh" choice
   prayer-times.ts          On-device prayer times (adhan lib, MWL + 1/7-night)
   adhan-audio.ts           Adhan recording catalogue
@@ -133,14 +252,25 @@ npm test
 ```
 
 Covers Arabic normalisation, word alignment (perfect / skipped / wrong word),
-end-to-end scoring, and Quran text integrity (canonical match + checksum).
+live mistake detection, history merging, stats aggregation, reminder scheduling
+and the .ics file, end-to-end scoring, and Quran text integrity (canonical
+match + checksum).
+
+### Database (accounts)
+
+`supabase/schema.sql` is idempotent — re-run it in the Supabase SQL editor
+after pulling. It adds the richer session columns (`client_id`, `seconds`,
+`verses`, `from_verse`, `to_verse`, `extra`, `peeks`, `hifz`), the
+`user_settings` table and the `bookmarks` table. Until it is run the app falls
+back to the old shape automatically (nothing breaks, sessions just carry less
+detail in the cloud).
 
 ---
 
 ## Roadmap
 
-- Scale content to more surahs from a verified dataset, each locked by checksum.
 - Quran-tuned acoustic model + real phonetic tajweed (makharij, ghunnah,
   qalqalah) beyond the current madd-timing heuristic.
-- Live word highlighting while reciting (streaming).
-- Progress tracking and memorisation (hifz) mode.
+- Listen-then-recite drill loops per verse (play the qari, recite, auto-check,
+  advance on three clean passes).
+- Real push reminders if the project ever gets a (free) backend worker.

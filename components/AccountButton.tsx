@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 
-export default function AccountButton() {
+export default function AccountButton({ inline = false }: { inline?: boolean }) {
   const { user, loading, configured, signOut } = useAuth();
   const [open, setOpen] = useState(false);
 
@@ -11,15 +11,13 @@ export default function AccountButton() {
 
   return (
     <>
-      <div className="absolute right-3 top-3 z-20 sm:right-5 sm:top-5">
+      <div className={inline ? "flex justify-center" : "z-20 ml-auto"}>
         {loading ? null : user ? (
           <div className="flex items-center gap-2">
-            <span className="hidden max-w-[10rem] truncate text-xs text-white/70 sm:inline">
-              {user.email}
-            </span>
+            <span className="max-w-[10rem] truncate text-xs text-ink/60">{user.email}</span>
             <button
               onClick={() => void signOut()}
-              className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-gold-soft ring-1 ring-white/15 transition hover:bg-white/20"
+              className="rounded-full px-3 py-1.5 text-xs font-medium text-ink/80 ring-1 ring-ink/15 transition hover:bg-ink/5"
             >
               Sign out
             </button>
@@ -27,7 +25,7 @@ export default function AccountButton() {
         ) : (
           <button
             onClick={() => setOpen(true)}
-            className="rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-gold-soft ring-1 ring-white/15 transition hover:bg-white/20"
+            className="rounded-full bg-emerald px-3.5 py-1.5 text-xs font-semibold text-white shadow-soft transition hover:brightness-105"
           >
             Sign in
           </button>
@@ -68,11 +66,11 @@ function AuthModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] grid place-items-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl border border-gold/25 bg-white p-6 shadow-soft"
+        className="w-full max-w-sm rounded-2xl border border-ink/10 bg-surface p-6 shadow-soft"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-1 flex items-center justify-between">
@@ -107,8 +105,8 @@ function AuthModal({ onClose }: { onClose: () => void }) {
             className="w-full rounded-xl border border-ink/15 px-3.5 py-2.5 text-sm outline-none focus:border-emerald focus:ring-2 focus:ring-emerald/20"
           />
 
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-          {info && <p className="rounded-lg bg-emerald/10 px-3 py-2 text-sm text-emerald-deep">{info}</p>}
+          {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-600">{error}</p>}
+          {info && <p className="rounded-lg bg-emerald/10 px-3 py-2 text-sm text-emerald-bright">{info}</p>}
 
           <button
             type="submit"
@@ -127,7 +125,7 @@ function AuthModal({ onClose }: { onClose: () => void }) {
               setError(null);
               setInfo(null);
             }}
-            className="font-semibold text-emerald-deep underline underline-offset-2"
+            className="font-semibold text-emerald-bright underline underline-offset-2"
           >
             {mode === "in" ? "Create an account" : "Sign in"}
           </button>

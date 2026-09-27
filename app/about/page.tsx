@@ -1,0 +1,177 @@
+import Link from "next/link";
+import { BUILD_VERSION } from "@/lib/version";
+import PageHeader from "@/components/PageHeader";
+
+export const metadata = {
+  title: "Dugsi — About, sources & licences",
+  description:
+    "What Dugsi is built from: the Quran text, translations, recitation audio, word timings, speech models and open-source libraries, with their licences.",
+};
+
+interface Source {
+  name: string;
+  what: string;
+  licence: string;
+  url: string;
+  note?: string;
+}
+
+const DATA: Source[] = [
+  {
+    name: "Tanzil Project",
+    what: "Transliteration and the Saheeh International English translation (via quran-json).",
+    licence: "Creative Commons Attribution 3.0 — text must stay unmodified and link back to tanzil.net",
+    url: "https://tanzil.net",
+    note: "Dugsi shows the text verbatim; nothing is edited.",
+  },
+  {
+    name: "The Noble Qur'an Encyclopedia (quranenc.com)",
+    what: "Uthmani Quran text, Hafs ʿan ʿĀṣim (via quran-json).",
+    licence: "Free to use with attribution",
+    url: "https://quranenc.com",
+  },
+  {
+    name: "quran-json by Risan Bagja Pradana",
+    what: "The JSON packaging of the text, transliteration and translation Dugsi ships.",
+    licence: "MIT",
+    url: "https://github.com/risan/quran-json",
+  },
+  {
+    name: "Saheeh International",
+    what: "English translation of the meanings of the Quran.",
+    licence: "© Saheeh International / Abul-Qasim Publishing House — used unmodified, non-commercially, with attribution",
+    url: "https://tanzil.net/trans/",
+  },
+  {
+    name: "EveryAyah.com",
+    what: "Verse-by-verse recitation audio for every Sheikh in the Listen page and the ▶ buttons. Streams from their servers at play time, with the next verse loaded ahead so the recitation never breaks. \"Save this surah to listen without internet\" keeps those files in your own browser\u2019s cache, on your device only.",
+    licence: "Public archive of freely distributed recitations; Dugsi links and your browser caches, nothing is copied or re-hosted",
+    url: "https://everyayah.com",
+  },
+  {
+    name: "Wikipedia / Wikimedia Commons",
+    what: "Reciter portraits in the reciter library are the thumbnails of each Sheikh's English Wikipedia article, fetched in your browser when the list opens.",
+    licence: "Each image carries its own free licence (CC BY-SA or public domain); the portrait links to the article, where the file's author and licence are listed",
+    url: "https://commons.wikimedia.org",
+  },
+  {
+    name: "King Fahd Glorious Qur'an Printing Complex — HAFS Uthmanic Script typeface",
+    what: "The Quran typeface, so every letter and mark reads exactly as in the printed Madinah mushaf. Shipped unmodified.",
+    licence: "Free to use, copy and distribute; may not be sold or modified (the Complex's end-user licence)",
+    url: "https://fonts.qurancomplex.gov.sa/",
+  },
+  {
+    name: "King Fahd Glorious Qur'an Printing Complex — Madinah mushaf page layout",
+    what: "Which word sits on which of the 15 lines of each of the 604 printed pages, taken from the Complex's own typeset document of the Hafs mushaf. The words themselves are Dugsi's verified text.",
+    licence: "Free to use with attribution",
+    url: "https://qurancomplex.gov.sa/",
+  },
+  {
+    name: "quran-align by Collin Fair",
+    what: "Word-level timestamps inside the EveryAyah recordings (Alafasy, Al-Husary Muallim, Ash-Shuraim, Al-Minshawi) — powers word highlighting while listening and 'hear the qari say just this word'.",
+    licence: "Creative Commons Attribution 4.0",
+    url: "https://github.com/cpfair/quran-align",
+  },
+];
+
+const MODELS: Source[] = [
+  {
+    name: "Whisper (OpenAI)",
+    what: "The speech recognition model family behind the precise on-device check.",
+    licence: "MIT",
+    url: "https://github.com/openai/whisper",
+  },
+  {
+    name: "whisper-base-ar-quran (Tarteel AI)",
+    what: "Whisper base fine-tuned on Quranic recitation. Used through a community ONNX export (YunusZJ/whisper-base-ar-quran-ONNX) when the device can run it.",
+    licence: "Apache-2.0",
+    url: "https://huggingface.co/tarteel-ai/whisper-base-ar-quran",
+  },
+  {
+    name: "whisper-tiny (Xenova ONNX export)",
+    what: "The lighter general model used on phones and as the fallback.",
+    licence: "MIT / Apache-2.0",
+    url: "https://huggingface.co/Xenova/whisper-tiny",
+  },
+  {
+    name: "Silero VAD",
+    what: "Voice activity detection: notices long pauses (hesitations) and powers auto-stop. Runs on the device.",
+    licence: "MIT",
+    url: "https://github.com/snakers4/silero-vad",
+  },
+];
+
+const LIBS: Source[] = [
+  { name: "Transformers.js (Hugging Face)", what: "Runs Whisper in the browser.", licence: "Apache-2.0", url: "https://github.com/huggingface/transformers.js" },
+  { name: "ONNX Runtime Web (Microsoft)", what: "Runs the VAD and Whisper models.", licence: "MIT", url: "https://github.com/microsoft/onnxruntime" },
+  { name: "@ricky0123/vad-web", what: "Browser wrapper for Silero VAD.", licence: "ISC", url: "https://github.com/ricky0123/vad" },
+  { name: "adhan-js (Batoul Apps)", what: "Prayer time calculation.", licence: "MIT", url: "https://github.com/batoulapps/adhan-js" },
+  { name: "Amiri typeface (Khaled Hosny)", what: "Arabic in the interface, the basmala glyph, and the fallback while the mushaf typeface loads.", licence: "SIL Open Font License 1.1", url: "https://github.com/aliftype/amiri" },
+  { name: "Next.js, React, Tailwind CSS, react-virtuoso, Supabase JS", what: "The app framework and UI.", licence: "MIT / Apache-2.0", url: "https://github.com/vercel/next.js" },
+];
+
+function List({ items }: { items: Source[] }) {
+  return (
+    <ul className="space-y-2">
+      {items.map((s) => (
+        <li key={s.name} className="rounded-xl border border-ink/10 bg-surface-2 px-3 py-2 text-sm">
+          <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-bright underline underline-offset-2">
+            {s.name}
+          </a>
+          <p className="text-ink/75">{s.what}</p>
+          <p className="text-xs text-ink/50">Licence: {s.licence}</p>
+          {s.note && <p className="text-xs text-ink/50">{s.note}</p>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export default function AboutPage() {
+  return (
+    <>
+    <PageHeader title="About Dugsi" back={{ href: "/", label: "Home" }} />
+    <main className="mx-auto max-w-3xl space-y-6 px-4 pb-16 pt-4">
+      <p className="text-center text-base font-semibold text-ink/60">
+        Free, no ads, no tracking. Everything runs in your browser; only your progress syncs if you sign in.
+      </p>
+
+      <section className="card p-4 sm:p-5">
+        <h2 className="text-lg font-extrabold text-ink">Honest limits</h2>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink/75">
+          <li>Speech recognition can misread classical Arabic. A word marked wrong may be the recogniser, not you.</li>
+          <li>The live word marking uses your browser&apos;s speech service; in Chrome that service sends audio to Google to turn it into text. The precise check and the voice activity detection run fully on your device.</li>
+          <li>Madd timing is a heuristic from word timestamps, not a phonetic measurement.</li>
+          <li>Always learn tajweed with a qualified teacher. Dugsi is a practice aid.</li>
+        </ul>
+      </section>
+
+      <section className="card p-4 sm:p-5">
+        <h2 className="mb-2 text-lg font-extrabold text-ink">Quran text, translation & audio</h2>
+        <List items={DATA} />
+      </section>
+
+      <section className="card p-4 sm:p-5">
+        <h2 className="mb-2 text-lg font-extrabold text-ink">Speech & AI models</h2>
+        <List items={MODELS} />
+        <p className="mt-2 text-xs text-ink/50">
+          Models download from Hugging Face / jsDelivr on first use and are cached by your browser. Your audio is never uploaded.
+        </p>
+      </section>
+
+      <section className="card p-4 sm:p-5">
+        <h2 className="mb-2 text-lg font-extrabold text-ink">Open-source libraries</h2>
+        <List items={LIBS} />
+      </section>
+
+      <p className="text-center text-xs text-ink/45">
+        Dugsi is not affiliated with Tanzil, Tarteel, EveryAyah or any of the projects above.{" "}
+        <Link href="/" className="underline underline-offset-2">
+          Back to the start
+        </Link>{" "}
+        · Version {BUILD_VERSION}
+      </p>
+    </main>
+    </>
+  );
+}

@@ -13,6 +13,9 @@ const nextConfig = {
   images: { unoptimized: true },
   basePath: isPages ? `/${repo}` : undefined,
   assetPrefix: isPages ? `/${repo}/` : undefined,
+  // Lets client code build absolute paths (service worker, manifest, icons)
+  // that work both at the root and under /<repo> on GitHub Pages.
+  env: { NEXT_PUBLIC_BASE_PATH: isPages ? `/${repo}` : "" },
 };
 
 export default nextConfig;

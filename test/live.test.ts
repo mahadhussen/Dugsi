@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { trackLive } from "../lib/live";
+import { trackLive, mergeLiveStatuses } from "../lib/live";
 import { normalizeWord } from "../lib/arabic";
 
 const expected = ["بسم", "الله", "الرحمن", "الرحيم"].map(normalizeWord);
@@ -57,4 +57,59 @@ test("startPointer resumes tracking mid-surah (incremental updates)", () => {
   assert.equal(statuses[2], "correct");
   assert.equal(statuses[3], "correct");
   assert.equal(pointer, 4);
+});
+
+// ── Live mistake detection ───────────────────────────────────────────────────
+
+const long = ["الحمد", "لله", "رب", "العالمين", "الرحمن", "الرحيم", "مالك", "يوم", "الدين"].map(normalizeWord);
+
+test("mistake mode marks a jumped-over word as skipped", () => {
+  const { statuses, pointer } = trackLive(long, ["الحمد", "رب"].map(normalizeWord), 0, { mistakes: true });
+  assert.equal(statuses[0], "correct");
+  assert.equal(statuses[1], "missing");
+  assert.equal(statuses[2], "correct");
+  assert.equal(pointer, 3);
+});
+
+test("mistake mode marks an unrecognised word between two matches as substituted", () => {
+  const { statuses, extras } = trackLive(long, ["الحمد", "كتاب", "رب"].map(normalizeWord), 0, { mistakes: true });
+  assert.equal(statuses[1], "wrong");
+  assert.equal(statuses[2], "correct");
+  assert.equal(extras, 0);
+});
+
+test("mistake mode counts an added word without painting the text", () => {
+  const { statuses, extras } = trackLive(long, ["الحمد", "كتاب", "لله"].map(normalizeWord), 0, { mistakes: true });
+  assert.equal(statuses[0], "correct");
+  assert.equal(statuses[1], "correct");
+  assert.equal(extras, 1);
+  assert.equal(Object.values(statuses).filter((s) => s === "wrong" || s === "missing").length, 0);
+});
+
+test("mistake mode: two unrecognised words in a row flag the current slot", () => {
+  const { statuses, pointer } = trackLive(long, ["الحمد", "كتاب", "قلم"].map(normalizeWord), 0, { mistakes: true });
+  assert.equal(statuses[1], "wrong");
+  assert.equal(pointer, 2);
+});
+
+test("mistake mode never marks a word twice or downgrades a match", () => {
+  const { statuses } = trackLive(long, ["الحمد", "رب", "لله"].map(normalizeWord), 0, { mistakes: true });
+  // Re-reading the skipped word restores it.
+  assert.equal(statuses[1], "correct");
+});
+
+test("default mode stays positive-only even with the same input", () => {
+  const { statuses, extras } = trackLive(long, ["الحمد", "كتاب", "رب"].map(normalizeWord));
+  assert.equal(statuses[1], undefined);
+  assert.equal(extras, 0);
+});
+
+test("mergeLiveStatuses: green sticks, red recovers, red never overwrites green", () => {
+  const a = mergeLiveStatuses({}, { 0: "correct", 1: "missing" });
+  assert.deepEqual(a, { 0: "correct", 1: "missing" });
+  const b = mergeLiveStatuses(a, { 0: "wrong", 1: "correct" });
+  assert.equal(b[0], "correct");
+  assert.equal(b[1], "correct");
+  const same = mergeLiveStatuses(b, { 0: "correct" });
+  assert.equal(same, b); // unchanged → same object
 });
