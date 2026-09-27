@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nextRef, prevRef } from "../lib/listen-engine";
+import { nextPiece, nextRef, nextSurahRef, prevRef, prevSurahRef } from "../lib/listen-engine";
 import { surahAyahUrls } from "../lib/audio-cache";
 import { surahMeta } from "../lib/quran";
 
@@ -43,4 +43,28 @@ test("saving a surah covers every one of its verses, in order", () => {
   assert.ok(urls[0].endsWith("/112001.mp3"), urls[0]);
   assert.ok(urls[3].endsWith("/112004.mp3"), urls[3]);
   assert.equal(surahAyahUrls(999, "alafasy").length, 0);
+});
+
+test("a whole-surah Sheikh steps a surah at a time, not a verse", () => {
+  // His recording is one file per surah, so "next" means the next surah and the
+  // verse pointer stays at the top of it.
+  assert.deepEqual(nextSurahRef({ surah: 2, verse: 1 }, false), { surah: 3, verse: 1 });
+  assert.deepEqual(prevSurahRef({ surah: 3, verse: 1 }), { surah: 2, verse: 1 });
+  // Repeat keeps him on the same surah, and the Quran still does not wrap.
+  assert.deepEqual(nextSurahRef({ surah: 36, verse: 1 }, true), { surah: 36, verse: 1 });
+  assert.equal(nextSurahRef({ surah: 114, verse: 1 }, false), null);
+  assert.equal(prevSurahRef({ surah: 1, verse: 1 }), null);
+});
+
+test("the piece after this one depends on which kind of recording it is", () => {
+  const at = { surah: 18, verse: 10 };
+  assert.deepEqual(nextPiece(at, false, true), { surah: 18, verse: 11 });
+  assert.deepEqual(nextPiece(at, false, false), { surah: 19, verse: 1 });
+});
+
+test("every surah boundary works for a whole-surah Sheikh too", () => {
+  for (let s = 1; s <= 113; s++) {
+    assert.deepEqual(nextSurahRef({ surah: s, verse: 1 }, false), { surah: s + 1, verse: 1 }, `after surah ${s}`);
+    assert.deepEqual(prevSurahRef({ surah: s + 1, verse: 1 }), { surah: s, verse: 1 }, `before surah ${s + 1}`);
+  }
 });

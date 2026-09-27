@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   RECITERS,
   STYLE_LABEL,
+  hasPerAyahAudio,
   reciterBitrate,
   reciterCountries,
   reciterQuality,
@@ -139,8 +140,10 @@ export default function ReciterPicker() {
                 </div>
               )}
               <p className="px-4 pb-4 pt-2 text-xs font-semibold text-ink/40">
-                {RECITERS.length} reciters, all Hafs ʿan ʿĀṣim, streamed from everyayah.com. Portraits come from Wikipedia where
-                available. If a Sheikh will not play, pick another.
+                {RECITERS.length} reciters, all Hafs ʿan ʿĀṣim, streamed from everyayah.com — and from mp3quran.net for the
+                Sheikhs who were only ever recorded as whole surahs. Those play a surah at a time, without word highlighting, and
+                a single tapped verse is read in the default voice. Portraits come from Wikipedia where available. If a Sheikh
+                will not play, pick another.
               </p>
             </div>
         </Sheet>
@@ -176,6 +179,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Row({ r, current, fav, onPick }: { r: Reciter; current: boolean; fav: boolean; onPick: (id: string) => void }) {
   const q = reciterQuality(r);
   const wiki = reciterWikipediaUrl(r);
+  const perAyah = hasPerAyahAudio(r);
   return (
     <li className={`flex items-center gap-3 border-b border-ink/5 px-4 py-3 transition hover:bg-emerald/10 ${current ? "bg-emerald/10" : ""}`}>
       {wiki ? (
@@ -194,9 +198,13 @@ function Row({ r, current, fav, onPick }: { r: Reciter; current: boolean; fav: b
         <span className="mt-1 flex flex-wrap items-center gap-1 text-xs font-semibold text-ink/50">
           <Badge>{STYLE_LABEL[r.style]}</Badge>
           <Badge>{r.country}</Badge>
-          <Badge tone={q === "high" ? "good" : q === "standard" ? "neutral" : "muted"}>
-            {q === "high" ? `High quality · ${reciterBitrate(r)}k` : q === "standard" ? `${reciterBitrate(r)}k` : `Archive · ${reciterBitrate(r)}k`}
-          </Badge>
+          {perAyah ? (
+            <Badge tone={q === "high" ? "good" : q === "standard" ? "neutral" : "muted"}>
+              {q === "high" ? `High quality · ${reciterBitrate(r)}k` : q === "standard" ? `${reciterBitrate(r)}k` : `Archive · ${reciterBitrate(r)}k`}
+            </Badge>
+          ) : (
+            <Badge>One file per surah</Badge>
+          )}
           {hasWordTimings(r.id) && <Badge tone="good">Word highlighting</Badge>}
         </span>
       </button>

@@ -10,8 +10,13 @@
 // The files are the reciters' own recordings, saved by the listener's own
 // browser, exactly like any page you visit offline. Nothing is bundled into the
 // app and nothing is re-hosted.
+//
+// A whole-surah Sheikh is the same idea with one big file instead of a hundred
+// small ones — and it only works if that recording's server allows a fetch from
+// the browser; when it doesn't, the surah simply streams as before.
 
-import { ayahAudioUrl } from "./audio-quran";
+import { ayahAudioUrl, getReciter, hasPerAyahAudio } from "./audio-quran";
+import { surahAudioUrl } from "./mp3quran";
 import { surahMeta } from "./quran";
 
 const CACHE_NAME = "dugsi-audio-v1";
@@ -45,6 +50,18 @@ export function surahAyahUrls(surah: number, reciterId: string): string[] {
   const urls: string[] = [];
   for (let a = 1; a <= meta.ayahCount; a++) urls.push(ayahAudioUrl(surah, a, reciterId));
   return urls;
+}
+
+/**
+ * Every file that makes up one surah in this Sheikh's voice: one per ayah for
+ * most, a single recording for a whole-surah Sheikh (empty when his server
+ * cannot be resolved).
+ */
+export async function surahFileUrls(surah: number, reciterId: string): Promise<string[]> {
+  if (hasPerAyahAudio(getReciter(reciterId))) return surahAyahUrls(surah, reciterId);
+  if (!surahMeta(surah)) return [];
+  const one = await surahAudioUrl(reciterId, surah);
+  return one ? [one] : [];
 }
 
 // Blob URLs for files we play from the cache. A handful is enough — the player
@@ -93,14 +110,14 @@ export async function isSaved(url: string): Promise<boolean> {
   }
 }
 
-/** How many of a surah's ayat are saved in this Sheikh's voice. */
-export async function savedCount(surah: number, reciterId: string): Promise<number> {
+/** How much of a surah is saved in this Sheikh's voice, and how much there is. */
+export async function savedFiles(surah: number, reciterId: string): Promise<{ done: number; total: number }> {
+  const urls = await surahFileUrls(surah, reciterId);
   const cache = await openCache();
-  if (!cache) return 0;
-  const urls = surahAyahUrls(surah, reciterId);
-  let n = 0;
-  await Promise.all(urls.map(async (u) => void ((await cache.match(u)) && n++)));
-  return n;
+  if (!cache) return { done: 0, total: urls.length };
+  let done = 0;
+  await Promise.all(urls.map(async (u) => void ((await cache.match(u)) && done++)));
+  return { done, total: urls.length };
 }
 
 export interface SaveProgress {
@@ -111,9 +128,10 @@ export interface SaveProgress {
 }
 
 /**
- * Save a whole surah in one Sheikh's voice. Downloads a few ayat at a time so
+ * Save a whole surah in one Sheikh's voice. Downloads a few files at a time so
  * the phone stays responsive, skips what is already there, and reports progress
- * as it goes. Resolves to the number of ayat saved; stops early if aborted.
+ * as it goes. Resolves to the number of files saved (0 when the recording's
+ * server refuses a browser fetch); stops early if aborted.
  */
 export async function saveSurah(
   surah: number,
@@ -122,7 +140,7 @@ export async function saveSurah(
   signal?: AbortSignal,
 ): Promise<number> {
   const cache = await openCache();
-  const urls = surahAyahUrls(surah, reciterId);
+  const urls = await surahFileUrls(surah, reciterId);
   const total = urls.length;
   if (!cache || total === 0) return 0;
 
@@ -158,8 +176,9 @@ export async function saveSurah(
 export async function forgetSurah(surah: number, reciterId: string): Promise<void> {
   const cache = await openCache();
   if (!cache) return;
+  const urls = await surahFileUrls(surah, reciterId);
   await Promise.all(
-    surahAyahUrls(surah, reciterId).map(async (u) => {
+    urls.map(async (u) => {
       const blob = blobs.get(u);
       if (blob) {
         blobs.delete(u);

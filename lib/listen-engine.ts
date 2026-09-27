@@ -8,14 +8,19 @@
 //   2. The player lived inside the reader. Flowing into the next surah reloaded
 //      the page text, which unmounted the player — taking the audio with it.
 //
+// A second kind of Sheikh complicates this a little: a few were only ever
+// recorded as one file per surah. For them a "piece" of recitation is a whole
+// surah rather than one ayah, and the engine simply steps surah by surah.
+//
 // So playback lives here instead, outside React, in a pair of audio elements.
 // One plays while the other quietly loads the ayah after it (across the surah
 // boundary too), and at the end they simply swap: the next ayah is already
 // buffered, so it starts in the same tick. The reader follows along afterwards;
 // it can take its time without the recitation waiting for it.
 
-import { ayahAudioUrl } from "./audio-quran";
+import { ayahAudioUrl, getReciter, hasPerAyahAudio } from "./audio-quran";
 import { playableUrl } from "./audio-cache";
+import { forgetResolved, surahAudioUrl } from "./mp3quran";
 import { surahMeta } from "./quran";
 import { loadTimings } from "./quran/timings";
 import { useSyncExternalStore } from "react";
@@ -57,10 +62,36 @@ export function prevRef(at: Ref): Ref | null {
   return null;
 }
 
+/** The next surah, for a Sheikh whose recording is one file per surah. */
+export function nextSurahRef(at: Ref, repeat: boolean): Ref | null {
+  if (repeat) return { surah: at.surah, verse: 1 };
+  if (at.surah < 114) return { surah: at.surah + 1, verse: 1 };
+  return null;
+}
+
+/** The previous surah, same kind of Sheikh. */
+export function prevSurahRef(at: Ref): Ref | null {
+  return at.surah > 1 ? { surah: at.surah - 1, verse: 1 } : null;
+}
+
+/**
+ * The piece of recitation that follows this one: the next ayah for a per-ayah
+ * Sheikh, the next surah for a whole-surah one.
+ */
+export function nextPiece(at: Ref, repeat: boolean, perAyah: boolean): Ref | null {
+  return perAyah ? nextRef(at, repeat) : nextSurahRef(at, repeat);
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 
 let state: ListenState = { at: { surah: 1, verse: 1 }, playing: false, status: "idle", rate: 1, repeat: false };
 let reciterId = "alafasy";
+
+/** Whether the chosen Sheikh has a file per ayah (most do) or per surah. */
+const perAyah = (): boolean => hasPerAyahAudio(getReciter(reciterId));
+
+/** Where a piece of recitation starts: an ayah, or the top of a surah. */
+const pieceOf = (at: Ref): Ref => (perAyah() ? at : { surah: at.surah, verse: 1 });
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<ListenState>): void {
@@ -105,7 +136,11 @@ function decksReady(): [HTMLAudioElement, HTMLAudioElement] | null {
       if (decks && decks[live] === a) set({ status: "loading" });
     });
     a.addEventListener("error", () => {
-      if (decks && decks[live] === a && state.playing) set({ status: "error" });
+      if (!decks || decks[live] !== a) return;
+      // A whole-surah recording that refuses to load usually means the server we
+      // remembered has since moved, so ask the catalogue again next time.
+      if (!perAyah()) forgetResolved(reciterId);
+      if (state.playing) set({ status: "error" });
     });
     return a;
   };
@@ -149,8 +184,17 @@ async function load(deck: number, at: Ref): Promise<void> {
   // Warm the read-along timings for the surah we are heading into, so the words
   // keep lighting up across the boundary.
   void loadTimings(reciterId, at.surah);
-  const src = await playableUrl(ayahAudioUrl(at.surah, at.verse, reciterId));
+  const file = perAyah() ? ayahAudioUrl(at.surah, at.verse, reciterId) : await surahAudioUrl(reciterId, at.surah);
   if (token[deck] !== mine) return; // a newer load won
+  if (!file) {
+    // The whole-surah catalogue could not be reached, or this Sheikh never
+    // recorded this surah. Say so rather than sit silently on a dead deck.
+    wanted[deck] = null;
+    if (deck === live) set({ status: "error" });
+    return;
+  }
+  const src = await playableUrl(file);
+  if (token[deck] !== mine) return;
   d[deck].src = src;
   d[deck].playbackRate = state.rate;
   d[deck].load();
@@ -159,6 +203,10 @@ async function load(deck: number, at: Ref): Promise<void> {
 
 /** Start the ayah after the current one loading, so the swap is instant. */
 function primeNext(): void {
+  // Nothing to prime for a whole-surah Sheikh: inside a surah it is one
+  // continuous file, and pre-loading the *next* surah would pull tens of
+  // megabytes off the listener's data plan to save a second at the boundary.
+  if (!perAyah()) return;
   const next = nextRef(state.at, state.repeat);
   if (next) void load(1 - live, next);
 }
@@ -180,7 +228,7 @@ function playLive(): void {
 function advance(): void {
   const d = decksReady();
   if (!d) return;
-  const next = nextRef(state.at, state.repeat);
+  const next = nextPiece(state.at, state.repeat, perAyah());
   if (!next) {
     set({ playing: false });
     return;
@@ -203,7 +251,9 @@ function advance(): void {
 
 /** Jump to an ayah, keeping playing if we were. Called by the picker too. */
 export function seek(at: Ref, alsoPlay?: boolean): void {
-  const verse = Math.max(1, Math.min(ayatIn(at.surah) || 1, at.verse));
+  // A whole-surah recording has no ayah offsets inside it, so for those Sheikhs
+  // every jump lands at the start of the surah.
+  const verse = perAyah() ? Math.max(1, Math.min(ayatIn(at.surah) || 1, at.verse)) : 1;
   const target = { surah: at.surah, verse };
   if (sameRef(state.at, target) && !alsoPlay) return;
   const d = decksReady();
@@ -246,12 +296,12 @@ export function toggle(): void {
 }
 
 export function next(): void {
-  const n = nextRef(state.at, false);
+  const n = perAyah() ? nextRef(state.at, false) : nextSurahRef(state.at, false);
   if (n) seek(n);
 }
 
 export function previous(): void {
-  const p = prevRef(state.at);
+  const p = perAyah() ? prevRef(state.at) : prevSurahRef(state.at);
   if (p) seek(p);
 }
 
@@ -281,8 +331,10 @@ export function setReciter(id: string): void {
   const d = decksReady();
   if (!d) return;
   d[1 - live].pause();
-  set({ status: state.playing ? "loading" : "idle" });
-  void load(live, state.at).then(() => {
+  // Switching to (or from) a whole-surah voice changes what a position means.
+  const at = pieceOf(state.at);
+  set({ at, status: state.playing ? "loading" : "idle" });
+  void load(live, at).then(() => {
     if (state.playing) playLive();
     primeNext();
   });
