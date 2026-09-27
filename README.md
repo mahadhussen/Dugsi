@@ -48,7 +48,12 @@ reading-progress marker.
    next verse always loaded ahead so nothing breaks between verses or between
    surahs, and a surah can be saved to the device to play with no network at
    all. Your chosen Sheikh is remembered on the device and used everywhere
-   audio plays.
+   audio plays. A few beloved qaris — Sudan's Sheikh Al Zain Mohammad Ahmad
+   among them — were never published ayah by ayah; their recordings exist only
+   as one file per surah, so those come from mp3quran.net instead, with the
+   download server looked up in their public catalogue on your device rather
+   than hardcoded here. Such a Sheikh recites a surah at a time: no word
+   highlighting, and a single tapped verse is read in the default voice.
 6. **Prayer times for Göteborg + adhan.** A dedicated page shows today's times
    (Fajr, Shuruq, Dhuhr, Asr, Maghrib, Isha) with the next prayer and a live
    countdown, computed **on-device** with the Muslim World League method and the
@@ -213,6 +218,7 @@ lib/
   live.ts                  Live tracking + mistake detection + sticky merge
   recordings.ts            On-device recordings (IndexedDB), bounded
   audio-quran.ts           Reciter catalogue + per-ayah audio URLs (everyayah.com)
+  mp3quran.ts              Whole-surah recitations: server lookup, cached on the device
   listen-engine.ts         Gapless recitation: two players, the next verse always ready
   audio-cache.ts           Saving a surah to the device, and playing it from there
   reciter-store.ts         Shared, persisted "current Sheikh" choice

@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useReciter } from "@/lib/reciter-store";
+import { hasPerAyahAudio } from "@/lib/audio-quran";
 import { surahMeta } from "@/lib/quran";
 import { loadTimings, wordAt, type SurahTimings } from "@/lib/quran/timings";
 import {
   audioCacheSupported,
   forgetSurah,
   saveSurah,
-  savedCount,
+  savedFiles,
   type SaveProgress,
 } from "@/lib/audio-cache";
 import {
@@ -51,6 +52,9 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
   const meta = surahMeta(surahId)!;
   const ayahCount = meta.ayahCount;
   const verse = listen.at.surah === surahId ? listen.at.verse : 1;
+  // A whole-surah Sheikh is recited from one file: there is no verse to point at
+  // and no word to light up, so the controls step surah by surah instead.
+  const perAyah = hasPerAyahAudio(reciter);
 
   const [timings, setTimings] = useState<SurahTimings | null>(null);
 
@@ -115,7 +119,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
   // Follow the qari word by word while playing (or verse by verse without timings).
   useEffect(() => {
     if (!onWordChange) return;
-    if (!listen.playing || listen.at.surah !== surahId) {
+    if (!perAyah || !listen.playing || listen.at.surah !== surahId) {
       onWordChange(null);
       return;
     }
@@ -134,21 +138,21 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [listen.playing, listen.at.surah, listen.at.verse, surahId, timings, onWordChange]);
+  }, [perAyah, listen.playing, listen.at.surah, listen.at.verse, surahId, timings, onWordChange]);
 
   // Lock-screen / headphone controls, plus a "now playing" card on the phone.
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: `${meta.transliteration} · verse ${verse} of ${ayahCount}`,
+        title: perAyah ? `${meta.transliteration} · verse ${verse} of ${ayahCount}` : `${meta.transliteration} · full surah`,
         artist: reciter.name,
         album: "Dugsi — Listen to the Quran",
       });
     } catch {
       // Some browsers restrict MediaMetadata — safe to skip.
     }
-  }, [meta.transliteration, verse, ayahCount, reciter.name]);
+  }, [perAyah, meta.transliteration, verse, ayahCount, reciter.name]);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
@@ -170,7 +174,20 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
     navigator.mediaSession.playbackState = listen.playing ? "playing" : "paused";
   }, [listen.playing]);
 
-  const progress = ayahCount > 1 ? ((verse - 1) / (ayahCount - 1)) * 100 : 0;
+  // Per ayah we know exactly where we are; in one long file we follow the clock.
+  const [filePct, setFilePct] = useState(0);
+  useEffect(() => {
+    if (perAyah) return;
+    setFilePct(0);
+    const id = setInterval(() => {
+      const a = liveAudio();
+      const d = a?.duration ?? 0;
+      setFilePct(a && d > 0 && Number.isFinite(d) ? Math.min(100, (a.currentTime / d) * 100) : 0);
+    }, 500);
+    return () => clearInterval(id);
+  }, [perAyah, listen.at.surah]);
+
+  const progress = perAyah ? (ayahCount > 1 ? ((verse - 1) / (ayahCount - 1)) * 100 : 0) : filePct;
   const rates = [0.75, 1, 1.25];
   const nextRate = () => setRate(rates[(rates.indexOf(listen.rate) + 1) % rates.length]);
 
@@ -192,7 +209,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
           </button>
 
           <div className="flex items-center gap-3">
-            <button onClick={enginePrev} aria-label="Previous verse" className="icon-btn h-14 w-14">
+            <button onClick={enginePrev} aria-label={perAyah ? "Previous verse" : "Previous surah"} className="icon-btn h-14 w-14">
               <svg viewBox="0 0 24 24" className="h-8 w-8" fill="currentColor" aria-hidden>
                 <path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z" />
               </svg>
@@ -215,7 +232,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
                 </svg>
               )}
             </button>
-            <button onClick={engineNext} aria-label="Next verse" className="icon-btn h-14 w-14">
+            <button onClick={engineNext} aria-label={perAyah ? "Next verse" : "Next surah"} className="icon-btn h-14 w-14">
               <svg viewBox="0 0 24 24" className="h-8 w-8" fill="currentColor" aria-hidden>
                 <path d="M16 6h2v12h-2V6zM6 6l8.5 6L6 18V6z" />
               </svg>
@@ -237,14 +254,16 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
           {listen.status === "error"
             ? "Couldn't load the audio. Try another Sheikh."
             : listen.playing
-              ? `Verse ${verse} of ${ayahCount}${listen.repeat ? " · repeating" : ""}`
+              ? perAyah
+                ? `Verse ${verse} of ${ayahCount}${listen.repeat ? " · repeating" : ""}`
+                : `Reciting ${meta.transliteration}${listen.repeat ? " · repeating" : ""}`
               : `Tap play to hear ${reciter.name} recite ${meta.transliteration}`}
         </p>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink/10">
           <div className="h-full rounded-full bg-emerald transition-[width] duration-300" style={{ width: `${progress}%` }} />
         </div>
 
-        <SaveSurah surahId={surahId} ayahCount={ayahCount} reciterId={reciterId} />
+        <SaveSurah surahId={surahId} reciterId={reciterId} />
       </div>
     </div>
   );
@@ -253,16 +272,19 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
 /**
  * Keep this surah, in this Sheikh's voice, on the phone. A saved surah plays
  * with no network at all — useful on a weak connection, on the metro, or when
- * a child listens to the same surah every day.
+ * a child listens to the same surah every day. That is a hundred small files
+ * for most Sheikhs and one long recording for a whole-surah one, so the button
+ * counts files rather than verses.
  */
-function SaveSurah({ surahId, ayahCount, reciterId }: { surahId: number; ayahCount: number; reciterId: string }) {
-  const [saved, setSaved] = useState<number | null>(null);
+function SaveSurah({ surahId, reciterId }: { surahId: number; reciterId: string }) {
+  const [saved, setSaved] = useState<{ done: number; total: number } | null>(null);
   const [progress, setProgress] = useState<SaveProgress | null>(null);
+  const [refused, setRefused] = useState(false);
   const abort = useRef<AbortController | null>(null);
 
   const refresh = useCallback(() => {
     let cancelled = false;
-    void savedCount(surahId, reciterId).then((n) => !cancelled && setSaved(n));
+    void savedFiles(surahId, reciterId).then((s) => !cancelled && setSaved(s));
     return () => {
       cancelled = true;
     };
@@ -275,18 +297,24 @@ function SaveSurah({ surahId, ayahCount, reciterId }: { surahId: number; ayahCou
   }, []);
 
   if (!audioCacheSupported()) return null;
+  // Still counting, or there is nothing to save (this Sheikh's recording of this
+  // surah could not be located).
+  if (!saved || saved.total === 0) return null;
 
-  const done = saved !== null && saved >= ayahCount;
+  const done = saved.done >= saved.total;
 
   const start = () => {
     const controller = new AbortController();
     abort.current = controller;
-    setProgress({ done: 0, total: ayahCount });
-    void saveSurah(surahId, reciterId, setProgress, controller.signal).finally(() => {
-      abort.current = null;
-      setProgress(null);
-      refresh();
-    });
+    setRefused(false);
+    setProgress({ done: 0, total: saved.total });
+    void saveSurah(surahId, reciterId, setProgress, controller.signal)
+      .then((n) => setRefused(n === 0 && !controller.signal.aborted))
+      .finally(() => {
+        abort.current = null;
+        setProgress(null);
+        refresh();
+      });
   };
 
   const remove = () => {
@@ -294,11 +322,12 @@ function SaveSurah({ surahId, ayahCount, reciterId }: { surahId: number; ayahCou
   };
 
   if (progress) {
-    const pct = Math.round((progress.done / Math.max(1, progress.total)) * 100);
+    // One long file gives no honest percentage — only a spinner.
+    const pct = progress.total > 1 ? `${Math.round((progress.done / progress.total) * 100)}%` : "";
     return (
       <div className="mt-2 flex items-center justify-center gap-2 text-sm font-bold text-ink/60">
         <span className="h-4 w-4 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-        Saving to this device… {pct}%
+        Saving to this device… {pct}
         <button onClick={() => abort.current?.abort()} className="underline underline-offset-2 hover:text-ink">
           Stop
         </button>
@@ -315,6 +344,8 @@ function SaveSurah({ surahId, ayahCount, reciterId }: { surahId: number; ayahCou
             Remove
           </button>
         </>
+      ) : refused ? (
+        <span>This recording can only be streamed — it cannot be saved for offline use.</span>
       ) : (
         <button onClick={start} className="underline underline-offset-2 hover:text-ink">
           Save this surah to listen without internet

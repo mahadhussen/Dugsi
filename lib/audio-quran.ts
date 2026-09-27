@@ -6,8 +6,19 @@
 // Every entry is a Hafs ʿan ʿĀṣim recording (the text Dugsi shows), so what you
 // hear always matches what you read. Folder names are everyayah's own; the
 // bitrate in the name is the recording quality.
+//
+// A few beloved qaris were never published ayah by ayah — their recordings only
+// exist as one file per surah. Those come from mp3quran.net instead (see
+// lib/mp3quran.ts), which is why a reciter carries a `source`.
 
 export type ReciterStyle = "murattal" | "mujawwad" | "teaching";
+
+/**
+ * Where a reciter's audio comes from, and in what size:
+ *  - "everyayah": one small mp3 per ayah, addressed directly by folder name.
+ *  - "mp3quran": one mp3 per whole surah, its server looked up at play time.
+ */
+export type ReciterSource = "everyayah" | "mp3quran";
 
 export interface Reciter {
   /** Stable id we persist as the user's choice. */
@@ -16,8 +27,17 @@ export interface Reciter {
   name: string;
   /** Arabic name shown in the picker. */
   arabicName: string;
+  /** Where the recording comes from. Defaults to everyayah (one file per ayah). */
+  source?: ReciterSource;
   /** everyayah.com data folder that holds this reciter's ayah files. */
-  folder: string;
+  folder?: string;
+  /** How to find an mp3quran.net reciter in their catalogue (mp3quran only). */
+  mp3quran?: {
+    /** Arabic name as mp3quran lists it — what we match on. */
+    arabicName: string;
+    /** Their numeric reciter id, when known; tried before the name. */
+    id?: number;
+  };
   /** Short note (style/quality) shown under the name. */
   note?: string;
   /** Recitation style: measured murattal, melodic mujawwad, or slow teaching. */
@@ -282,6 +302,18 @@ export const RECITERS: Reciter[] = [
     style: "murattal",
     country: "Sudan",
   },
+  {
+    // Beloved across Sudan, and never published ayah by ayah — his mus'haf
+    // exists as one recording per surah, so he streams from mp3quran.net.
+    id: "alzain",
+    name: "Al Zain Mohammad Ahmad",
+    arabicName: "الزين محمد أحمد",
+    source: "mp3quran",
+    mp3quran: { arabicName: "الزين محمد أحمد" },
+    note: "Sudan · one file per surah",
+    style: "murattal",
+    country: "Sudan",
+  },
   // ── Egypt ────────────────────────────────────────────────────────────────
   {
     id: "husary_mujawwad",
@@ -484,9 +516,30 @@ export function getReciter(id: string | null | undefined): Reciter {
   return RECITERS.find((r) => r.id === id) ?? RECITERS[0];
 }
 
+export function reciterSource(r: Reciter): ReciterSource {
+  return r.source ?? "everyayah";
+}
+
+/** True when this voice exists as a separate file for every single ayah. */
+export function hasPerAyahAudio(r: Reciter): boolean {
+  return reciterSource(r) === "everyayah" && !!r.folder;
+}
+
+/**
+ * The voice to use where one verse must sound on its own — a tapped ayah
+ * marker, a mistake played back. A whole-surah recording cannot be cut into
+ * verses (we have no ayah boundaries inside it), so those reciters fall back to
+ * the default voice for those short clips; continuous listening still uses the
+ * chosen Sheikh.
+ */
+export function perAyahReciterId(id: string | null | undefined): string {
+  const r = getReciter(id);
+  return hasPerAyahAudio(r) ? r.id : DEFAULT_RECITER_ID;
+}
+
 /** Recording bitrate parsed from the everyayah folder name, in kbps. */
 export function reciterBitrate(r: Reciter): number {
-  const m = r.folder.match(/(\d+)\s*kbps/i);
+  const m = (r.folder ?? "").match(/(\d+)\s*kbps/i);
   return m ? Number(m[1]) : 0;
 }
 
@@ -518,7 +571,9 @@ export function reciterCountries(): string[] {
  * when omitted it falls back to the default (Alafasy).
  */
 export function ayahAudioUrl(surah: number, ayah: number, reciterId?: string): string {
-  const folder = getReciter(reciterId).folder;
+  // A whole-surah reciter has no file for a single ayah; those callers get the
+  // default voice rather than silence (see perAyahReciterId).
+  const folder = getReciter(perAyahReciterId(reciterId)).folder!;
   const s = String(surah).padStart(3, "0");
   const a = String(ayah).padStart(3, "0");
   return `https://everyayah.com/data/${folder}/${s}${a}.mp3`;

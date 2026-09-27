@@ -49,6 +49,12 @@ const DATA: Source[] = [
     url: "https://everyayah.com",
   },
   {
+    name: "MP3Quran.net",
+    what: "Recitations for Sheikhs who were only ever recorded as whole surahs, such as Al Zain Mohammad Ahmad. Their public catalogue is read in your browser to find the reciter's own download server, so the address always comes from the source; the surah then streams from there.",
+    licence: "Free public archive of freely distributed recitations; Dugsi links, nothing is copied or re-hosted",
+    url: "https://mp3quran.net",
+  },
+  {
     name: "Wikipedia / Wikimedia Commons",
     what: "Reciter portraits in the reciter library are the thumbnails of each Sheikh's English Wikipedia article, fetched in your browser when the list opens.",
     licence: "Each image carries its own free licence (CC BY-SA or public domain); the portrait links to the article, where the file's author and licence are listed",
