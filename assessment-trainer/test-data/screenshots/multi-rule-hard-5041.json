@@ -1,0 +1,197 @@
+{
+ "id": "multi-rule-hard-5041",
+ "category": "multi-rule",
+ "difficulty": "hard",
+ "correctAnswer": 5,
+ "rules": [
+  {
+   "attribute": "size",
+   "kind": "prog",
+   "axis": "row",
+   "description": "In each row the figure shrinks step by step."
+  },
+  {
+   "attribute": "fill",
+   "kind": "latin",
+   "axis": "row",
+   "description": "Each row contains an empty, a half-filled and a solid figure."
+  }
+ ],
+ "problem": {
+  "rows": 3,
+  "cols": 3,
+  "cells": [
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 1,
+      "size": 0.85,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 0,
+      "size": 0.65,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 0.5,
+      "size": 0.45,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 0.5,
+      "size": 0.85,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 1,
+      "size": 0.65,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 0,
+      "size": 0.45,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 0,
+      "size": 0.85,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 0.5,
+      "size": 0.65,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   null
+  ],
+  "options": [
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 1,
+      "size": 0.85,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 0.5,
+      "size": 0.65,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 0,
+      "size": 0.45,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 1,
+      "size": 0.65,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "circle",
+      "fill": 1,
+      "size": 0.45,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "diamond",
+      "fill": 1,
+      "size": 0.45,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   }
+  ]
+ }
+}

@@ -1,0 +1,191 @@
+{
+ "id": "direction-easy-5009",
+ "category": "direction",
+ "difficulty": "easy",
+ "correctAnswer": 2,
+ "rules": [
+  {
+   "attribute": "rotation",
+   "kind": "latin",
+   "axis": "row",
+   "description": "Each row contains the orientations down, right, down-left once each."
+  }
+ ],
+ "problem": {
+  "rows": 3,
+  "cols": 3,
+  "cells": [
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 225,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 180,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 90,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 90,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 225,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 180,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 180,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 90,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   null
+  ],
+  "options": [
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 135,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 90,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 225,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 180,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "arrow",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 45,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "triangle",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 225,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   }
+  ]
+ }
+}

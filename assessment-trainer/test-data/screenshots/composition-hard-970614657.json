@@ -1,0 +1,423 @@
+{
+ "id": "composition-hard-970614657",
+ "category": "composition",
+ "difficulty": "hard",
+ "correctAnswer": 0,
+ "rules": [
+  {
+   "attribute": "objects",
+   "kind": "xor",
+   "axis": "row",
+   "description": "In each row the third cell keeps the elements that appear in exactly one of the first two (XOR)."
+  }
+ ],
+ "problem": {
+  "rows": 3,
+  "cols": 3,
+  "cells": [
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.8
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.8
+     }
+    ]
+   },
+   null
+  ],
+  "options": [
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.8
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.2
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.2,
+      "y": 0.5
+     },
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.3,
+      "rotation": 0,
+      "x": 0.8,
+      "y": 0.5
+     }
+    ]
+   }
+  ]
+ }
+}
