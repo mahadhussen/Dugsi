@@ -46,6 +46,10 @@ mikrofon ─► AudioWorklet (16 kHz mono) ─► Segmenter (pauser, max 15 s)
   (rätt > nästan > fel > överhoppad). Mellanrum som modellen inte kan förklara
   blir `unclear`, inte `missing`. Inledning (isti'adha, basmala) och avslutning
   ("sadaqa Allahu l-azim") tolereras.
+- `lib/follow/lexicon.ts` — är det hörda ett ord ur Koranen alls? Stavningsnyckeln
+  för varje ord i Uthmani och modern stavning (`lexicon-data.json`, byggd av
+  `scripts/build-lexicon.ts`, kontrollerad mot texten i test). "Fel ord" kräver
+  ett annat Koranord; bokstäver som inte är något ord är "kunde inte höra".
 - `lib/follow/verdict.ts` — slutdomen: poäng, sammanfattning, konfidensgrind,
   fellista med typ (fel ord, överhoppat, förväxlad aya, upprepat och rättat,
   tvekan). Ger samma `RecitationFeedback` som resultatpanelen redan visar.
@@ -109,6 +113,9 @@ för aya från everyayah i stället.
 
 ## Testning
 
+- Modellens riktiga utdata på 145 inspelningar (mästare, rätta läsningar, en
+  vers överhoppad, ett ord utbytt) räknas i `test/corpus.verdict.test.ts`: falska
+  anklagelser mot ett tak som bara får sänkas.
 - Rena kärnor har enhetstester mot facit: follow (`test/follow.test.ts`),
   segmentern, sammanslagningsregeln (`test/policy.test.ts`), svaga ställen
   (`test/weak-spots.test.ts`) och aya-tidernas tolkning

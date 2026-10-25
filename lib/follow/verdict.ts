@@ -12,6 +12,7 @@ import type { TimeRange } from "@/lib/review";
 import type { Word } from "@/lib/quran/types";
 import { alignWindow } from "./align";
 import { CLOSE } from "./phonetic";
+import { isQuranWord } from "./lexicon";
 import { bestMarks, voicedSeconds, type FollowState, type PieceRecord } from "./follower";
 
 /** Voice the model produced no word for, at least this long, makes the words
@@ -242,11 +243,10 @@ export function judgeWords(
   for (let k = lo; k <= hi; k++) {
     const m = best.get(k);
     if (!m || m.status === "missing") continue;
-    // A word heard wrong only as a fragment at a piece's edge — a cut the
-    // length cap made, the moment listening began, a word heard in pieces
-    // ("إِذْ مِ" for بِسْمِ) or a scrap too short to be a word — is the model's
-    // onset or tail, not proof. A whole other word there is a real mistake.
-    if (m.status === "wrong" && fragmentAtEdge(state.pieces[m.piece], k)) statusOf.set(k, "unclear");
+    // A word heard wrong at a piece's edge is accused only where a reciter
+    // stops: see edgeHolds. Elsewhere the pause may have cut the word in two
+    // ("ولغر" | "ضالين" for وَلَا ٱلضَّآلِّينَ), and that proves nothing.
+    if (m.status === "wrong" && !edgeHolds(state, m.piece, k)) statusOf.set(k, "unclear");
     else statusOf.set(k, m.status);
   }
   // Every run of words no piece placed: said as something else, skipped, or unclear?
@@ -285,21 +285,44 @@ export function liveMarks(state: FollowState): Record<number, WordStatus> {
 
 const isFragment = (tokens: string[]) => tokens.length !== 1 || tokens[0].length <= 2;
 
-/** Is text word k heard wrong only as a fragment at an edge of its piece? */
-function fragmentAtEdge(p: PieceRecord, k: number): boolean {
-  if (!p.align) return false;
+/** Is text word k the last word of its verse? */
+const endsVerse = (ref: FollowState["ref"], k: number) => k + 1 >= ref.norm.length || ref.ayah[k + 1] !== ref.ayah[k];
+
+/** Was a piece heard cleanly — placed, or a preamble, or no voice at all? */
+const clean = (p: PieceRecord | undefined) =>
+  !p || p.kind === "aligned" || p.kind === "preamble" || (p.kind === "empty" && voicedSeconds(p.input) < EMPTY_VOICE_S);
+
+/**
+ * May a word heard wrong at an edge of its piece be called wrong? Only when
+ * what was heard is a whole word of the Quran, the edge is where a reciter
+ * stops (the start or end of a verse), and nothing unheard, cut or out of
+ * reach lies across it: no length-cap cut, not the moment listening began, the
+ * neighbouring piece heard cleanly. The middle of a piece is judged as heard.
+ */
+function edgeHolds(state: FollowState, pi: number, k: number): boolean {
+  const p = state.pieces[pi];
+  if (!p.align) return true;
   const pairs = p.align.pairs;
   const pair = pairs.find((x) => k >= x.ref && k < x.refEnd);
-  if (!pair) return false;
+  if (!pair) return true;
   const first = pair === pairs[0];
   const last = pair === pairs[pairs.length - 1];
-  if (!first && !last) return false;
-  if ((first && (p.input.cutStart || p.input.t0 === 0)) || (last && p.input.cutEnd)) return true;
-  return isFragment(p.tokens.slice(pair.heard, pair.heardEnd)) || pair.refEnd - pair.ref > 1;
+  if (!first && !last) return true;
+  const said = p.tokens.slice(pair.heard, pair.heardEnd);
+  if (isFragment(said) || pair.refEnd - pair.ref > 1 || !isQuranWord(said[0])) return false;
+  if (first && (p.input.cutStart || p.input.t0 === 0 || state.ref.inAyah[k] !== 0 || !clean(state.pieces[pi - 1]))) return false;
+  if (last && (p.input.cutEnd || !endsVerse(state.ref, k) || !clean(state.pieces[pi + 1]))) return false;
+  return true;
 }
 
-/** Unmatched words at the tail of the piece before a run, or the head of the
- *  piece after it, paired with the run's words in order. */
+/**
+ * Words left over at the tail of the piece before a run, or the head of the
+ * piece after it, paired with the run's words in order: what was said
+ * instead of them. The same guards as runVerdict hold — the model's own
+ * word times (not the browser's), the two pieces next to each other in time
+ * with nothing between, no cut — and the pause must fall where a reciter
+ * stops, at a verse's end or start.
+ */
 function edgeSlots(
   state: FollowState,
   best: ReturnType<typeof bestMarks>,
@@ -309,23 +332,27 @@ function edgeSlots(
   const out = new Map<number, { text: string; fragment: boolean }>();
   const before = best.get(a - 1);
   const after = best.get(b);
-  const pb = before ? state.pieces[before.piece] : null;
-  const pa = after ? state.pieces[after.piece] : null;
-  if (pb?.align && pb.align.end === a && !(pb.input.cutEnd)) {
+  if (!before || !after) return out;
+  const pb = state.pieces[before.piece];
+  const pa = state.pieces[after.piece];
+  if (!pb.align || !pa.align || !pb.input.voiced || !pa.input.voiced) return out;
+  if (after.piece !== before.piece + 1 || pb.input.t0 > pa.input.t0) return out;
+  const word = (t: string) => ({ text: t, fragment: isFragment([t]) || !isQuranWord(t) });
+  if (pb.align.end === a && !pb.input.cutEnd) {
     const lastPair = pb.align.pairs[pb.align.pairs.length - 1];
-    const tail = pb.tokens.slice(lastPair ? lastPair.heardEnd : 0);
-    tail.slice(0, b - a).forEach((t, j) => out.set(a + j, { text: t, fragment: isFragment([t]) }));
+    const tail = pb.tokens.slice(lastPair ? lastPair.heardEnd : 0).slice(0, b - a);
+    if (tail.length && endsVerse(state.ref, a + tail.length - 1)) tail.forEach((t, j) => out.set(a + j, word(t)));
   }
-  if (pa?.align && pa.align.start === b && !(pa.input.cutStart || pa.input.t0 === 0)) {
+  if (pa.align.start === b && !(pa.input.cutStart || pa.input.t0 === 0)) {
     const firstPair = pa.align.pairs[0];
     const head = pa.tokens.slice(0, firstPair ? firstPair.heard : 0);
-    head
-      .slice(-Math.min(head.length, b - a))
-      .reverse()
-      .forEach((t, j) => {
+    const take = head.slice(-Math.min(head.length, b - a));
+    if (take.length && state.ref.inAyah[b - take.length] === 0) {
+      take.reverse().forEach((t, j) => {
         const i = b - 1 - j;
-        if (i >= a && !out.has(i)) out.set(i, { text: t, fragment: isFragment([t]) });
+        if (i >= a && !out.has(i)) out.set(i, word(t));
       });
+    }
   }
   return out;
 }
@@ -374,6 +401,18 @@ function runVerdict(
     // can come back empty, and was still said.
     if (p.kind === "empty" && voicedSeconds(p.input) >= EMPTY_VOICE_S) return "unclear";
   }
+  // A piece whose words another piece covers too (the model wrote the end of
+  // a verse for audio of its start, then the end again) cannot vouch that the
+  // words before or after it were left out: its voice may have been them.
+  // (Most of it, two words or more: a garbled onset laid over the word
+  // before is not a second copy.)
+  const shared = (p: PieceRecord) =>
+    state.pieces.some((q) => {
+      if (q === p || !q.align || !p.align) return false;
+      const both = Math.min(q.align.end, p.align.end) - Math.max(q.align.start, p.align.start);
+      return both >= 2 && 2 * both >= p.align.end - p.align.start;
+    });
+  if (shared(pb) || shared(pa)) return "unclear";
   // Could the piece before have been the copy right in front of the piece
   // after (identical verse openings, 2:97/2:98)? Then it is not known which
   // words were left out.

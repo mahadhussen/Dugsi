@@ -208,20 +208,32 @@ const JUMP = 1.0; // extra cost of a place found by searching the whole text
 /** Text words the alignment heard as said right. */
 const clearWords = (a: Alignment) => a.pairs.filter((p) => p.sim >= CORRECT).reduce((n, p) => n + (p.refEnd - p.ref), 0);
 
-export function placePiece(ref: RefText, heard: string[], cursor: number, lo: number, hi: number): Placement | null {
+export function placePiece(ref: RefText, heard: string[], cursor: number, lo: number, hi: number, carryOn = false): Placement | null {
   const m = heard.length;
   const wLo = Math.max(lo, cursor - BACK);
   const wHi = Math.min(hi, cursor + AHEAD + 2 * m);
   let local = alignWindow(ref, heard, wLo, wHi, (i) => -Math.min(DIST_CAP, DIST * (i < cursor ? BACK_FACTOR : 1) * Math.abs(i - cursor)));
   // Leaving the reciter's place says they went back or skipped ahead, and
-  // that takes two words heard clearly. On less, when the piece's first word
-  // is the next word of the text, the reciter simply carried on: "اله الوحد"
-  // after verse 1 of Al-Ikhlas is verse 2 with its second word changed, not
-  // "لَّهُۥ … أَحَدٌۢ" eight words further on.
-  if (local && local.start !== cursor && cursor < hi && clearWords(local) < 2) {
+  // that takes two words heard clearly. On less, when the piece (two words or
+  // more, once the reciter has begun) starts with the next word of the text,
+  // the reciter simply carried on: "اله الوحد" after verse 1 of Al-Ikhlas is
+  // verse 2 with its second word changed, not "لَّهُۥ … أَحَدٌۢ" further on.
+  // Never at the cost of a word inside the piece left out.
+  if (carryOn && local && local.start !== cursor && cursor < hi && clearWords(local) < 2) {
     const on = alignWindow(ref, heard, cursor, wHi, (i) => (i === cursor ? 0 : -1e9));
     const first = on?.pairs[0];
-    if (on && first && first.ref === cursor && first.heard === 0 && first.sim >= CLOSE && on.score > -0.2) local = on;
+    if (
+      on &&
+      first &&
+      first.ref === cursor &&
+      first.refEnd === cursor + 1 &&
+      first.heard === 0 &&
+      first.heardEnd === 1 &&
+      first.sim >= CLOSE &&
+      on.skipped.length === 0 &&
+      on.score > -0.2
+    )
+      local = on;
   }
   let best: Placement | null = local ? { align: local, jumped: false } : null;
 

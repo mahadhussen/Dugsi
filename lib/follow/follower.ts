@@ -18,6 +18,7 @@ import type { WordStatus } from "@/lib/align";
 import { tokenize } from "@/lib/arabic";
 import { alignWindow, placePiece, type Alignment } from "./align";
 import { CLOSE, CORRECT, spoken, wordSim } from "./phonetic";
+import { isQuranWord } from "./lexicon";
 import type { RefText } from "./text";
 
 /** One decoded piece, as the pipeline delivers it. Times are seconds on the
@@ -59,6 +60,11 @@ export interface PieceRecord {
   jumped: boolean;
   /** Cursor before this piece. */
   from: number;
+  /** Where a short piece would have gone, too far to move on its own word:
+   *  confirmed if the next piece carries on from there. */
+  held?: Alignment;
+  /** This piece carried on from the piece before's held place, which now stands. */
+  confirmsHeld?: boolean;
 }
 
 export interface FollowState {
@@ -164,14 +170,27 @@ export function placeInput(state: FollowState, input: PieceInput, cursor: number
   if (tokens.length === 0) {
     return { ...base, kind: formula.length ? "preamble" : voicedSeconds(input) >= 1 ? "unclear" : "empty", align: null };
   }
-  const place = placePiece(state.ref, tokens, cursor, state.start, state.end);
+  // The piece before was held back (one word, too far to move on): if this
+  // piece carries on right where it would have gone, the two together are
+  // the evidence, and both stand. A learner who pauses after every word and
+  // has left out a verse is followed again from the second word.
+  const prev = state.pieces[state.pieces.length - 1];
+  if (prev?.held) {
+    const at = prev.held.end;
+    const next = alignWindow(state.ref, tokens, at, Math.min(state.end, at + 2 * tokens.length + 2), (i) => (i === at ? 0 : -1e9));
+    if (next && next.start === at && next.skipped.length === 0 && next.pairs.every((p) => p.sim >= SOLID) && solidWords(next) + solidWords(prev.held) >= 2) {
+      return { ...base, kind: "aligned", align: next, jumped: true, confirmsHeld: true };
+    }
+  }
+  const place = placePiece(state.ref, tokens, cursor, state.start, state.end, started && tokens.length >= 2);
   const a = place?.align ?? null;
   // Moving the cursor far takes real evidence: two or more words heard well.
   // One look-alike word (a hallucinated "طسم" on a madd tail landing on
-  // "بسم" 28 words back) must not drag the reciter's place away.
-  if (a && Math.abs(a.start - cursor) > 8) {
-    const solid = a.pairs.filter((p) => p.sim >= 0.75).reduce((n, p) => n + (p.refEnd - p.ref), 0);
-    if (solid < 2) return { ...base, kind: "unclear", align: null };
+  // "بسم" 28 words back) must not drag the reciter's place away — but its
+  // place is kept, for the next piece to confirm.
+  if (a && Math.abs(a.start - cursor) > 8 && solidWords(a) < 2) {
+    const held = a.pairs.every((p) => p.sim >= SOLID) && a.skipped.length === 0 ? a : undefined;
+    return { ...base, kind: "unclear", align: null, held };
   }
   // A piece explains itself when enough of what was heard landed on real words.
   const ok = !!a && a.matched >= 1 && a.matched >= Math.ceil(0.4 * Math.min(tokens.length, a.end - a.start + a.extras.length)) && a.score > -0.2;
@@ -224,9 +243,18 @@ function backfill(ref: RefText, pieces: PieceRecord[], lo: number): PieceRecord[
   return pieces;
 }
 
+/** Heard well enough to count towards moving the reciter's place. */
+const SOLID = 0.75;
+const solidWords = (a: Alignment) => a.pairs.filter((p) => p.sim >= SOLID).reduce((n, p) => n + (p.refEnd - p.ref), 0);
+
 function advance(state: FollowState, rec: PieceRecord): FollowState {
   let pieces = [...state.pieces, rec];
   if (rec.kind !== "aligned" || !rec.align) return { ...state, pieces };
+  if (rec.confirmsHeld) {
+    const i = pieces.length - 2;
+    const held = pieces[i];
+    pieces[i] = { ...held, kind: "aligned", align: held.held!, jumped: true, held: undefined };
+  }
   pieces = backfill(state.ref, pieces, state.start);
   const cursor = rec.align.end;
   // The screen follows the piece, but a hint that already ran ahead stays
@@ -299,10 +327,28 @@ export function applyHint(state: FollowState, text: string): FollowState {
 
 // ── Marks ──────────────────────────────────────────────────────────────────
 
-const RANK: Record<WordStatus, number> = { correct: 4, close: 3, wrong: 2, missing: 1, unclear: 0 };
+// A word heard but not made out still outranks one not heard at all.
+const RANK: Record<WordStatus, number> = { correct: 4, close: 3, wrong: 2, unclear: 1.5, missing: 1 };
 
 export function statusOfSim(sim: number): WordStatus {
   return sim >= CORRECT ? "correct" : sim >= CLOSE ? "close" : "wrong";
+}
+
+/**
+ * The status of one heard word against the text word it was lined up with.
+ * "Wrong" means another word was said, so what was heard must be a word of
+ * the Quran; letters that are no word are the model failing, not the reciter.
+ */
+export function statusOfPair(heard: string, expected: string, sim: number): WordStatus {
+  const st = statusOfSim(sim);
+  // A scrap half the word's length or less ("لت" for "لَيْلَةِ") is the model
+  // catching part of it, not another word.
+  if (st === "wrong") return isQuranWord(heard) && 2 * heard.length > expected.length ? "wrong" : "unclear";
+  if (st !== "close") return st;
+  // Alike on paper only through the article they share: "ٱلْوَٰحِدُ" for
+  // "ٱلصَّمَدُ" is another word, not a slip.
+  if (heard.length > 3 && expected.length > 3 && heard.startsWith("ال") && expected.startsWith("ال") && isQuranWord(heard) && wordSim(heard.slice(2), expected.slice(2)) < CLOSE) return "wrong";
+  return st;
 }
 
 /** Best status of every word some piece covered, plus what was heard for it. */
@@ -321,8 +367,16 @@ export function bestMarks(state: FollowState): Map<number, Mark> {
   state.pieces.forEach((p, pi) => {
     if (p.kind !== "aligned" || !p.align) return;
     for (const pair of p.align.pairs) {
-      const st = statusOfSim(pair.sim);
       const heard = p.tokens.slice(pair.heard, pair.heardEnd).join(" ");
+      const one = pair.heardEnd - pair.heard === 1 && pair.refEnd - pair.ref === 1;
+      // A word the model split in two ("لو ضروا") or two it ran together is
+      // judged as one: wrong only if, put together, it is a word at all.
+      const joined = statusOfSim(pair.sim);
+      const st = one
+        ? statusOfPair(heard, state.ref.norm[pair.ref], pair.sim)
+        : joined === "wrong" && !isQuranWord(heard.replace(/ /g, ""))
+          ? "unclear"
+          : joined;
       for (let k = pair.ref; k < pair.refEnd; k++) {
         if (st === "wrong") everWrong.add(k);
         const prev = out.get(k);

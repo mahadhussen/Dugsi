@@ -10,6 +10,73 @@
 2. **Hur Mahad provar på telefonen.** GitHub Pages är produktion (allt på `main`
    deployas). Alternativ: (a) lokal https-server på wifi, (b) förhandsdeploy på
    Vercel, (c) merga. Ingen deploy görs utan ja.
+3. **Ska ett ljudlikt bokstavsbyte synas?** ح för ه, ص för س, ق för ك: i dag
+   blir ordet "nästan rätt" (gult, delpoäng, sparas inte som fel), aldrig
+   "rätt" och aldrig "fel". Modellen kan inte skilja elevens makhraj från sin
+   egen stavning. Alternativ: (a) som nu, (b) inte visa alls (räkna som rätt),
+   (c) räkna som fel (anklagar rätt läsning när modellen stavar fel). Följd av
+   (a): korta ord som قل/كل blir också "nästan rätt" (34 ordformer). Mahads beslut.
+
+## 2026-10-25 — Naadirs andra NOT CLEAN: riktig modellutdata
+
+Naadir körde modellen på 145 nya inspelningar (17 mästare, 54 rätta läsningar
+med Majed-rösten, 24 med en överhoppad vers, 50 med ett utbytt ord) och fann att
+förra rundans regler anklagade rätt läsning oftare: BOB:s svep körs med perfekt
+text, där reglerna aldrig biter. Korpusarna ligger nu i
+`test/fixtures/recite/corpus/` med `test/corpus.verdict.test.ts`, som räknar
+falska anklagelser mot ett tak. Grönt kan inte längre betyda att mästare anklagas.
+
+| Mått (Naadirs kommandon) | före rundan `2da2aaf` | `f4e54c3` | nu |
+|---|---|---|---|
+| 17 mästare: falska fel / falska överhopp | 4 / 0 | 8 / 0 | **1 / 0** |
+| 54 rätta läsningar: falska fel / falska överhopp | 33 / 26 | 44 / 30 | **7 / 6** |
+| 24 med vers överhoppad: falska anklagelser utanför versen | 58 | 71 | **16** |
+| samma: överhoppade ord fångade (av 131) | 117 | 117 | 114 |
+| 50 med ett ord utbytt: fångade / falska anklagelser | 17 / 23 | 48 / 22 | **48 / 2** |
+| ljudlik bokstav lyfter ord från nästan rätt till rätt | 0 | 4 734 ordformer | **0** |
+| Al-Fatiha med الرهمن ×4: poäng mot perfekt 90 | 76 | 90 | **88**, fyra nästan rätt |
+| ord för ord, svep 112/101/77/36: falska överhopp | 4 | 13 | **0** |
+| ord för ord, Ya-Sin 1–60 utan 36:12: falska / fångade | 81 / 0 av 14 | 82 | **0 / 14 av 14** |
+| kantpar vid misslyckad bit, webbläsare, ohörd bit | ohörda | fel | **ohörda** |
+| /quran första laddning | 254 kB | 254 kB | **233 kB** |
+
+Reglerna, var och en med test och sabotageprov (elva sabotage, alla fälls):
+
+- **"Fel" kräver att ett annat ord ur Koranen hördes** (`lib/follow/lexicon.ts`).
+  Förvanskningar som "ولغر", "العمسان", "معصره" blir ohörda. Uppslaget är exakt
+  på en stavningsnyckel (ordet utan alif och hamza) ur både Uthmani och modern
+  stavning. Beslut: exakt nyckel. Förkastat: likhet mot ordlistan (gav
+  "ولغر"≈"الغار", "سمت"≈"سموت"). Ett ord som modellen delat i två bedöms hopslaget.
+  En stump på högst halva ordets längd ("لت" för "ليلة") är aldrig "fel".
+- **Kantregeln:** ett fel ord vid en bits kant döms bara vid versens början
+  eller slut, med grannbiten ren och utan klipp. Kostnad: ett fel ord just före
+  en andningspaus mitt i en vers blir ohört.
+- **Kantparen** följer samma skydd som resten av domen: modellens ordtider
+  (inte webbläsarens), bitarna intill varandra, ingen bit emellan, inget klipp,
+  pausen vid en versgräns.
+- **Ljudlika bokstäver** ger högst "nästan rätt", aldrig "rätt". Se NEEDS-DECISION 3.
+- **Artikeln:** ingen jämförelse utan artikel i likheten (gav falska fel på
+  modellens stavning). Den delade artikeln räknas bort bara när det hörda är
+  ett annat Koranord ("الواحد" för "الصمد"). Solbokstavsregeln kräver att resten
+  är ett ord ("الله" är inte "ال" + "له").
+- **Fortsätt-regeln** gäller bara när läsaren har börjat, bara bitar om minst två
+  ord, bara ett-till-ett vid markören, och aldrig så att ett ord i biten hoppas
+  över. Efter regeln nedan gör villkoret för första biten ingen mätbar skillnad.
+  Det behålls enligt Naadirs krav och är testat direkt.
+- **En dubbelplacering vittnar inte om överhopp:** en bit vars ord en annan bit
+  också täcker (två ord eller mer, minst halva biten) gör glappet bredvid ohört
+  (95:6, där modellen skrev versens slut för dess början).
+- **En kort bit långt bort hålls kvar i stället för att kastas.** Om nästa bit
+  fortsätter precis där, står båda (`held`/`confirmsHeld` i follower.ts). Fanns
+  före rundan: ord för ord efter en överhoppad vers tappade följaren bort sig
+  för resten av suran.
+- **Recitera laddas vid behov** (`next/dynamic`), så att ordlistan (36 kB
+  komprimerad) inte tynger läsning och lyssning.
+
+Kända gränser, låsta med test: Qahtani 1,12× 1:2:2 ("الحمل لا يرب" för
+"الحمد لله رب", ett riktigt ord för ett riktigt ord) och tts-fatiha 1:6:2
+("اسرق", som är ett Koranord). Fler ord blir ohörda hos Majed (26→59). Det är
+priset för att inte anklaga.
 
 ## 2026-10-25 — Naadirs NOT CLEAN: villkor 1–4 och efterpunkterna
 

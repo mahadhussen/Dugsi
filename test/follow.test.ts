@@ -10,7 +10,7 @@ import { loadSurah } from "../lib/quran";
 import { flattenAyat, type Ayah } from "../lib/quran/types";
 import { runFixture, type Fixture } from "../lib/follow/fixture";
 import { buildRef } from "../lib/follow/text";
-import { applyHint, applyPiece, createFollower, type PieceInput } from "../lib/follow/follower";
+import { applyHint, applyPiece, createFollower, placeInput, statusOfPair, type PieceInput } from "../lib/follow/follower";
 import { liveMarks, verdictOf } from "../lib/follow/verdict";
 import { alignWindow, placePiece } from "../lib/follow/align";
 import { wordSim, spoken, CLOSE, CORRECT } from "../lib/follow/phonetic";
@@ -116,6 +116,18 @@ test("afasy-fatiha-phone: through a phone band, noise and 12 % faster it still f
   assert.deepEqual(where("wrong"), []);
 });
 
+// ── Known limit: the model hears a real word that was not said ────────────
+
+test("tts-fatiha: 1:6:2 heard as اسرق is judged wrong — a known limit of the model", async () => {
+  // The plain Majed reading says ٱلصِّرَٰطَ; the model writes "اسرق", which is
+  // a word of the Quran (سَرَقَ, 12:77). Nothing in the letters tells the
+  // model's mistake from a reciter's, so it is accused. Locked here so a
+  // change in it is seen; see WORKLOG.
+  const { where } = await run("tts-fatiha");
+  assert.deepEqual(where("wrong"), ["6:2"]);
+  assert.deepEqual(where("missing"), []);
+});
+
 // ── A different word at a verse's edge (General Naadir's probe) ───────────
 // The same voice reads each verse right and with one word changed; the model's
 // real output of both is in the fixtures.
@@ -168,18 +180,37 @@ test("spelling differences between Uthmani and modern script are the same word",
   assert.ok(wordSim(spoken("قَلْب"), spoken("كلب")) < CORRECT);
 });
 
-test("letters that sound alike are near, a different word is not", () => {
+test("letters that sound alike make a word nearly right at most, never right", () => {
   const sim = (a: string, b: string) => wordSim(spoken(a), spoken(b));
-  // The article before a sun letter is silent, and ص/س, د/ت are written for each other.
+  // The recogniser's spelling or the learner's makhraj: nearly right.
+  for (const [said, text] of [
+    ["الرهمن", "ٱلرَّحْمَٰنِ"],
+    ["الرهيم", "ٱلرَّحِيمِ"],
+    ["السلوه", "ٱلصَّلَوٰةَ"],
+    ["ينفكون", "يُنفِقُونَ"],
+    ["رزكنهم", "رَزَقْنَٰهُمْ"],
+    ["والزين", "وَٱلَّذِينَ"],
+  ]) {
+    assert.ok(sim(said, text) >= CLOSE && sim(said, text) < CORRECT, `${said} vs ${text}: ${sim(said, text)}`);
+  }
+  // The article before a sun letter is silent.
   assert.ok(sim("سمد", "ٱلصَّمَدُ") >= CLOSE);
   assert.ok(sim("سمت", "ٱلصَّمَدُ") >= CLOSE);
-  // A shared article does not make two words alike.
-  assert.ok(sim("الواحد", "ٱلصَّمَدُ") < CLOSE, `${sim("الواحد", "ٱلصَّمَدُ")}`);
-  assert.ok(sim("التي", "ٱلَّذِى") < CLOSE);
-  // A dropped ʿayn in a long word is not "said right" any more.
-  assert.ok(sim("الالمين", "ٱلْعَٰلَمِينَ") < CORRECT);
+  // ...but "الله" is not "ال" + "له": it does not look like "قل هو" run together.
+  assert.ok(sim("الله", "قلهو") < CLOSE, `${sim("الله", "قلهو")}`);
   // Before a moon letter the lām is heard, so a missing article still costs.
   assert.ok(sim("حمد", "ٱلْحَمْدُ") < CORRECT);
+});
+
+test("wrong means another word of the Quran was heard; letters that are no word are unclear", () => {
+  const st = (heard: string, text: string) => statusOfPair(spoken(heard), spoken(text), wordSim(spoken(heard), spoken(text)));
+  assert.equal(st("بالحق", "بِٱلصَّبْرِ"), "wrong"); // another word
+  assert.equal(st("الواحد", "ٱلصَّمَدُ"), "wrong"); // alike only through the article
+  assert.equal(st("التي", "ٱلَّذِى"), "wrong");
+  assert.equal(st("ولغر", "وَلَا"), "unclear"); // a word cut in two by a pause
+  assert.equal(st("العمسان", "ٱلْإِنسَٰنَ"), "close"); // the model's spelling
+  assert.equal(st("لت", "لَيْلَةِ"), "unclear"); // a scrap of the word
+  assert.equal(st("سمت", "ٱلصَّمَدُ"), "close");
 });
 
 test("a word the recogniser split in two still lines up", () => {
@@ -389,6 +420,87 @@ test("words before the first piece heard are never skipped (backlog trimmed whil
     assert.deepEqual(at("missing"), [], `surah ${n}`);
     assert.deepEqual(v.mistakes, [], `surah ${n}`);
   }
+});
+
+test("word-by-word reading never turns a said word into a skipped one", async () => {
+  for (const n of [112, 101, 77, 109, 1]) {
+    const s = await loadSurah(n);
+    assert.deepEqual(judge(s.ayat, breaths(s.ayat, 1)).at("missing"), [], `surah ${n}`);
+  }
+  // Starting at verse 2 of Al-Ikhlas, one word at a time: the first "ٱللَّهُ"
+  // is not carried back onto "قُلْ هُوَ", and nothing said is skipped.
+  const s = await loadSurah(112);
+  const { at } = judge(s.ayat, breaths(s.ayat.slice(1), 1));
+  assert.deepEqual(at("missing"), []);
+  assert.deepEqual(at("wrong"), []);
+});
+
+test("word by word with a verse left out: the follow keeps up, and only that verse is skipped", async () => {
+  // A learner who pauses after every word gives one-word pieces; one word
+  // alone may not move the place far, so the next word confirms it.
+  for (const [n, upto, skip] of [
+    [36, 60, 12],
+    [36, 60, 14],
+    [67, 30, 12],
+    [2, 40, 10],
+  ]) {
+    const s = await loadSurah(n);
+    const set = s.ayat.slice(0, upto);
+    const { at, flat } = judge(set, breaths(set, 1, skip));
+    const missing = at("missing");
+    assert.deepEqual(missing.filter((k) => Number(k.split(":")[0]) !== skip), [], `${n} skip ${skip}`);
+    assert.equal(missing.length, flat.filter((f) => f.ayah === skip).length, `${n} skip ${skip}: verse caught`);
+  }
+  // Ya-Sin, verses 12–16 each left out in turn: no word said is called skipped.
+  const y = (await loadSurah(36)).ayat.slice(0, 60);
+  for (const skip of [12, 13, 14, 15, 16]) {
+    const { at } = judge(y, breaths(y, 1, skip));
+    assert.deepEqual(at("missing").filter((k) => Number(k.split(":")[0]) !== skip), [], `skip ${skip}`);
+  }
+});
+
+test("carrying on at the reciter's place needs a reciter who has begun", async () => {
+  const s = await loadSurah(112);
+  const ref = buildRef(s.ayat);
+  const state = createFollower(ref, undefined, 4); // at verse 2, nothing heard yet
+  const piece: PieceInput = { id: 1, t0: 5, t1: 7, text: "اله الوحد", source: "browser" };
+  assert.equal(placeInput(state, piece, 4, true).align?.start, 4); // begun: verse 2, its word changed
+  assert.notEqual(placeInput(state, piece, 4, false).align?.start, 4); // first piece: not forced there
+});
+
+test("a stray word next to a gap is never what was said instead, when the gap was not clean", async () => {
+  const s = await loadSurah(2);
+  const set = s.ayat.slice(0, 6);
+  const stray = (p: PieceInput): PieceInput => ({
+    ...p,
+    text: `${p.text} فكتب`,
+    words: p.words ? [...p.words, { text: "فكتب", start: p.t1 - 0.3, end: p.t1 }] : undefined,
+  });
+  // The model could not decode verse 4 (voice we could not read).
+  const failed = breaths(set, 99, undefined, { dropPiece: 3 }).map((p, i) => (i === 2 ? stray(p) : p));
+  assert.deepEqual(judge(set, failed).v.mistakes, []);
+  // The browser's recogniser dropped verse 4 at a restart: no word times to go on.
+  const browser = breaths(set, 99, undefined, { source: "browser" }).map((p, i) => (i === 2 ? stray(p) : p));
+  browser.splice(3, 1);
+  assert.deepEqual(judge(set, browser).v.mistakes, []);
+  // A one-word verse (55:64) the model could not decode, and a stray word of
+  // the Quran at the end of the verse before: the stray word is not taken for it.
+  const r = (await loadSurah(55)).ayat.slice(59, 70);
+  const word = (p: PieceInput): PieceInput => ({
+    ...p,
+    text: `${p.text} الجبال`,
+    words: p.words ? [...p.words, { text: "الجبال", start: p.t1 - 0.3, end: p.t1 }] : undefined,
+  });
+  const lost = breaths(r, 99, undefined, { dropPiece: 4 }).map((p, i) => (i === 3 ? word(p) : p));
+  assert.deepEqual(judge(r, lost).v.mistakes, []);
+  const lostBrowser = breaths(r, 99, undefined, { source: "browser" }).map((p, i) => (i === 3 ? word(p) : p));
+  lostBrowser.splice(4, 1);
+  assert.deepEqual(judge(r, lostBrowser).v.mistakes, []);
+  // Verse 4 heard only as noise (a piece we could not place), stray word after it.
+  const noise = breaths(set, 99).map((p, i) =>
+    i === 3 ? { ...p, text: "ق", words: [{ text: "ق", start: p.t0, end: p.t0 + 0.3 }] } : i === 4 ? { ...p, text: `فكتب ${p.text}`, words: [{ text: "فكتب", start: p.t0, end: p.t0 + 0.3 }, ...(p.words ?? [])] } : p,
+  );
+  assert.deepEqual(judge(set, noise).v.mistakes.filter((m) => m.kind === "wrong"), []);
 });
 
 test("with the browser as judge, a dropped phrase or word is unclear, never skipped", async () => {

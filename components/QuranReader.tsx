@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Reciter from "./Reciter";
+import dynamic from "next/dynamic";
 import SurahPicker from "./SurahPicker";
 import ReciterPicker from "./ReciterPicker";
 import ReciterAvatar from "./ReciterAvatar";
@@ -18,6 +18,17 @@ import { useReciter } from "@/lib/reciter-store";
 import { useReaderPosition } from "@/lib/reader-store";
 import { useSettings } from "@/lib/settings";
 import { useAuth } from "@/lib/supabase/AuthProvider";
+
+// Reciting (the follower, the listening engine, the list of Quran words) is
+// fetched only when reciting is opened, so reading and listening load lighter.
+const Reciter = dynamic(() => import("./Reciter"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex justify-center py-16 text-ink/60">
+      <span className="h-8 w-8 animate-spin rounded-full border-4 border-gold border-t-transparent" />
+    </div>
+  ),
+});
 import { loadFurthest, resetFurthest } from "@/lib/supabase/progress";
 import { PAGE_COUNT, pageStart, surahStartingOn } from "@/lib/quran/layout";
 

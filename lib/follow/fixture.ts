@@ -21,6 +21,8 @@ export interface Fixture {
   note: string;
   segments: { t0: number; t1: number; byPause: boolean; text: string; words: FixtureWord[]; voiced: [number, number][] }[];
   joins: { of: [number, number]; text: string; words: FixtureWord[] }[];
+  /** For a deliberate mistake: the verse left out, or the word said as another. */
+  expect?: { skipVerse: number } | { wrongAt: string; said: string };
 }
 
 /** Fixture word times are relative to the decoded audio; the follower wants the recording clock. */
