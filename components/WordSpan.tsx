@@ -23,21 +23,23 @@ export interface WordSpanProps {
   madd?: "good" | "rushed" | "unknown";
   /** Follow the word with a space (flowing text); off inside a mushaf line. */
   space?: boolean;
+  /** "surah:verse", so a text selection can be turned into verses to play. */
+  sv?: string;
 }
 
 /** One Quran word as it appears on the page, with its recitation marks. */
-export function WordSpan({ text, translit, masked, onReveal, colorClass, status, active, madd, space = true }: WordSpanProps) {
+export function WordSpan({ text, translit, masked, onReveal, colorClass, status, active, madd, space = true, sv }: WordSpanProps) {
   const sp = space ? " " : "";
   if (masked) {
     return (
-      <span className="word word-mask" onClick={onReveal} role="button" tabIndex={0} aria-label="Hidden word — tap to reveal">
+      <span className="word word-mask" data-sv={sv} onClick={onReveal} role="button" tabIndex={0} aria-label="Hidden word — tap to reveal">
         {text}
         {sp}
       </span>
     );
   }
   return (
-    <span className={`word ${colorClass ?? ""} ${status ? statusClass[status] : ""} ${active ? "word-active" : ""}`} title={translit}>
+    <span className={`word ${colorClass ?? ""} ${status ? statusClass[status] : ""} ${active ? "word-active" : ""}`} title={translit} data-sv={sv}>
       {text}
       {madd === "rushed" && (
         <sup className="ml-0.5 text-xs" style={{ color: "var(--bad)" }} title="Elongation may be rushed">

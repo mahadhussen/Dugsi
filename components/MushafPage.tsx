@@ -137,7 +137,11 @@ function MushafPageInner(p: MushafPageProps) {
                 );
               }
               if (m) nodes.push(<AyahMarker key="m" surah={s} verse={a} />);
-              return <span key={`${s}:${a}:${w0}`} className="contents">{nodes}</span>;
+              return (
+                <span key={`${s}:${a}:${w0}`} className="contents" data-sv={`${s}:${a}`}>
+                  {nodes}
+                </span>
+              );
             })}
           </div>
         );

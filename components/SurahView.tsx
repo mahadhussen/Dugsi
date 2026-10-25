@@ -119,11 +119,12 @@ function VerseWords({
               status={status}
               active={activeIndex === idx}
               madd={maddVerdicts?.[idx]}
+              sv={`${surahNumber}:${ayah.number}`}
             />
           );
         })
       ) : (
-        <span>{ayah.words.map((w) => w.uthmani).join(" ")} </span>
+        <span data-sv={`${surahNumber}:${ayah.number}`}>{ayah.words.map((w) => w.uthmani).join(" ")} </span>
       )}
       <AyahMarker surah={surahNumber} verse={ayah.number} />{" "}
     </>

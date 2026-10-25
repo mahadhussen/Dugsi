@@ -7,6 +7,7 @@ import ReciterPicker from "./ReciterPicker";
 import ReciterAvatar from "./ReciterAvatar";
 import SurahView from "./SurahView";
 import ListenPlayer from "./ListenPlayer";
+import SelectionPlay from "./SelectionPlay";
 import PageHeader from "./PageHeader";
 import OptionsSheet from "./OptionsSheet";
 import Legend from "./Legend";
@@ -212,6 +213,8 @@ export default function QuranReader() {
         ) : (
           <ListenSection surah={surah} surahId={surah.number} startVerse={reading.verse} onSurahChange={followSurah} />
         )}
+
+        <SelectionPlay />
 
         {settings.showTajweed && showing && (
           <div className="mt-8">

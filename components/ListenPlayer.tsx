@@ -212,7 +212,9 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
   };
   const loop = listen.loop;
   const loopLabel = loop
-    ? loop.from.verse === loop.to.verse
+    ? loop.times === 1
+      ? ` · reading ${loop.from.verse === loop.to.verse ? "this verse" : `verses ${loop.from.verse}–${loop.to.verse}`}`
+      : loop.from.verse === loop.to.verse
       ? ` · repeating this verse${loop.times ? ` (${loop.done + 1}/${loop.times})` : ""}`
       : ` · repeating verses ${loop.from.verse}–${loop.to.verse}${loop.times ? ` (${loop.done + 1}/${loop.times})` : ""}`
     : listen.repeat
