@@ -102,6 +102,8 @@ export interface SessionRecord {
   mistakes: StoredMistake[];
   /** Verses fully heard and judged (kept on the device). */
   hv?: number[];
+  /** The recording of this session (kept on the device). */
+  take?: number;
 }
 
 /** Record a finished recitation — locally for everyone, and to the account when

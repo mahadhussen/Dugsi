@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { selectEvictions, withinBlobLimit, type RecordingMeta } from "../lib/recordings";
+import { selectEvictions, takeId, withinBlobLimit, type RecordingMeta } from "../lib/recordings";
 
 const MB = 1024 * 1024;
 
@@ -47,4 +47,13 @@ test("withinBlobLimit rejects empty and oversized blobs", () => {
   assert.equal(withinBlobLimit(1 * MB), true);
   assert.equal(withinBlobLimit(24 * MB), true);
   assert.equal(withinBlobLimit(26 * MB), false); // above the ~25 MB per-blob cap
+});
+
+test("takes of the same surah are evicted one by one, oldest first", () => {
+  // Several recitations of Al-Fatiha are separate takes: the cap drops the
+  // oldest take, not the whole surah.
+  const t = (surah: number, mb: number, at: number) => ({ surah, size: mb * MB, createdAt: at, id: takeId(surah, at) });
+  const recs = [t(1, 1, 3), t(1, 1, 2), t(1, 1, 1), t(2, 1, 0)];
+  assert.deepEqual(selectEvictions(recs, 3, 80 * MB), [takeId(2, 0)]);
+  assert.deepEqual(selectEvictions(recs, 2, 80 * MB).sort(), [takeId(1, 1), takeId(2, 0)].sort());
 });

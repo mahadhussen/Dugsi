@@ -37,6 +37,29 @@
    modellen tappar ett kort ord). Beslutet togs av mig i runda 4 utan att
    läggas här; det är Mahads.
 
+## 2026-10-25 — Mahads test: hör ditt eget fel bredvid facit
+
+Mahad provade och ville kunna välja exakt var det blev fel och höra just det:
+facit och, bredvid, sitt eget fel som han läste det. Förut sparades bara den
+senaste inspelningen per sura, så Fel-fliken kunde inte spela felet (bara
+shejken), och en senare rätt läsning hade skrivit över det.
+
+- `lib/recordings.ts`: varje recitation sparas som ett eget försök (IndexedDB
+  v2, nyckel "sura:tid"), högst 30 försök och 80 MB, äldst först bort. Gamla
+  inspelningar flyttas med vid uppgraderingen (provat i webbläsaren).
+- Sessionen sparar vilket försök den hör till (`take`, bara lokalt, skickas
+  inte till molnet).
+- `HearChips` (MistakeReview.tsx): **Correct** (shejken säger just ordet, eller
+  versen utan ordtider) och **You** (din röst vid ordet, i försöket där felet
+  gjordes) sida vid sida, sedan **Verse**. Används i resultatpanelen och i
+  Fel-fliken.
+- Provat: "You" i Fel-fliken spelar 0,85–2,1 s av ett försök där ordet låg på
+  1,0–1,8 s.
+
+Krasch vid surabyte: går inte att framkalla i Chrome på datorn (Lyssna,
+Recitera, under uppspelning, snabba byten, från sen vers till kort sura: 0
+fel). Väntar på Mahads uppgifter om enhet och hur det ser ut.
+
 ## 2026-10-25 — Naadirs fjärde NOT CLEAN: röst som segmenteraren inte tog
 
 Ny osedd uppsättning: 16 mästare under en annan läsares sorl (−12 dB), brunt

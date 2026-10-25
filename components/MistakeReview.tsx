@@ -144,7 +144,7 @@ export default function MistakeReview({
       </p>
       <ul className="space-y-2.5">
         {mistakes.map((m) => (
-          <MistakeRow key={m.refIndex} m={m} surahNumber={surahNumber} recordingUrl={recordingUrl} timings={timings} />
+          <MistakeRow key={m.refIndex} m={m} surahNumber={surahNumber} recordingUrl={recordingUrl} />
         ))}
       </ul>
       <p className="mt-3 text-xs text-ink/40">
@@ -172,101 +172,11 @@ function MistakeRow({
   m,
   surahNumber,
   recordingUrl,
-  timings,
 }: {
   m: Mistake;
   surahNumber: number;
   recordingUrl?: string;
-  timings: SurahTimings | null;
 }) {
-  const { reciterId } = useReciter();
-  const [playing, setPlaying] = useState<"you" | "correct" | "verse" | null>(null);
-  const localRef = useRef<HTMLAudioElement | null>(null);
-  const wordTime =
-    timings && m.indexInAyah !== undefined ? timings[String(m.verse)]?.[m.indexInAyah] : undefined;
-
-  const playYou = () => {
-    if (!recordingUrl || !m.time) return;
-    if (playing === "you") {
-      stopCurrent();
-      setPlaying(null);
-      return;
-    }
-    stopCurrent();
-    const a = localRef.current ?? new Audio(recordingUrl);
-    localRef.current = a;
-    // Pad the window a little — word timestamps drift, so a slightly wider
-    // slice reliably contains the whole word.
-    const PAD = 0.15;
-    const from = Math.max(0, m.time.start - PAD);
-    const to = m.time.end + PAD;
-    current = a;
-    setPlaying("you");
-    a.onerror = () => setPlaying(null);
-    void (async () => {
-      try {
-        await seekTo(a, from);
-        if (current !== a) return; // another clip was started meanwhile
-        a.ontimeupdate = () => {
-          if (a.currentTime >= to) a.pause();
-        };
-        a.onpause = () => setPlaying(null);
-        await a.play();
-      } catch {
-        setPlaying(null);
-      }
-    })();
-  };
-
-  const playVerse = () => {
-    if (playing === "verse") {
-      stopCurrent();
-      setPlaying(null);
-      return;
-    }
-    stopCurrent();
-    const a = new Audio(ayahAudioUrl(surahNumber, m.verse, reciterId));
-    a.onended = () => setPlaying(null);
-    a.onpause = () => setPlaying(null);
-    a.onerror = () => setPlaying(null);
-    current = a;
-    setPlaying("verse");
-    void a.play().catch(() => setPlaying(null));
-  };
-
-  // Just this word in the qari's voice (word timings from quran-align), so the
-  // comparison with "You" is one word against one word.
-  const playCorrect = () => {
-    if (!wordTime) return playVerse();
-    if (playing === "correct") {
-      stopCurrent();
-      setPlaying(null);
-      return;
-    }
-    stopCurrent();
-    const a = new Audio(ayahAudioUrl(surahNumber, m.verse, reciterId));
-    const PAD = 0.12;
-    const from = Math.max(0, wordTime[0] / 1000 - PAD);
-    const to = wordTime[1] / 1000 + PAD;
-    current = a;
-    setPlaying("correct");
-    a.onerror = () => setPlaying(null);
-    void (async () => {
-      try {
-        await seekTo(a, from);
-        if (current !== a) return;
-        a.ontimeupdate = () => {
-          if (a.currentTime >= to) a.pause();
-        };
-        a.onpause = () => setPlaying(null);
-        a.onended = () => setPlaying(null);
-        await a.play();
-      } catch {
-        setPlaying(null);
-      }
-    })();
-  };
-
   return (
     <li className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2 ring-1 ring-ink/5">
       <div className="min-w-0">
@@ -285,19 +195,136 @@ function MistakeRow({
           {` · verse ${m.verse}`}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {recordingUrl &&
-          (m.time ? (
-            <AudioChip label="You" active={playing === "you"} tone="ink" onClick={playYou} />
-          ) : (
-            <span className="text-[10px] text-ink/35" title="This word isn't in your last recording of this surah">
-              no clip
-            </span>
-          ))}
-        <AudioChip label="Correct" active={playing === "correct"} tone="emerald" onClick={playCorrect} />
-        {wordTime && <AudioChip label="Verse" active={playing === "verse"} tone="emerald" onClick={playVerse} />}
-      </div>
+      <HearChips surah={surahNumber} verse={m.verse} indexInAyah={m.indexInAyah} recordingUrl={recordingUrl} time={m.time} />
     </li>
+  );
+}
+
+/**
+ * The right reading and yours, side by side, for one word: "Correct" is the
+ * Sheikh saying just that word (or the verse, when there are no word times),
+ * "You" is your own voice at that word in the recording where you made the
+ * mistake, and "Verse" is the Sheikh's whole verse. The recording is a URL, or
+ * a stored blob that is opened only when played.
+ */
+export function HearChips({
+  surah,
+  verse,
+  indexInAyah,
+  recordingUrl,
+  recording,
+  time,
+}: {
+  surah: number;
+  verse: number;
+  indexInAyah?: number;
+  recordingUrl?: string;
+  recording?: Blob;
+  time?: TimeRange;
+}) {
+  const { reciterId } = useReciter();
+  const [timings, setTimings] = useState<SurahTimings | null>(null);
+  const [playing, setPlaying] = useState<"you" | "correct" | "verse" | null>(null);
+  const localRef = useRef<HTMLAudioElement | null>(null);
+  const ownUrl = useRef<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void loadTimings(reciterId, surah).then((t) => !cancelled && setTimings(t));
+    return () => {
+      cancelled = true;
+    };
+  }, [reciterId, surah]);
+  useEffect(
+    () => () => {
+      if (ownUrl.current) URL.revokeObjectURL(ownUrl.current);
+    },
+    [],
+  );
+  const wordTime = timings && indexInAyah !== undefined ? timings[String(verse)]?.[indexInAyah] : undefined;
+  const hasRecording = !!(recordingUrl || recording);
+
+  /** Play [from, to] seconds of a source, stopping at `to`. */
+  const playSlice = (a: HTMLAudioElement, from: number, to: number, which: "you" | "correct") => {
+    current = a;
+    setPlaying(which);
+    a.onerror = () => setPlaying(null);
+    void (async () => {
+      try {
+        await seekTo(a, from);
+        if (current !== a) return; // another clip was started meanwhile
+        a.ontimeupdate = () => {
+          if (a.currentTime >= to) a.pause();
+        };
+        a.onpause = () => setPlaying(null);
+        a.onended = () => setPlaying(null);
+        await a.play();
+      } catch {
+        setPlaying(null);
+      }
+    })();
+  };
+
+  const playYou = () => {
+    if (!hasRecording || !time) return;
+    if (playing === "you") {
+      stopCurrent();
+      setPlaying(null);
+      return;
+    }
+    stopCurrent();
+    if (!recordingUrl && recording && !ownUrl.current) ownUrl.current = URL.createObjectURL(recording);
+    const src = recordingUrl ?? ownUrl.current!;
+    const a = localRef.current ?? new Audio(src);
+    localRef.current = a;
+    // Pad the window a little — word timestamps drift, so a slightly wider
+    // slice reliably contains the whole word.
+    const PAD = 0.15;
+    playSlice(a, Math.max(0, time.start - PAD), time.end + PAD, "you");
+  };
+
+  const playVerse = () => {
+    if (playing === "verse") {
+      stopCurrent();
+      setPlaying(null);
+      return;
+    }
+    stopCurrent();
+    const a = new Audio(ayahAudioUrl(surah, verse, reciterId));
+    a.onended = () => setPlaying(null);
+    a.onpause = () => setPlaying(null);
+    a.onerror = () => setPlaying(null);
+    current = a;
+    setPlaying("verse");
+    void a.play().catch(() => setPlaying(null));
+  };
+
+  // Just this word in the qari's voice (word timings from quran-align), so the
+  // comparison with "You" is one word against one word.
+  const playCorrect = () => {
+    if (!wordTime) return playVerse();
+    if (playing === "correct") {
+      stopCurrent();
+      setPlaying(null);
+      return;
+    }
+    stopCurrent();
+    const PAD = 0.12;
+    playSlice(new Audio(ayahAudioUrl(surah, verse, reciterId)), Math.max(0, wordTime[0] / 1000 - PAD), wordTime[1] / 1000 + PAD, "correct");
+  };
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <AudioChip label="Correct" active={playing === "correct" || (!wordTime && playing === "verse")} tone="emerald" onClick={playCorrect} />
+      {hasRecording &&
+        (time ? (
+          <AudioChip label="You" active={playing === "you"} tone="ink" onClick={playYou} />
+        ) : (
+          <span className="text-[10px] text-ink/35" title="This word isn't in the recording of that recitation">
+            no clip
+          </span>
+        ))}
+      {wordTime && <AudioChip label="Verse" active={playing === "verse"} tone="emerald" onClick={playVerse} />}
+    </div>
   );
 }
 

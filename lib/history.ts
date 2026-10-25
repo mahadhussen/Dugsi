@@ -51,6 +51,9 @@ export interface SessionRow {
   /** Verses fully heard and judged in this attempt (on this device only; the
    *  cloud keeps the from/to span). Weak spots count practice on these. */
   hv?: number[] | null;
+  /** The recording made in this session (its createdAt in lib/recordings),
+   *  so a mistake is replayed from the take in which it was made. Local only. */
+  take?: number | null;
 }
 
 export interface LocalSession extends SessionRow {

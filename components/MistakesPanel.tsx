@@ -6,11 +6,17 @@ import { loadSurah, flattenAyat, surahMeta } from "@/lib/quran";
 import type { WordMistake } from "@/lib/supabase/progress";
 import { readHistory } from "@/lib/history";
 import { describe, weakSpots, type WeakSpot, type VerseIndex } from "@/lib/memory/weak-spots";
-import { playVerseOnce } from "@/lib/verse-player";
+import { listTakes, takeId, type StoredRecording } from "@/lib/recordings";
+import { clipForMistake } from "@/lib/review";
+import { HearChips } from "./MistakeReview";
 
 interface Resolved extends WeakSpot {
   uthmani: string;
+  indexInAyah: number;
   translit?: string;
+  /** The recording of the latest recitation in which this word was a
+   *  mistake, and where in it the word is: your own mistake, to hear. */
+  mine?: { take: StoredRecording; time?: { start: number; end: number } };
 }
 
 const STATE_LABEL: Record<WeakSpot["state"], string> = {
@@ -30,14 +36,27 @@ export default function MistakesPanel({ words }: { words: WordMistake[] }) {
     let cancelled = false;
     const rows = readHistory();
     const surahs = Array.from(new Set([...words.map((w) => w.surah), ...rows.filter((r) => r.mistakes?.length).map((r) => r.surah)]));
-    void Promise.all(surahs.map((s) => loadSurah(s).then((x) => [s, flattenAyat(x.ayat)] as const))).then((pairs) => {
+    const surahsLoaded = Promise.all(surahs.map((s) => loadSurah(s).then((x) => [s, flattenAyat(x.ayat)] as const)));
+    void Promise.all([surahsLoaded, listTakes()]).then(([pairs, takes]) => {
       if (cancelled) return;
       const verses: VerseIndex = new Map(pairs.map(([s, flat]) => [s, flat.map((f) => f.ayah)]));
       const flat = new Map(pairs);
+      const byId = new Map(takes.map((t) => [takeId(t.surah, t.createdAt), t]));
       const out: Resolved[] = [];
       for (const s of weakSpots(rows, verses, new Date())) {
         const fw = flat.get(s.surah)?.[s.i];
-        if (fw) out.push({ ...s, uthmani: fw.word.uthmani, translit: fw.word.translit });
+        if (!fw) continue;
+        // The newest recitation that got this word wrong and still has its recording.
+        let mine: Resolved["mine"];
+        for (const r of rows) {
+          if (r.surah !== s.surah || !r.take) continue;
+          const m = r.mistakes?.find((x) => x.i === s.i);
+          const take = m && byId.get(takeId(r.surah, r.take));
+          if (!m || !take) continue;
+          mine = { take, time: clipForMistake(take.times, s.i, m.h === null) };
+          break;
+        }
+        out.push({ ...s, uthmani: fw.word.uthmani, translit: fw.word.translit, indexInAyah: fw.indexInAyah, mine });
       }
       setResolved(out);
     });
@@ -97,14 +116,14 @@ export default function MistakesPanel({ words }: { words: WordMistake[] }) {
                   {w.due && <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-amber-700">Due today</span>}
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button
-                  onClick={() => playVerseOnce(w.surah, w.verse)}
-                  className="rounded-full px-2.5 py-1 text-xs font-semibold text-emerald ring-1 ring-emerald/30 hover:bg-emerald/10"
-                  aria-label={`Hear the Sheikh read verse ${w.verse}`}
-                >
-                  ▶ Hear
-                </button>
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <HearChips
+                  surah={w.surah}
+                  verse={w.verse}
+                  indexInAyah={w.indexInAyah}
+                  recording={w.mine?.take.blob}
+                  time={w.mine?.time}
+                />
                 <Link href={href} className="rounded-full bg-emerald px-2.5 py-1 text-xs font-semibold text-white shadow-soft">
                   Practise
                 </Link>

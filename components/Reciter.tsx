@@ -82,6 +82,8 @@ export default function Reciter({
   const engineRef = useRef<ReciteEngine | null>(null);
   const loggedRef = useRef(false);
   const secondsRef = useRef(0);
+  /** The take saved for this recitation, linked from its session. */
+  const takeRef = useRef<number | null>(null);
   const topVerseRef = useRef(0); // the verse at the top of the screen, where reciting starts
   /** Drop an attempt in flight; it is not a crash, so its breadcrumb goes too. */
   const cancelEngine = useCallback(() => {
@@ -193,7 +195,9 @@ export default function Reciter({
       // Clip times keyed on the whole surah (the history review uses those).
       const clips: Record<number, { start: number; end: number }> = {};
       for (const k in result.verdict.clips) clips[Number(k) + wordOffset] = result.verdict.clips[k];
-      void saveRecording(surahNumber, result.recording, clips, Date.now());
+      const at = Date.now();
+      takeRef.current = at;
+      void saveRecording(surahNumber, result.recording, clips, at);
     }
     const heardSomething = result.verdict.alignment.words.length > 0 || result.verdict.transcript.trim().length > 0;
     if (!heardSomething) {
@@ -223,6 +227,7 @@ export default function Reciter({
     setRevealed(new Set());
     peeksRef.current = 0;
     loggedRef.current = false;
+    takeRef.current = null;
     clearRecording();
     const range = { start: 0, end: ref.norm.length };
     // Start following where the reader is: a bookmark, a mistake to practise,
@@ -409,6 +414,7 @@ export default function Reciter({
       hesitations: hesitations.length,
       mistakes: missed,
       hv: verseList,
+      take: takeRef.current ?? undefined,
     });
   }, [phase, feedback, userId, surahNumber, flatWords, hifz, hesitations, wordOffset]);
 
