@@ -9,42 +9,43 @@ och sparande.
 - [x] Före-bevis: modellens laddning, glapp mellan suror, gammal spårare
 
 ## S1 — Följaren (ren kärna)
-- [ ] Viktad fonetisk likhet, sammanslagning och delning av ord
-- [ ] Semi-global justering och omsynk (missad aya, hopp, upprepning, inledning)
-- [ ] Reducer med bästa försök, `unclear` för oförklarade luckor
-- [ ] Slutdom med konfidensgrind och typade fel
-- [ ] Tester mot riktiga modelltranskriptioner
+- [x] Viktad fonetisk likhet, sammanslagning och delning av ord
+- [x] Semi-global justering och omsynk (missad aya, hopp, upprepning, inledning)
+- [x] Reducer med bästa försök, `unclear` för oförklarade luckor
+- [x] Slutdom med konfidensgrind och typade fel
+- [x] Tester mot riktiga modelltranskriptioner
 
 ## S2 — Lyssnaren (mikrofon till text på enheten)
-- [ ] Segmenter (paus, max 12 s, tvekan, auto-stopp) med tester på riktigt ljud
-- [ ] ASR-worker med Tarteel whisper-tiny-ar-quran, WebGPU eller WASM
-- [ ] Reciteringsmotorn med explicita tillstånd
-- [ ] Eval-skript: hela kedjan på riktiga ljudfiler
+- [x] Segmenter (paus, max 12 s, tvekan, auto-stopp) med tester på riktigt ljud
+- [x] ASR-worker med Tarteel whisper-tiny-ar-quran, WebGPU eller WASM
+- [x] Reciteringsmotorn med explicita tillstånd
+- [x] Eval-skript: hela kedjan på riktiga ljudfiler
 
 ## S3 — Recitera i appen
-- [ ] Reciter använder motorn: live-följning, ohört grått, dom utan väntan
-- [ ] Sparas för alla (utloggade också), fel med typ
-- [ ] Silero VAD och den trasiga modellkonfigurationen bort
-- [ ] Prövad i webbläsaren med riktigt ljud via falsk mikrofon
+- [x] Reciter använder motorn: live-följning, ohört grått, dom utan väntan
+- [x] Sparas för alla (utloggade också), fel med typ
+- [x] Silero VAD och den trasiga modellkonfigurationen bort
+- [x] Prövad i webbläsaren med riktigt ljud via falsk mikrofon
 
 ## S4 — Lyssna utan glapp
-- [ ] mp3quran aya-tider: tolkning, cache, koppling shejk → inspelning
-- [ ] Helsura-läge i motorn, nästa sura värms upp
-- [ ] Spelknappen byts aldrig mot snurra
-- [ ] Aya för aya: nästa aya hämtas till minnet i förväg
-- [ ] Mätt i webbläsaren: inget glapp vid aya- och surabyten
+- [x] mp3quran aya-tider: tolkning, cache, koppling shejk → inspelning
+- [x] Helsura-läge i motorn, nästa sura värms upp
+- [x] Spelknappen byts aldrig mot snurra
+- [x] Aya för aya: nästa aya hämtas till minnet i förväg
+- [x] Mätt i webbläsaren: inget glapp vid aya- och surabyten
 
 ## S5 — Klicka och markera
-- [ ] Aya-meny: lyssna härifrån, aya, upprepa, recitera härifrån, från/till
-- [ ] Intervall med upprepning (1, 3, 5, oändligt)
-- [ ] Markera text → lyssna på markerat
+- [x] Tryck på aya-markören: i Lyssna läser shejken därifrån, i Recitera just den ayan (egen röst)
+- [ ] Aya-meny med från/till (intervall) — motorn har `repeatRange`, menyn återstår
+- [x] Upprepa: av / denna aya / hela suran (motorn klarar intervall och antal)
+- [ ] Markera text → lyssna på markerat (återstår)
 
 ## S6 — Sparande som förstår felen
-- [ ] Härledda svaga ställen per ord och aya, feltyp, förväxlade ayat, tvekan
-- [ ] Repetition (Leitner) och "dags att repetera"
-- [ ] Svaga ställen med Lyssna och Öva
+- [x] Härledda svaga ställen per ord och aya, feltyp, förväxlade ayat, tvekan
+- [x] Repetition (Leitner) och "dags att repetera"
+- [x] Svaga ställen med Lyssna och Öva
 
 ## S7 — Granskning och leverans
 - [ ] Kräsen, Heisenberg mot BOB, Naadir CLEAN
-- [ ] README, THIRD_PARTY och /about uppdaterade
+- [x] README, THIRD_PARTY och /about uppdaterade
 - [ ] PR med före- och efter-bevis

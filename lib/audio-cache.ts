@@ -17,6 +17,7 @@
 
 import { ayahAudioUrl, getReciter, hasPerAyahAudio } from "./audio-quran";
 import { surahAudioUrl } from "./mp3quran";
+import { hasSurahTiming, loadSurahTiming } from "./listen/surah-timing";
 import { surahMeta } from "./quran";
 
 const CACHE_NAME = "dugsi-audio-v1";
@@ -58,8 +59,15 @@ export function surahAyahUrls(surah: number, reciterId: string): string[] {
  * cannot be resolved).
  */
 export async function surahFileUrls(surah: number, reciterId: string): Promise<string[]> {
+  const meta = surahMeta(surah);
+  if (!meta) return [];
+  // A Sheikh with a timed whole-surah recording is played from that one file
+  // (no pauses between verses), so that file is what must be on the device.
+  if (hasSurahTiming(reciterId)) {
+    const t = await loadSurahTiming(reciterId, surah, meta.ayahCount);
+    if (t) return [t.url];
+  }
   if (hasPerAyahAudio(getReciter(reciterId))) return surahAyahUrls(surah, reciterId);
-  if (!surahMeta(surah)) return [];
   const one = await surahAudioUrl(reciterId, surah);
   return one ? [one] : [];
 }

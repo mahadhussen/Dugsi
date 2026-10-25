@@ -32,6 +32,8 @@ import { verdictOf, type Verdict } from "@/lib/follow/verdict";
 import { ReciteEngine, type EngineSnapshot, type Hesitation } from "@/lib/listen/recite-engine";
 import { asr } from "@/lib/listen/asr";
 import { ASR_MODEL } from "@/lib/listen/model";
+import { pause as pauseListening } from "@/lib/listen-engine";
+import { stopVerse } from "@/lib/verse-player";
 import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
 
 type Phase = "idle" | "recording" | "processing" | "done" | "error" | "unsupported";
@@ -122,7 +124,9 @@ export default function Reciter({
   // verse is judged by it rather than waiting for a 67 MB download.
   const modelAllowed = settings.quranModel && !whisperDisabledByCrashes();
   useEffect(() => {
-    if (modelAllowed) void asr.load();
+    // On a "save data" connection, wait until the mic is actually tapped.
+    const saveData = (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData;
+    if (modelAllowed && !saveData) void asr.load();
   }, [modelAllowed, engineTick]);
   const [model, setModel] = useState({ status: asr.status, percent: asr.percent, device: asr.device });
   useEffect(() => asr.subscribe(() => setModel({ status: asr.status, percent: asr.percent, device: asr.device })), []);
@@ -172,6 +176,10 @@ export default function Reciter({
   stopRef.current = stop;
 
   const start = async () => {
+    // The Sheikh must not be playing into the microphone: the model would hear
+    // him, not the reciter.
+    pauseListening();
+    stopVerse();
     engineRef.current?.cancel();
     setError(null);
     setFeedback(null);

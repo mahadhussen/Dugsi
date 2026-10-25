@@ -11,6 +11,25 @@
    deployas). Alternativ: (a) lokal https-server på wifi, (b) förhandsdeploy på
    Vercel, (c) merga. Ingen deploy görs utan ja.
 
+## 2026-10-25 — Bygget, skiva för skiva
+
+- S1 `92574a6` följaren, S2–S3 `f0bcea7` modellen live, S4–S5 `3f05f85` lyssning
+  utan glapp, S6 `f9c696a` svaga ställen, docs `2a72d8f`.
+- Beslut: helsura-läget är förval för de 33 shejker som har tidsatt helsura hos
+  mp3quran. Det kostar ord-för-ord-markering under lyssning för Alafasy, Husary
+  (muallim), Shuraim och Minshawi (hela ayan lyser i stället). Skäl: Mahads
+  klagomål var pausen; ord-för-ord kräver filbyten per aya. Alternativ: se
+  NEEDS-DECISION 1.
+- Beslut: klipp vid pauser 300 ms (inte 380): längre gav fler kapningar mitt i
+  ord hos Alafasy. Madd-svansar hanteras med ihopslagen omavkodning i stället.
+- Beslut: madd döms bara för madd lazim, och bara under halva längden (ordtider
+  för grova för 2 takter, mätt).
+- Känd gräns (mätt): telefonbandsfiltret i stresstestet tar bort s-ljudet i
+  بِسْمِ och ger ett fel ord; en webbläsarmikrofon har fullt band.
+- Känd gräns: provat i Chrome på Mac med falsk mikrofon och dold panel; iPhone och
+  Android är inte provade här.
+- `next lint` saknar ESLint-konfiguration i repot (CI kör den inte); inte skapad.
+
 ## 2026-10-25 — Före bygget: läget, mätt
 
 Utgångspunkt: `origin/main` @ `38d2b06` (PR #6). Den lokala utcheckningen i
