@@ -50,7 +50,7 @@ export default function SelectionPlay() {
   };
   const label = picked.from === picked.to ? `verse ${picked.from}` : `verses ${picked.from}–${picked.to}`;
   return (
-    <div className="fixed inset-x-0 bottom-[12.5rem] z-40 flex justify-center px-3" role="dialog" aria-label="Hear the marked verses">
+    <div className="fixed inset-x-0 top-[4.75rem] z-40 flex justify-center px-3" role="dialog" aria-label="Hear the marked verses">
       <div className="flex items-center gap-2 rounded-full border-2 border-emerald/30 bg-surface px-2 py-1.5 shadow-soft">
         <button onClick={() => play(1)} className="rounded-full bg-emerald px-3 py-1.5 text-sm font-extrabold text-white">
           ▶ Hear {label}

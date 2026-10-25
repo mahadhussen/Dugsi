@@ -48,6 +48,9 @@ export interface SessionRow {
   /** Long pauses mid-recitation (voice activity detection). */
   hesitations?: number | null;
   client_id?: string | null;
+  /** Verses fully heard and judged in this attempt (on this device only; the
+   *  cloud keeps the from/to span). Weak spots count practice on these. */
+  hv?: number[] | null;
 }
 
 export interface LocalSession extends SessionRow {

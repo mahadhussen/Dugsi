@@ -68,13 +68,16 @@ export function weakSpots(rows: SessionRow[], verses: VerseIndex, now: Date): We
       s.lastSeen = r.created_at;
       s.cleanSince = 0;
     }
-    // A recitation that covered the verse and got the word right counts as clean.
+    // A recitation that heard the verse and got the word right counts as clean.
+    // Newer rows list the verses actually heard; older ones only a span.
+    const heard = Array.isArray(r.hv) ? new Set(r.hv) : null;
     const from = r.from_verse ?? null;
     const to = r.to_verse ?? null;
-    if (from === null || to === null) continue;
+    if (!heard && (from === null || to === null)) continue;
+    const covers = (v: number) => (heard ? heard.has(v) : v >= from! && v <= to!);
     for (const s of spots.values()) {
       if (s.surah !== r.surah || slipped.has(s.i)) continue;
-      if (s.verse >= from && s.verse <= to && +new Date(r.created_at) > +new Date(s.lastSlip)) {
+      if (covers(s.verse) && +new Date(r.created_at) > +new Date(s.lastSlip)) {
         s.cleanSince++;
         s.lastSeen = r.created_at;
       }

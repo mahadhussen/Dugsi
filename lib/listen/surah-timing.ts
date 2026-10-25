@@ -74,14 +74,19 @@ export function hasSurahTiming(reciterId: string): boolean {
  * verse 1..ayahCount is there once, in order, with sane times — a timing we
  * cannot trust would jump to the wrong verse, which is worse than none.
  */
-export function parseTimings(raw: unknown, ayahCount: number): VerseSpan[] | null {
+export function parseTimings(raw: unknown, ayahCount: number, surah = 0): VerseSpan[] | null {
   if (!Array.isArray(raw)) return null;
-  const rows = raw
+  let all = raw
     .filter((r): r is { ayah: number; start_time: number; end_time: number } =>
       !!r && typeof r === "object" && typeof (r as { ayah?: unknown }).ayah === "number",
     )
-    .filter((r) => r.ayah >= 1)
     .sort((a, b) => a.ayah - b.ayah);
+  // In Al-Fatiha the basmala is verse 1, but some recordings number it 0
+  // (0..6 for seven verses). Shift those; elsewhere "ayah 0" is the opening.
+  if (surah === 1 && all.length === ayahCount && all[0]?.ayah === 0 && all[all.length - 1]?.ayah === ayahCount - 1) {
+    all = all.map((r) => ({ ...r, ayah: r.ayah + 1 }));
+  }
+  const rows = all.filter((r) => r.ayah >= 1);
   if (rows.length !== ayahCount) return null;
   const out: VerseSpan[] = [];
   for (let i = 0; i < rows.length; i++) {
@@ -145,11 +150,36 @@ function writeCache(c: Cached) {
   }
 }
 
+// Verse timings of a recording never change, and a surah saved for offline
+// needs them for as long as it is saved: kept without an expiry date.
+const SURAHS = "dugsi:surah-timing:verses:v1";
+function readSurahs(): Record<string, VerseSpan[]> {
+  try {
+    return JSON.parse(localStorage.getItem(SURAHS) || "{}") as Record<string, VerseSpan[]>;
+  } catch {
+    return {};
+  }
+}
+function writeSurahs(v: Record<string, VerseSpan[]>) {
+  try {
+    localStorage.setItem(SURAHS, JSON.stringify(v));
+  } catch {
+    /* quota: fetched again next time */
+  }
+}
+
 let foldersPromise: Promise<Record<number, string> | null> | null = null;
 
 async function folders(): Promise<Record<number, string> | null> {
   const c = readCache();
   if (c.folders) return c.folders;
+  const stale = (() => {
+    try {
+      return (JSON.parse(localStorage.getItem(CACHE) || "{}") as Cached).folders ?? null;
+    } catch {
+      return null;
+    }
+  })();
   if (!foldersPromise) {
     foldersPromise = fetch(`${API}/reads`)
       .then((r) => (r.ok ? r.json() : null))
@@ -165,7 +195,7 @@ async function folders(): Promise<Record<number, string> | null> {
         writeCache({ ...fresh, folders: map });
         return map;
       })
-      .catch(() => null)
+      .catch(() => stale) // offline: the last known folders still point at saved files
       .finally(() => {
         foldersPromise = null;
       });
@@ -187,14 +217,13 @@ export function loadSurahTiming(reciterId: string, surah: number, ayahCount: num
       const folder = dirs?.[read];
       if (!folder) return null;
       const url = `${folder}${String(surah).padStart(3, "0")}.mp3`;
-      const cached = readCache().surahs?.[key];
+      const cached = readSurahs()[key];
       if (cached && cached.length === ayahCount) return { read, surah, url, verses: cached };
       const res = await fetch(`${API}?surah=${surah}&read=${read}`).catch(() => null);
       const raw = res && res.ok ? await res.json().catch(() => null) : null;
-      const verses = parseTimings(raw, ayahCount);
+      const verses = parseTimings(raw, ayahCount, surah);
       if (!verses) return null;
-      const c = readCache();
-      writeCache({ ...c, surahs: { ...(c.surahs ?? {}), [key]: verses } });
+      writeSurahs({ ...readSurahs(), [key]: verses });
       return { read, surah, url, verses };
     })().catch(() => null);
     memo.set(key, p);

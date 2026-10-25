@@ -22,7 +22,7 @@ Gäller före äldre beskrivningar i README där de säger emot. Koden och komme
 ## Recitera (Tarteel-läsningen)
 
 ```
-mikrofon ─► AudioWorklet (16 kHz mono) ─► Segmenter (pauser, max 12 s)
+mikrofon ─► AudioWorklet (16 kHz mono) ─► Segmenter (pauser, max 15 s)
                 │                              │ stängt segment / öppet segment
                 │                              ▼
                 │                     ASR-worker: Tarteel whisper-tiny-ar-quran
@@ -53,8 +53,9 @@ mikrofon ─► AudioWorklet (16 kHz mono) ─► Segmenter (pauser, max 12 s)
   adaptiv brusnivå. Ger också tvekan (paus > 2,5 s mitt i) och auto-stopp,
   så Silero VAD och dess andra ONNX-runtime tas bort.
 - `public/asr-worker.js` — laddar transformers.js 3.3.3 och modellen från CDN
-  (fast revision), avkodar ett segment i taget. Ett segment avkodas aldrig
-  längre än 15 s; långa bitar är där modellen tappar hela ayat (uppmätt).
+  (fast revision), avkodar ett segment i taget. Ett segment är högst 15 s och en
+  ihopslagen omavkodning högst 18 s; långa bitar (Al-Fatiha som en 46 s bit) är
+  där modellen tappar hela ayat (uppmätt).
 - `lib/listen/recite-engine.ts` — tjänstelagret som kopplar ihop mikrofon,
   segmenter, worker, ledtrådar och follower, med explicita tillstånd
   (idle → starting → listening → finishing → done).
@@ -62,7 +63,7 @@ mikrofon ─► AudioWorklet (16 kHz mono) ─► Segmenter (pauser, max 12 s)
 Modell: `tarteel-ai/whisper-tiny-ar-quran` (Apache-2.0, 7 % WER) via
 ONNX-exporten `Sharjeelbaig/whisper-tiny-ar-quran-onnx` på fast revision.
 Kodaren körs i fp32 (den kvantiserade kraschar, ConvInteger saknas), avkodaren i q8.
-Cirka 63 MB, hämtas en gång och cachas. Den allmänna whisper-tiny tas bort som
+Cirka 67 MB, hämtas en gång och cachas. Den allmänna whisper-tiny tas bort som
 reserv: den hör "المستطيع" för "المستقيم" och skulle döma fel.
 
 ## Lyssna (shejken)
@@ -81,15 +82,19 @@ En motor, `lib/listen-engine.ts`, två lägen som väljs per shejk:
 Spelknappen byts aldrig mot en snurra. Laddning visas bredvid.
 Vid surans slut värms nästa surafil upp i förväg och spelningen fortsätter själv.
 
-`lib/listen/plan.ts` (ren) räknar ut vad som ska spelas: från–till, antal
-upprepningar, nästa sura. Testas utan ljud.
+Loopar (från–till, antal, stopp eller fortsätt) bor i motorn själv; de
+mättes i webbläsaren och i BOB:s ljudattrapp, inte i enhetstester.
+Underkänns en suras aya-tider (Hudhaify, vissa Al-Fatiha-filer) spelas den aya
+för aya från everyayah i stället.
 
 ## Klicka och markera
 
-- Tryck på en aya-markör: meny med Lyssna härifrån, Lyssna på aya, Upprepa,
-  Recitera härifrån, Från här, Till här.
-- Markera text med fingret eller musen: "Lyssna på markerat" spelar de ayat
-  som markeringen täcker (exakta ord där ordtider finns).
+- Tryck på en aya-markör: i Lyssna läser shejken därifrån, i Recitera just
+  den ayan (med sin egen röst även för helsura-shejker).
+- "Repeat a passage" under spelaren: ayat från–till, 1/3/5/7 gånger eller
+  tills stopp, sedan vidare.
+- Markera text med fingret eller musen: "Hear verses a–b" (eller ×3) spelar
+  de ayat som markeringen täcker.
 - Varje fel i historiken har Lyssna och Öva, som öppnar just det stället.
 
 ## Sparande
@@ -109,5 +114,6 @@ upprepningar, nästa sura. Testas utan ljud.
 - Riktiga transkriptioner från modellen (Alafasy, Husary, syntetiska fel med
   överhoppad aya, fel ord, upprepning) ligger som fixturer, så spåraren prövas mot
   modellens faktiska utdata och inte mot påhittad text.
-- `scripts/eval-recite.mjs` kör hela kedjan (segmenter → modell → follower) på
-  riktiga ljudfiler i Node och skriver resultatet. Körs för hand, inte i CI.
+- `scripts/eval/transcribe.ts` kör segmenter → modell på riktiga ljudfiler i
+  Node och skriver fixturer; `scripts/eval/follow.ts` skriver domen för varje
+  fixtur. Körs för hand, inte i CI.

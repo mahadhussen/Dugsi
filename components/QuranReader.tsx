@@ -121,6 +121,16 @@ export default function QuranReader() {
     };
   }, [trackProgress, surah, reading.surah, userId]);
 
+  // Where the practised range starts in the whole surah's word list.
+  const wordOffset = useMemo(() => {
+    if (!surah || !range || surah.number !== reading.surah) return 0;
+    let n = 0;
+    for (const a of surah.ayat) {
+      if (a.number >= range.from) break;
+      n += a.words.length;
+    }
+    return n;
+  }, [surah, range, reading.surah]);
   const ayat = useMemo(() => {
     if (!surah) return null;
     // A range belongs to the surah it was chosen for — never to the one still
@@ -209,7 +219,7 @@ export default function QuranReader() {
             <span className="h-8 w-8 animate-spin rounded-full border-4 border-gold border-t-transparent" />
           </div>
         ) : reading.mode === "recite" ? (
-          <Reciter ayat={ayat} surahNumber={reading.surah} trackProgress={trackProgress} startVerse={range ? undefined : reading.verse} />
+          <Reciter ayat={ayat} surahNumber={reading.surah} trackProgress={trackProgress} startVerse={range ? undefined : reading.verse} wordOffset={wordOffset} />
         ) : (
           <ListenSection surah={surah} surahId={surah.number} startVerse={reading.verse} onSurahChange={followSurah} />
         )}
@@ -268,25 +278,23 @@ function ListenSection({
   // word -1: a whole-surah recording, where we know the verse but not the
   // word — the whole verse lights up (and the page follows its first word).
   const activeIndex = pos && offsets.has(pos.verse) ? offsets.get(pos.verse)! + Math.max(0, pos.word) : undefined;
-  const verseLit = useMemo(() => {
-    if (!pos || pos.word !== -1 || !offsets.has(pos.verse)) return undefined;
-    const first = offsets.get(pos.verse)!;
-    const n = surah.ayat.find((a) => a.number === pos.verse)?.words.length ?? 0;
-    const out: Record<number, "correct"> = {};
-    for (let i = 0; i < n; i++) out[first + i] = "correct";
-    return out;
-  }, [pos, offsets, surah]);
+  // The lit verse is coloured through the words' surah:verse tag, so the
+  // tajweed colours stay on everywhere else on the page.
+  const litCss =
+    pos && pos.word === -1
+      ? `.karaoke [data-sv="${surahId}:${pos.verse}"], .karaoke [data-sv="${surahId}:${pos.verse}"] .word { color: var(--good) !important; }`
+      : "";
   const onWordChange = useCallback((p: { verse: number; word: number } | null) => setPos(p), []);
 
   return (
     <div className="space-y-4">
+      {litCss && <style>{litCss}</style>}
       <div className="karaoke">
         <SurahView
           ayat={surah.ayat}
           surahNumber={surahId}
-          showTajweed={settings.showTajweed && !verseLit}
+          showTajweed={settings.showTajweed}
           activeIndex={activeIndex}
-          statuses={verseLit}
           showTranslation={settings.showTranslation}
           showTranslit={settings.showTranslit}
           initialTopVerse={startVerse}

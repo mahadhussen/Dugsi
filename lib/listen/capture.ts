@@ -50,12 +50,26 @@ export interface Mic {
   stop(): void;
 }
 
+/** The microphone was allowed, but audio processing could not start here. */
+export class CaptureUnavailable extends Error {}
+
 /**
  * Open the microphone and deliver 16 kHz samples to `onSamples`. Must be
  * called from a tap on iOS (the audio context starts suspended otherwise).
  */
 export async function openMic(onSamples: (pcm: Float32Array) => void): Promise<Mic> {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  try {
+    return await wire(stream, onSamples);
+  } catch (e) {
+    // The microphone was granted but audio processing could not start: let go
+    // of the microphone, and say it was not the permission.
+    stream.getTracks().forEach((t) => t.stop());
+    throw new CaptureUnavailable(String(e));
+  }
+}
+
+async function wire(stream: MediaStream, onSamples: (pcm: Float32Array) => void): Promise<Mic> {
   const Ctx: typeof AudioContext =
     window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   const ctx = new Ctx();

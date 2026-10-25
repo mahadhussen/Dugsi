@@ -133,7 +133,7 @@ export default function AboutPage() {
         <h2 className="text-lg font-extrabold text-ink">Honest limits</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-ink/75">
           <li>Speech recognition can misread classical Arabic. A word marked wrong may be the recogniser, not you.</li>
-          <li>The live word marking uses your browser&apos;s speech service; in Chrome that service sends audio to Google to turn it into text. The precise check and the voice activity detection run fully on your device.</li>
+          <li>When the Quran model is ready on your device, it does all the listening and your voice stays on the device. Until it has downloaded the first time — or where it cannot run, or if you switch it off — your browser&apos;s speech service listens instead, and in Chrome that service sends the audio to Google to turn it into text.</li>
           <li>Madd timing is a heuristic from word timestamps, not a phonetic measurement.</li>
           <li>Always learn tajweed with a qualified teacher. Dugsi is a practice aid.</li>
         </ul>
@@ -148,7 +148,7 @@ export default function AboutPage() {
         <h2 className="mb-2 text-lg font-extrabold text-ink">Speech & AI models</h2>
         <List items={MODELS} />
         <p className="mt-2 text-xs text-ink/50">
-          Models download from Hugging Face / jsDelivr on first use and are cached by your browser. Your audio is never uploaded.
+          The model downloads from Hugging Face / jsDelivr on first use and is cached by your browser. Dugsi itself uploads no audio; the one exception is the browser speech service described above.
         </p>
       </section>
 

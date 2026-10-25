@@ -92,3 +92,20 @@ test("the open piece can be read while it is still being spoken", () => {
   assert.ok(open && open.audio.length > SR * 1.5);
   assert.ok(s.openMs() > 1500);
 });
+
+test("a reciter already speaking when the microphone opens keeps the first phrase", () => {
+  const p = pieces(concat(voice(3.8), quiet(0.5), voice(3), quiet(0.5), voice(3), quiet(0.6)));
+  assert.equal(p.length, 3);
+  assert.ok(p[0].startSample === 0);
+});
+
+test("digital zeros before a room at -50 dBFS still find the pauses (and the hesitation)", () => {
+  const zeros = new Float32Array(Math.round(0.3 * SR));
+  const room = (sec: number) => quiet(sec, 0.004);
+  const parts: Float32Array[] = [zeros, room(0.5)];
+  for (let i = 0; i < 5; i++) parts.push(voice(3.5), room(0.45));
+  parts.push(voice(3.5), room(3.2));
+  const ev = segmentAll(concat(...parts), { silenceMarks: [2500] });
+  assert.equal(ev.filter((e) => e.type === "segment").length, 6);
+  assert.equal(ev.filter((e) => e.type === "silence").length, 1);
+});

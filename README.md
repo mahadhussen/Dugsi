@@ -12,26 +12,24 @@ verse range to recite. More surahs slot in via the same verified-data pipeline.
 
 **Free for everyone. No API key, no server, no cost, no tracking.** All the
 word-checking is plain JavaScript that runs client-side, so the app is a static
-site anyone can host for free. Recognition runs in the browser two ways:
-**High accuracy** (on-device Whisper) keeps audio entirely on the device;
-**Fast** uses the browser's built-in Web Speech API, which in some browsers
-(e.g. Chrome) transcribes audio in the cloud. We store nothing but a local
-reading-progress marker.
+site anyone can host for free. Listening is done by Tarteel's open Quran model,
+on the device, so the voice stays there. Until the model has downloaded the
+first time (or where it cannot run, or when switched off), the browser's own
+speech service stands in — in Chrome that sends the audio to Google, and the
+app says so on screen.
 
 ## What it does today
 
-1. **Recitation accuracy.** You recite into the mic; your Arabic is recognised
-   on-device, then each spoken word is aligned against the verified Uthmani text
-   of Al-Fatiha using diacritic-insensitive fuzzy matching. Every word is marked
-   **correct / close / needs-work / skipped**.
-2. **Two free voice engines (pick per recitation):**
-   - **Fast** — the browser's built-in recogniser. Instant, zero download.
-   - **High accuracy** — a real **Whisper** model running on-device via
-     `transformers.js` (loaded from a CDN the first time, then cached/offline).
-     Better at classical Arabic, and it returns **word-level timestamps**.
-3. **Acoustic madd-timing (High-accuracy mode).** Using Whisper's word
-   timestamps, Dugsi estimates whether your elongations were held long enough and
-   flags rushed ones (⏱) — e.g. the 6-count madd in *aḍ-ḍāāāllīn*.
+1. **Recitation accuracy.** You recite into the mic; your voice is cut at your
+   pauses and heard by Tarteel's Quran model on the device (see 17), and each
+   word is laid against the verified Uthmani text by a deterministic follower.
+   Every word is marked **correct / nearly / wrong / skipped**, or faded
+   **not heard** when there was voice the model could not make out.
+2. **One engine, chosen for you.** The Quran model when it can run here;
+   otherwise the browser's speech service, said plainly on screen.
+3. **Acoustic madd-timing.** From the model's word timestamps Dugsi flags a
+   six-count madd held for less than half its length (⏱) — e.g. in
+   *aḍ-ḍāāāllīn*. Two-count madds are not judged: the timestamps are too coarse.
 4. **Tajweed guide.** The surah is rendered with colour-coded tajweed rules
    (madd, sun/moon letters, leen, lām of Allah, tafkhīm, …) to learn as you read.
 5. **Listen to the whole Quran, in your Sheikh's voice.** A reciter library

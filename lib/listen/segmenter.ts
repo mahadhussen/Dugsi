@@ -93,6 +93,7 @@ export class Segmenter {
   private floor: number | null = null; // slow minimum: the room between words
   private voice: number | null = null; // fast-attack, slow-release: the voice
   private smooth: number[] = []; // last few frame powers (linear)
+  private frames = 0;
   private loudRun = 0;
   private quietRun = 0;
   private open: { start: number; lastVoiced: number; frames: Frame[] } | null = null;
@@ -173,12 +174,19 @@ export class Segmenter {
     if (this.smooth.length > 5) this.smooth.shift();
     const level = 10 * Math.log10(this.smooth.reduce((a, b) => a + b, 0) / this.smooth.length + 1e-12);
 
-    // Floor: follows the quietest level down at once, creeps up ~1 dB/s.
-    const rise = this.opts.frameMs / 1000;
-    this.floor = this.floor === null ? level : Math.min(this.floor + rise, level);
+    // Floor: follows the quietest level down at once, creeps up ~1 dB/s. It
+    // starts low rather than at the first frame — the reciter may already be
+    // speaking when the microphone opens — and ignores digital silence (exact
+    // zeros some devices send first), which would pin it far below the room.
+    // Fast at first (6 dB/s for 5 s) so a low start finds the room quickly.
+    this.frames++;
+    const rise = (this.frames * this.opts.frameMs < 5000 ? 6 : 1) * (this.opts.frameMs / 1000);
+    const start = this.opts.minThresholdDb - 10;
+    if (level > -100) this.floor = this.floor === null ? Math.min(level, start) : Math.min(this.floor + rise, level);
+    else if (this.floor === null) this.floor = start;
     // Voice: jumps up with speech, fades ~2.5 dB/s in pauses.
     if (this.voice === null || level > this.voice) this.voice = this.voice === null ? level : 0.7 * this.voice + 0.3 * level;
-    else this.voice -= 2.5 * rise;
+    else this.voice -= 2.5 * (this.opts.frameMs / 1000);
     const floor = this.floor;
     const range = Math.max(0, this.voice - floor);
     const voicedThreshold = Math.max(

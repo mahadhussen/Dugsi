@@ -148,7 +148,7 @@ export default function Home() {
       </div>
 
       <p className="mt-8 text-center text-sm font-semibold text-ink/45">
-        Free, no ads. Your voice stays on your device.{" "}
+        Free, no ads. With the Quran model ready, your voice stays on your device.{" "}
         <Link href="/about" className="underline underline-offset-2 hover:text-ink">
           About &amp; sources
         </Link>

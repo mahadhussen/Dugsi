@@ -18,7 +18,7 @@ import type { RefText } from "@/lib/follow/text";
 import { verdictOf, type Verdict } from "@/lib/follow/verdict";
 import { tokenize } from "@/lib/arabic";
 import { asr } from "./asr";
-import { openMic, type Mic } from "./capture";
+import { CaptureUnavailable, openMic, type Mic } from "./capture";
 import { isJoinCandidate, preferJoined } from "./policy";
 import { Segmenter, type Segment } from "./segmenter";
 
@@ -47,6 +47,8 @@ export interface EngineSnapshot {
   waiting: number;
   /** The last words heard, for the line under the mic. */
   heard: string;
+  /** Words heard that belong nowhere in the text, so far. */
+  extras: number;
   seconds: number;
   error: "mic-denied" | "unsupported" | null;
 }
@@ -57,11 +59,15 @@ export interface EngineResult {
   hesitations: Hesitation[];
   seconds: number;
   mode: JudgeMode;
+  /** The model was still downloading when the reciter stopped (first use). */
+  modelPending: boolean;
 }
 
 export interface EngineOptions {
   ref: RefText;
   range?: { start: number; end: number };
+  /** Word to start following from (reciting from a verse mid-surah). */
+  from?: number;
   words: Word[];
   /** Use the Quran model (the user can switch it off). */
   useModel: boolean;
@@ -110,15 +116,20 @@ export class ReciteEngine {
   private unsub: (() => void) | null = null;
   private lastPieceInput: PieceInput | null = null;
   private idleWaiters: (() => void)[] = [];
+  private starting: Promise<boolean> | null = null;
+  /** This attempt is judged by the browser after all (model not ready at stop). */
+  private browserJudges = false;
+  private modelPending = false;
+  private stoppedAt = 0;
   private lastSegEnd = 0; // seconds, end of the last closed piece
   private segmentsClosed = 0;
 
   constructor(private readonly opts: EngineOptions) {
-    this.follow = createFollower(opts.ref, opts.range);
+    this.follow = createFollower(opts.ref, opts.range, opts.from);
   }
 
   get mode(): JudgeMode {
-    if (this.opts.useModel && asr.status !== "failed" && asr.supported()) return "model";
+    if (!this.browserJudges && this.opts.useModel && asr.status !== "failed" && asr.supported()) return "model";
     return isSpeechSupported() ? "browser" : "none";
   }
 
@@ -132,6 +143,10 @@ export class ReciteEngine {
       model: { status: asr.status, percent: asr.percent, device: asr.device },
       waiting: this.queue.filter((j) => j.kind !== "partial").length + (this.busy ? 1 : 0),
       heard: tail.slice(-12).join(" "),
+      extras: this.follow.pieces.reduce(
+        (n, p) => n + (p.align ? p.align.extras.filter((e) => e > 0 && e < p.tokens.length - 1).length : 0),
+        0,
+      ),
       seconds: this.started ? (Date.now() - this.started) / 1000 : 0,
       error: this.error,
     };
@@ -142,8 +157,13 @@ export class ReciteEngine {
   }
 
   /** Begin listening. Call from a tap (iOS needs the gesture for audio). */
-  async start(): Promise<boolean> {
-    if (this.phase !== "idle") return false;
+  start(): Promise<boolean> {
+    if (this.phase !== "idle") return Promise.resolve(false);
+    this.starting = this.doStart();
+    return this.starting;
+  }
+
+  private async doStart(): Promise<boolean> {
     const my = ++this.session;
     this.phase = "starting";
     this.emit();
@@ -153,20 +173,28 @@ export class ReciteEngine {
     this.unsub = asr.subscribe(() => {
       if (this.session !== my) return;
       if (asr.status === "failed") this.fallBackToBrowser();
+      // The model is ready: from now on nothing leaves the device.
+      if (asr.status === "ready" && this.mode === "model" && this.recognizer) {
+        this.recognizer.cancel();
+        this.recognizer = null;
+      }
       this.emit();
       this.pump();
     });
     try {
       this.mic = await openMic((pcm) => this.onSamples(pcm, my));
-    } catch {
+    } catch (e) {
       if (this.session !== my) return false;
-      this.error = "mic-denied";
+      this.error = e instanceof CaptureUnavailable ? "unsupported" : "mic-denied";
       this.phase = "error";
       this.emit();
       return false;
     }
-    if (this.session !== my) {
+    // Cancelled or stopped while the microphone question was open: let go of
+    // the microphone at once instead of starting to record after all.
+    if (this.session !== my || this.phase !== "starting") {
       this.mic.stop();
+      this.mic = null;
       return false;
     }
     this.started = Date.now();
@@ -179,7 +207,10 @@ export class ReciteEngine {
     } catch {
       this.recorder = null; // reciting still works, just no playback
     }
-    if (isSpeechSupported()) {
+    // The browser's recogniser (in Chrome it sends audio to Google) runs only
+    // while the Quran model is not ready to listen on the device: as a stand-in
+    // judge, and for the cursor until the model takes over.
+    if (isSpeechSupported() && !(this.mode === "model" && asr.status === "ready")) {
       const expected = new Set(this.opts.ref.norm);
       const r = new Recognizer({
         pickBest: (alts) => pickBestAlternative(alts, expected),
@@ -277,6 +308,10 @@ export class ReciteEngine {
     if (res) {
       if (job.kind !== "partial") this.lastSpeed = res.ms / Math.max(1, (job.audio.length / SR) * 1000);
       this.handle(job, res);
+    } else if (job.kind === "piece" && job.seg) {
+      // The model could not decode it: there was voice we could not read,
+      // which must never turn into "skipped".
+      this.handle(job, { text: "", words: [] }, true);
     }
     this.emit();
     if (this.phase === "finishing") this.emitProgress?.(this.queue.filter((j) => j.kind !== "partial").length);
@@ -293,7 +328,7 @@ export class ReciteEngine {
     return { kind: "partial", audio: open.audio, t0: open.startSample / SR };
   }
 
-  private handle(job: Job, res: { text: string; words: { text: string; start: number; end: number }[] }) {
+  private handle(job: Job, res: { text: string; words: { text: string; start: number; end: number }[] }, failed = false) {
     const abs = res.words.map((w) => ({ text: w.text, start: job.t0 + w.start, end: job.t0 + w.end }));
     if (job.kind === "partial") {
       // The last word of an open piece may be cut mid-word: never use it.
@@ -316,6 +351,7 @@ export class ReciteEngine {
         // the first word may have been half-caught.
         cutStart: !!prev?.cutEnd || seg.startSample === 0,
         cutEnd: !seg.byPause,
+        failed: failed || undefined,
         source: "model",
       };
       this.before.set(input.id, this.follow);
@@ -345,6 +381,7 @@ export class ReciteEngine {
       };
       const start = this.before.get(job.a.id);
       if (start && preferJoined(fitScore(start, [job.a, job.b]), fitScore(start, [joined]))) {
+        this.before.set(joined.id, start); // a later join can build on this one
         this.follow = applyPiece(this.follow, joined);
         if (this.lastPieceInput?.id === job.b.id) this.lastPieceInput = joined;
       }
@@ -366,25 +403,38 @@ export class ReciteEngine {
   /** The model gave up: the browser's results carry the attempt from here. */
   private fallBackToBrowser() {
     this.queue = this.queue.filter((j) => j.kind === "partial");
-    if (this.follow.pieces.some((p) => p.input.source === "model")) return;
-    for (const f of this.browserFinals) this.applyBrowserFinal(f.t, f.text);
+    // Everything the model did not get to is carried by the browser's results.
+    const after = this.follow.pieces.filter((p) => p.input.source === "model").reduce((t, p) => Math.max(t, p.input.t1), 0);
+    for (const f of this.browserFinals) if (f.t > after) this.applyBrowserFinal(f.t, f.text);
   }
 
   /** Stop and give the verdict. Waits for the model to finish what it heard. */
   private emitProgress: ((waiting: number) => void) | null = null;
 
   async stop(onProgress?: (waiting: number) => void): Promise<EngineResult | null> {
-    if (this.phase !== "listening" && this.phase !== "starting") return null;
+    if (this.phase === "starting" && this.starting) await this.starting;
+    if (this.phase !== "listening") return null;
     this.emitProgress = onProgress ?? null;
+    this.stoppedAt = Date.now();
     const my = this.session;
     this.phase = "finishing";
     for (const ev of this.segmenter.flush()) if (ev.type === "segment") this.enqueuePiece(ev.segment);
     this.queue = this.queue.filter((j) => j.kind !== "partial");
     this.recognizer?.stop();
+    // First use: the model is still downloading. Do not make the reciter wait
+    // for it — judge this attempt with what the browser heard, and say so.
+    if (this.mode === "model" && asr.status !== "ready") {
+      this.modelPending = true;
+      this.browserJudges = true;
+      this.queue = [];
+      if (isSpeechSupported()) await new Promise((r) => setTimeout(r, 400));
+      for (const f of this.browserFinals) this.applyBrowserFinal(f.t, f.text);
+    }
     const recording = await this.stopRecorder();
     this.mic?.stop();
     this.mic = null;
     if (this.tick) clearInterval(this.tick);
+    this.tick = null;
     this.emit();
     // Let the model finish what it heard (it may still be downloading on first
     // use). Event-driven, not polled: a phone that backgrounds the page throttles
@@ -405,11 +455,12 @@ export class ReciteEngine {
     if (this.session !== my) return null;
     // Give the browser's final words a moment to land when it is the judge.
     if (this.mode === "browser") await new Promise((r) => setTimeout(r, 400));
-    const seconds = (Date.now() - this.started) / 1000;
-    // Resolve each pause to the word that came after it.
+    const seconds = (this.stoppedAt - this.started) / 1000;
+    // Resolve each pause to the word that came after it, and its real length.
     for (const h of this.hesitations) {
       const next = this.follow.pieces.find((p) => p.input.t0 >= h.at && p.align);
       h.beforeRefIndex = next?.align?.start ?? -1;
+      if (next) h.seconds = Math.max(h.seconds, +(next.input.t0 - h.at).toFixed(1));
     }
     const verdict = verdictOf(this.follow, {
       words: this.opts.words,
@@ -418,7 +469,14 @@ export class ReciteEngine {
     this.phase = "done";
     this.unsub?.();
     this.emit();
-    return { verdict, recording, hesitations: this.hesitations.filter((h) => h.beforeRefIndex >= 0), seconds, mode: this.mode };
+    return {
+      verdict,
+      recording,
+      hesitations: this.hesitations.filter((h) => h.beforeRefIndex >= 0),
+      seconds,
+      mode: this.mode,
+      modelPending: this.modelPending,
+    };
   }
 
   private stopRecorder(): Promise<Blob | null> {
@@ -448,6 +506,7 @@ export class ReciteEngine {
     this.mic?.stop();
     this.mic = null;
     if (this.tick) clearInterval(this.tick);
+    this.tick = null;
     this.unsub?.();
     this.queue = [];
   }

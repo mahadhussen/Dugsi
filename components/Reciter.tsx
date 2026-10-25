@@ -54,12 +54,17 @@ export default function Reciter({
   surahNumber,
   trackProgress = false,
   startVerse,
+  wordOffset = 0,
 }: {
   ayat: Ayah[];
   surahNumber: number;
   trackProgress?: boolean;
   /** Scroll to this 1-based verse first (e.g. a bookmark or a mistake to practise). */
   startVerse?: number;
+  /** Index in the whole surah of the first word shown (a practice range starts
+   *  mid-surah). Everything saved is keyed on the whole surah, so history,
+   *  weak spots and recordings stay right whichever range was practised. */
+  wordOffset?: number;
 }) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
@@ -76,6 +81,14 @@ export default function Reciter({
   const engineRef = useRef<ReciteEngine | null>(null);
   const loggedRef = useRef(false);
   const secondsRef = useRef(0);
+  const topVerseRef = useRef(0); // the verse at the top of the screen, where reciting starts
+  /** Drop an attempt in flight; it is not a crash, so its breadcrumb goes too. */
+  const cancelEngine = useCallback(() => {
+    if (engineRef.current) {
+      engineRef.current.cancel();
+      markWhisperFinished();
+    }
+  }, []);
 
   // Memorisation: hidden words the reader opened (tap or Peek), and how often.
   const [revealed, setRevealed] = useState<Set<number>>(() => new Set());
@@ -116,24 +129,39 @@ export default function Reciter({
     return () => {
       window.removeEventListener("pagehide", onLeave);
       document.removeEventListener("visibilitychange", onHide);
-      engineRef.current?.cancel();
+      cancelEngine();
     };
-  }, []);
+  }, [cancelEngine]);
 
   // Start fetching the model as soon as reciting is on screen, so the first
   // verse is judged by it rather than waiting for a 67 MB download.
-  const modelAllowed = settings.quranModel && !whisperDisabledByCrashes();
+  // iPhone without WebGPU runs the model on the CPU in a tab with a tight memory
+  // limit — the old model memory-killed it there — so it stays with the browser.
+  const [iosNoGpu, setIosNoGpu] = useState(false);
+  useEffect(() => {
+    const ua = navigator.userAgent || "";
+    const ios = /iP(hone|ad|od)/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
+    setIosNoGpu(ios && !("gpu" in navigator));
+  }, []);
+  const modelAllowed = settings.quranModel && !whisperDisabledByCrashes() && !iosNoGpu;
   useEffect(() => {
     // On a "save data" connection, wait until the mic is actually tapped.
     const saveData = (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData;
-    if (modelAllowed && !saveData) void asr.load();
+    if (modelAllowed && !saveData && asr.status === "idle") {
+      // Loading the model is where a phone runs out of memory, if anywhere:
+      // leave a breadcrumb so a killed tab is counted (see crashGuard).
+      markWhisperRunning();
+      void asr.load().then(() => {
+        if (!engineRef.current) markWhisperFinished();
+      });
+    }
   }, [modelAllowed, engineTick]);
   const [model, setModel] = useState({ status: asr.status, percent: asr.percent, device: asr.device });
   useEffect(() => asr.subscribe(() => setModel({ status: asr.status, percent: asr.percent, device: asr.device })), []);
 
   // A new surah or range: drop any attempt in flight and its result.
   useEffect(() => {
-    engineRef.current?.cancel();
+    cancelEngine();
     engineRef.current = null;
     setFeedback(null);
     setSnap(null);
@@ -141,7 +169,7 @@ export default function Reciter({
     setHesitations([]);
     clearRecording();
     setPhase((p) => (p === "unsupported" ? p : "idle"));
-  }, [ayat, clearRecording]);
+  }, [ayat, clearRecording, cancelEngine]);
 
   const stop = useCallback(async () => {
     const engine = engineRef.current;
@@ -161,11 +189,18 @@ export default function Reciter({
         if (prev) URL.revokeObjectURL(prev);
         return URL.createObjectURL(result.recording!);
       });
-      void saveRecording(surahNumber, result.recording, result.verdict.clips, Date.now());
+      // Clip times keyed on the whole surah (the history review uses those).
+      const clips: Record<number, { start: number; end: number }> = {};
+      for (const k in result.verdict.clips) clips[Number(k) + wordOffset] = result.verdict.clips[k];
+      void saveRecording(surahNumber, result.recording, clips, Date.now());
     }
     const heardSomething = result.verdict.alignment.words.length > 0 || result.verdict.transcript.trim().length > 0;
     if (!heardSomething) {
-      setError("We couldn't hear any recitation. Please try again a little closer to the microphone.");
+      setError(
+        result.modelPending
+          ? `The Quran listening model is still downloading (${asr.percent}%). Please recite again in a moment — it only downloads once.`
+          : "We couldn't hear any recitation. Please try again a little closer to the microphone.",
+      );
       setPhase("error");
       return;
     }
@@ -180,7 +215,7 @@ export default function Reciter({
     // him, not the reciter.
     pauseListening();
     stopVerse();
-    engineRef.current?.cancel();
+    cancelEngine();
     setError(null);
     setFeedback(null);
     setHesitations([]);
@@ -189,9 +224,13 @@ export default function Reciter({
     loggedRef.current = false;
     clearRecording();
     const range = { start: 0, end: ref.norm.length };
+    // Start following where the reader is: a bookmark, a mistake to practise,
+    // or the verse at the top of the screen.
+    const fromVerse = startVerse && startVerse > 1 ? startVerse : topVerseRef.current > 1 ? topVerseRef.current : 0;
     const engine = new ReciteEngine({
       ref,
       range,
+      from: fromVerse ? ref.verseFirst.get(fromVerse) : undefined,
       words: textWords,
       useModel: modelAllowed,
       autoStopMs: settings.autoStop ? AUTO_STOP_MS : null,
@@ -206,9 +245,14 @@ export default function Reciter({
     if (modelAllowed) markWhisperRunning();
     setPhase("recording");
     const ok = await engine.start();
-    if (!ok && engineRef.current === engine) {
+    const why = engine.snapshot().error;
+    if (!ok && engineRef.current === engine && why) {
       markWhisperFinished();
-      setError("Microphone access was denied. Please allow the mic and try again.");
+      setError(
+        why === "mic-denied"
+          ? "Microphone access was denied. Please allow the mic and try again."
+          : "The microphone could not be started in this browser. Try reloading the page, or another browser.",
+      );
       setPhase("error");
     }
   };
@@ -232,6 +276,7 @@ export default function Reciter({
   }, [trackProgress, surahNumber, userId, startVerse]);
   const handleTopVerseChange = useCallback(
     (verse: number) => {
+      topVerseRef.current = verse;
       if (trackProgress) saveFurthest(userId, surahNumber, verse);
     },
     [trackProgress, userId, surahNumber],
@@ -322,14 +367,22 @@ export default function Reciter({
     const missed = feedback.mistakes
       .filter((m) => m.kind === "wrong" || m.kind === "skipped")
       .slice(0, 40)
-      .map((m) => ({ i: m.refIndex, h: m.heard, t: m.kind === "wrong" ? ("w" as const) : ("s" as const) }));
-    const versesHit = new Set<number>();
+      .map((m) => ({ i: m.refIndex + wordOffset, h: m.heard, t: m.kind === "wrong" ? ("w" as const) : ("s" as const) }));
+    // Verses actually heard and judged: a verse we could not hear is not one
+    // the reader recited cleanly, so it must not count as practice of it.
+    const heardWords = new Map<number, { judged: number; total: number }>();
     for (const w of feedback.alignment.words) {
-      if (w.status === "unclear") continue;
       const v = flatWords[w.refIndex]?.ayah;
-      if (v) versesHit.add(v);
+      if (!v) continue;
+      const e = heardWords.get(v) ?? { judged: 0, total: 0 };
+      e.total++;
+      if (w.status !== "unclear") e.judged++;
+      heardWords.set(v, e);
     }
-    const verseList = Array.from(versesHit);
+    const verseList = Array.from(heardWords.entries())
+      .filter(([, e]) => e.judged === e.total)
+      .map(([v]) => v)
+      .sort((a, b) => a - b);
     const count = (st: WordStatus) => feedback.alignment.words.filter((w) => w.status === st).length;
     logSession(userId, {
       surah: surahNumber,
@@ -346,8 +399,9 @@ export default function Reciter({
       hifz,
       hesitations: hesitations.length,
       mistakes: missed,
+      hv: verseList,
     });
-  }, [phase, feedback, userId, surahNumber, flatWords, hifz, hesitations]);
+  }, [phase, feedback, userId, surahNumber, flatWords, hifz, hesitations, wordOffset]);
 
   const showingLive = (phase === "recording" || phase === "processing") && !feedback;
 
@@ -488,7 +542,7 @@ export default function Reciter({
               <p className="ayah truncate text-2xl text-ink/80" dir="rtl">
                 {snap?.heard || "…"}
               </p>
-              <LiveTally correct={liveCounts.correct} missing={liveCounts.missing} wrong={liveCounts.wrong} extra={0} detecting={settings.liveMistakes} />
+              <LiveTally correct={liveCounts.correct} missing={liveCounts.missing} wrong={liveCounts.wrong} extra={snap?.extras ?? 0} detecting={settings.liveMistakes} />
             </div>
           )}
           <div className="flex items-center justify-between gap-3">
@@ -576,13 +630,13 @@ function EngineStatus({
       </>
     );
   } else if (!allowed) {
-    text = "Listening via your browser (the Quran model is switched off in Options).";
+    text = "Listening via your browser's speech service (the Quran model is off in Options; in Chrome the service sends audio to Google).";
   } else if (model.status === "ready") {
     text = `Listening with Tarteel's Quran model on your device${model.device === "webgpu" ? " (graphics chip)" : ""} — your voice stays here.`;
   } else if (model.status === "loading") {
-    text = `Getting the Quran listening model ready… ${model.percent}% (about ${ASR_MODEL.approxMb} MB, only once)`;
+    text = `Getting the Quran listening model ready… ${model.percent}% (about ${ASR_MODEL.approxMb} MB, only once). Until then your browser's speech service listens — in Chrome it sends audio to Google.`;
   } else if (model.status === "failed") {
-    text = "The Quran model could not load here, so your browser's speech service listens instead.";
+    text = "The Quran model could not load here, so your browser's speech service listens instead (in Chrome it sends audio to Google).";
   } else {
     text = "Tap the mic to start.";
   }

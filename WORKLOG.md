@@ -73,7 +73,7 @@ markering, sparande för alla med typade fel.
    "الدار" för ett halvt "الدين"). → De flyttar bara markören framåt, sista ordet
    kastas, de dömer aldrig.
 2. Modellen kan tappa en hel aya inne i en lång bit (uppmätt). → Segment högst
-   12 s. En lucka på 4 ord eller mer inne i ett segment blir `unclear`. En hel
+   15 s (12 s kapade Al-Fatihas sista aya mitt i madden). En lucka på 4 ord eller mer inne i ett segment blir `unclear`. En hel
    aya blir "överhoppad" bara när ingen oförklarad röst finns mellan segmenten.
 3. Upprepning (uppmätt) får inte räknas som tillagda ord. → Bästa försöket per
    ord gäller, rättelsen sparas som "rättat".
@@ -86,7 +86,9 @@ markering, sparande för alla med typade fel.
 7. Modellen ligger i någon annans HF-repo. → Fast revision, Apache-2.0 krediteras,
    försvinner den faller appen tillbaka till webbläsarens taltjänst.
 8. mp3quran-tiderna har en "aya 0" (inledning) och kan vara trasiga. → Tolkas och
-   kontrolleras (ökande, inom filen, rätt antal), annars spelas suran utan aya-sök.
+   kontrolleras (ökande, rätt antal; loopens slut kläms till filens längd),
+   annars spelas suran aya för aya. (Rättat efter granskning: först fanns ingen
+   reserv.)
 9. Att matcha shejk på namn kan ge fel röst. → Varje shejk kopplas till ett
    bestämt läsnings-id, bara Hafs.
 
@@ -101,9 +103,9 @@ markering, sparande för alla med typade fel.
 4. Worker med CDN-import under `/Dugsi` på GitHub Pages. → Sökväg via
    `NEXT_PUBLIC_BASE_PATH`.
 5. Låst skärm: rAF stannar, så upprepning av ett intervall skulle löpa förbi. →
-   `timeupdate` och timer som reserv.
+   `timeupdate` (ca 4 gånger i sekunden) som reserv. Ingen extra timer.
 6. Byte av sura på iPhone: samma ljudelement återanvänds (upplåst vid första
-   trycket), nästa fil värms upp 20 s före slut.
+   trycket), nästa fil laddas 25 s före slut.
 7. Spara sura för offline måste fungera i helsuraläget. → Samma cache, tiderna
    cachas också.
 8. Start två gånger, stopp mitt i laddning, byte av sura mitt i. → Motorn har
