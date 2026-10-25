@@ -96,3 +96,27 @@ function subscribe(cb: () => void): () => void {
 export function usePlayingVerse(): string | null {
   return useSyncExternalStore(subscribe, () => playingKey, () => null);
 }
+
+/**
+ * Have the chosen Sheikh read one verse once, from anywhere (the progress
+ * page, a mistake). A Sheikh with a whole-surah recording reads it from there,
+ * in his own voice; others from their verse file.
+ */
+export function playVerseOnce(surah: number, verse: number): void {
+  const reciter = getSelectedReciterId();
+  stopVerse();
+  if (hasSurahTiming(reciter)) {
+    setListenReciter(reciter);
+    repeatRange({ surah, verse }, { surah, verse }, 1, "stop");
+    return;
+  }
+  pauseListening();
+  const a = new Audio();
+  audio = a;
+  void playableUrl(ayahAudioUrl(surah, verse, reciter)).then((src) => {
+    if (audio !== a) return;
+    a.src = src;
+    void a.play().catch(() => undefined);
+  });
+}
+

@@ -92,7 +92,7 @@ export default function ProgressDashboard() {
       ) : tab === "overview" ? (
         <Overview stats={stats} />
       ) : tab === "mistakes" ? (
-        <Card title="Words you stumble on" sub="Across every surah, most frequent first.">
+        <Card title="Words you stumble on" sub="Across every surah — what still slips comes first, what you have put right goes last.">
           <MistakesPanel words={stats.wordMistakes} />
         </Card>
       ) : tab === "recordings" ? (
