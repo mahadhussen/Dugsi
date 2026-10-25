@@ -1,6 +1,9 @@
 import { normalizeWord, similarity } from "@/lib/arabic";
 
-export type WordStatus = "correct" | "close" | "wrong" | "missing";
+/** correct / close / wrong / missing (skipped) are verdicts on the reciter.
+ *  "unclear" is not: there was voice we could not make out, so the word is
+ *  neither counted nor painted red. */
+export type WordStatus = "correct" | "close" | "wrong" | "missing" | "unclear";
 
 export interface AlignedWord {
   /** Index into the expected (reference) word list. */

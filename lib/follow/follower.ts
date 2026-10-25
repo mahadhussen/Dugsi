@@ -1,0 +1,306 @@
+// The follower: where the reciter is, and what was heard of every word.
+//
+// A pure reducer. The listening pipeline hands it pieces of recitation as the
+// model decodes them (each piece ≈ one breath, cut at a pause) and hints from
+// faster but rougher sources (the browser's recogniser, a provisional decode of
+// the piece still being spoken). Pieces decide marks; hints only move the
+// cursor, so a guess can never paint a word red.
+//
+// What it guarantees:
+//   - It keeps up: a verse the recogniser missed is passed over as soon as the
+//     next piece is placed, and the cursor lands where the reciter is.
+//   - It never accuses on thin evidence: words passed over are "unclear" until
+//     the verdict looks at whether there was voice there (see verdict.ts).
+//   - A re-read is a second chance, not an added word: every word keeps its
+//     best attempt.
+
+import type { WordStatus } from "@/lib/align";
+import { tokenize } from "@/lib/arabic";
+import { alignWindow, placePiece, type Alignment } from "./align";
+import { CLOSE, CORRECT, spoken, wordSim } from "./phonetic";
+import type { RefText } from "./text";
+
+/** One decoded piece, as the pipeline delivers it. Times are seconds on the
+ *  recording clock. */
+export interface PieceInput {
+  id: number;
+  t0: number;
+  t1: number;
+  text: string;
+  /** Word timings from the model, when it gives them (same order as the words). */
+  words?: { text: string; start: number; end: number }[];
+  /** Where there was voice inside the piece, [start, end) seconds. */
+  voiced?: [number, number][];
+  /** Pieces this one replaces (a joined re-decode). */
+  replaces?: number[];
+  /** The piece begins / ends where the length cap cut a breath, not at a
+   *  pause: the word there may be cut in two and is never judged wrong. */
+  cutStart?: boolean;
+  cutEnd?: boolean;
+  /** "model" = the on-device Quran model; "browser" = the browser recogniser
+   *  standing in when the model cannot run (no word times, no voice map). */
+  source: "model" | "browser";
+}
+
+export type PieceKind = "aligned" | "unclear" | "empty" | "preamble";
+
+export interface PieceRecord {
+  input: PieceInput;
+  /** Normalised tokens actually laid against the text (opening/closing formulas removed). */
+  tokens: string[];
+  /** Index into `tokens` → original word index (for timings). */
+  tokenWord: number[];
+  /** Tokens removed as isti'adha / basmala / sadaqa. */
+  formula: string[];
+  kind: PieceKind;
+  align: Alignment | null;
+  jumped: boolean;
+  /** Cursor before this piece. */
+  from: number;
+}
+
+export interface FollowState {
+  ref: RefText;
+  /** The practised part of the text, [start, end) word indices. */
+  start: number;
+  end: number;
+  /** Next word to recite, as confirmed by decoded pieces. */
+  cursor: number;
+  /** Where the screen shows the reciter: the cursor, nudged ahead by hints. */
+  live: number;
+  /** Whether any piece has landed in the text yet (formulas only before that). */
+  started: boolean;
+  pieces: PieceRecord[];
+}
+
+export function createFollower(ref: RefText, range?: { start: number; end: number }): FollowState {
+  const start = Math.max(0, range?.start ?? 0);
+  const end = Math.min(ref.norm.length, range?.end ?? ref.norm.length);
+  return { ref, start, end, cursor: start, live: start, started: false, pieces: [] };
+}
+
+// ── Opening and closing formulas ───────────────────────────────────────────
+
+const ISTIADHA = ["اعوذ", "بالله", "من", "الشيطان", "الرجيم"];
+const BASMALA = ["بسم", "الله", "الرحمن", "الرحيم"];
+const SADAQA = ["صدق", "الله", "العظيم"];
+
+/** How many leading tokens spell `formula` (joined-string match tolerates the
+ *  recogniser splitting or joining words), or 0. */
+function formulaPrefix(tokens: string[], formula: string[]): number {
+  const target = formula.join("");
+  let best = 0;
+  let bestSim = 0;
+  for (let n = Math.max(1, formula.length - 2); n <= Math.min(tokens.length, formula.length + 2); n++) {
+    const sim = wordSim(target, tokens.slice(0, n).join(""));
+    if (sim > bestSim) {
+      bestSim = sim;
+      best = n;
+    }
+  }
+  return bestSim >= 0.72 ? best : 0;
+}
+
+function formulaSuffix(tokens: string[], formula: string[]): number {
+  const rev = [...tokens].reverse();
+  const n = formulaPrefix(
+    rev.map((t) => [...t].reverse().join("")),
+    [...formula].reverse().map((w) => [...w].reverse().join("")),
+  );
+  return n;
+}
+
+/** Does the text itself start with the basmala here (Al-Fatiha 1:1, An-Naml 27:30)? */
+function textHasBasmalaAt(ref: RefText, i: number): boolean {
+  if (i + BASMALA.length > ref.norm.length) return false;
+  return wordSim(BASMALA.join(""), ref.norm.slice(i, i + BASMALA.length).join("")) >= 0.9;
+}
+
+// ── Pieces ─────────────────────────────────────────────────────────────────
+
+/** Tokens of a piece, with the index of the model word each came from. */
+function tokensOf(input: PieceInput): { tokens: string[]; tokenWord: number[] } {
+  if (input.words && input.words.length) {
+    const tokens: string[] = [];
+    const tokenWord: number[] = [];
+    input.words.forEach((w, wi) => {
+      for (const t of tokenize(w.text)) {
+        tokens.push(t);
+        tokenWord.push(wi);
+      }
+    });
+    if (tokens.length) return { tokens, tokenWord };
+  }
+  const tokens = tokenize(input.text);
+  return { tokens, tokenWord: tokens.map(() => -1) };
+}
+
+function voicedSeconds(input: PieceInput): number {
+  return (input.voiced ?? []).reduce((s, [a, b]) => s + Math.max(0, b - a), 0);
+}
+
+/** Place one piece against the text from `cursor`. Pure. */
+export function placeInput(state: FollowState, input: PieceInput, cursor: number, started: boolean): PieceRecord {
+  const { tokens: all, tokenWord: allWord } = tokensOf(input);
+  let lead = 0;
+  // Before the recitation has begun, the isti'adha and the basmala are a
+  // preface, not the surah — unless the text itself starts with the basmala.
+  if (!started) {
+    const a = formulaPrefix(all, ISTIADHA);
+    lead = a;
+    if (!textHasBasmalaAt(state.ref, cursor)) lead += formulaPrefix(all.slice(a), BASMALA);
+  }
+  let tail = formulaSuffix(all.slice(lead), SADAQA);
+  if (tail > 0 && lead + tail > all.length) tail = 0;
+  const tokens = all.slice(lead, all.length - tail);
+  const tokenWord = allWord.slice(lead, allWord.length - tail);
+  const formula = [...all.slice(0, lead), ...all.slice(all.length - tail)];
+  const base = { input, tokens, tokenWord, formula, from: cursor, jumped: false };
+
+  if (tokens.length === 0) {
+    return { ...base, kind: formula.length ? "preamble" : voicedSeconds(input) >= 1 ? "unclear" : "empty", align: null };
+  }
+  const place = placePiece(state.ref, tokens, cursor, state.start, state.end);
+  const a = place?.align ?? null;
+  // Moving the cursor far takes real evidence: two or more words heard well.
+  // One look-alike word (a hallucinated "طسم" on a madd tail landing on
+  // "بسم" 28 words back) must not drag the reciter's place away.
+  if (a && Math.abs(a.start - cursor) > 8) {
+    const solid = a.pairs.filter((p) => p.sim >= 0.75).reduce((n, p) => n + (p.refEnd - p.ref), 0);
+    if (solid < 2) return { ...base, kind: "unclear", align: null };
+  }
+  // A piece explains itself when enough of what was heard landed on real words.
+  const ok = !!a && a.matched >= 1 && a.matched >= Math.ceil(0.4 * Math.min(tokens.length, a.end - a.start + a.extras.length)) && a.score > -0.2;
+  if (!ok) return { ...base, kind: "unclear", align: null };
+  return { ...base, kind: "aligned", align: a, jumped: !!place?.jumped };
+}
+
+function advance(state: FollowState, rec: PieceRecord): FollowState {
+  const pieces = [...state.pieces, rec];
+  if (rec.kind !== "aligned" || !rec.align) return { ...state, pieces };
+  const cursor = rec.align.end;
+  // The screen follows the piece, but a hint that already ran ahead stays
+  // ahead (the reciter is already in the next verse while this one decoded).
+  const live = state.live > cursor && state.live - cursor < 40 ? state.live : cursor;
+  return { ...state, pieces, cursor, live, started: true };
+}
+
+/**
+ * A decoded piece arrives. When it replaces earlier pieces (a joined
+ * re-decode), the follow is replayed from the first replaced piece so every
+ * later decision sees the corrected picture. Deterministic either way.
+ */
+export function applyPiece(state: FollowState, input: PieceInput): FollowState {
+  if (input.replaces && input.replaces.length) {
+    const drop = new Set(input.replaces);
+    const firstIdx = state.pieces.findIndex((p) => drop.has(p.input.id));
+    if (firstIdx >= 0) {
+      const keep = state.pieces.slice(0, firstIdx);
+      const later = state.pieces.slice(firstIdx).filter((p) => !drop.has(p.input.id)).map((p) => p.input);
+      let s: FollowState = replay(state, keep);
+      s = advance(s, placeInput(s, input, s.cursor, s.started));
+      for (const inp of later) s = advance(s, placeInput(s, inp, s.cursor, s.started));
+      return s;
+    }
+  }
+  return advance(state, placeInput(state, input, state.cursor, state.started));
+}
+
+/** Rebuild cursor state as if only `kept` had arrived (their placements stand). */
+function replay(state: FollowState, kept: PieceRecord[]): FollowState {
+  let s: FollowState = { ...state, cursor: state.start, live: state.start, started: false, pieces: [] };
+  for (const p of kept) s = advance(s, p);
+  return s;
+}
+
+/**
+ * How well would this text fit here, without changing anything? Lets the
+ * pipeline choose between decoding two pieces apart or joined.
+ */
+export function fitScore(state: FollowState, inputs: PieceInput[]): number {
+  let s = state;
+  let total = 0;
+  for (const inp of inputs) {
+    const rec = placeInput(s, inp, s.cursor, s.started);
+    total += rec.align ? rec.align.matched - 0.5 * rec.align.skipped.length - 0.3 * rec.align.extras.length : -rec.tokens.length * 0.5;
+    s = advance(s, rec);
+  }
+  return total;
+}
+
+// ── Hints ──────────────────────────────────────────────────────────────────
+
+/**
+ * A rough, fast transcript of what is being said right now. Only the last few
+ * words are used, so it does not matter that browser recognisers revise and
+ * restart: the tail always says where the reciter is. The last word of a
+ * provisional decode may be cut mid-word, so callers drop it.
+ */
+export function applyHint(state: FollowState, text: string): FollowState {
+  const tokens = tokenize(text).slice(-5);
+  if (tokens.length < 2) return state;
+  const from = state.live;
+  const a = alignWindow(state.ref, tokens, Math.max(state.start, from - 4), Math.min(state.end, from + 40), (i) => -0.02 * Math.abs(i - from));
+  if (!a || a.matched < 2) return state;
+  const strong = a.pairs.filter((p) => p.sim >= 0.75).length;
+  if (strong < 2 || a.end <= state.live) return state;
+  return { ...state, live: a.end };
+}
+
+// ── Marks ──────────────────────────────────────────────────────────────────
+
+const RANK: Record<WordStatus, number> = { correct: 4, close: 3, wrong: 2, missing: 1, unclear: 0 };
+
+export function statusOfSim(sim: number): WordStatus {
+  return sim >= CORRECT ? "correct" : sim >= CLOSE ? "close" : "wrong";
+}
+
+/** Best status of every word some piece covered, plus what was heard for it. */
+export function bestMarks(state: FollowState): Map<number, { status: WordStatus; heard: string | null; piece: number; corrected: boolean }> {
+  const out = new Map<number, { status: WordStatus; heard: string | null; piece: number; corrected: boolean }>();
+  state.pieces.forEach((p, pi) => {
+    if (p.kind !== "aligned" || !p.align) return;
+    for (const pair of p.align.pairs) {
+      const st = statusOfSim(pair.sim);
+      const heard = p.tokens.slice(pair.heard, pair.heardEnd).join(" ");
+      for (let k = pair.ref; k < pair.refEnd; k++) {
+        const prev = out.get(k);
+        if (!prev || RANK[st] > RANK[prev.status]) {
+          out.set(k, { status: st, heard, piece: pi, corrected: !!prev && prev.status === "wrong" });
+        }
+      }
+    }
+    for (const k of p.align.skipped) {
+      if (!out.has(k)) out.set(k, { status: "missing", heard: null, piece: pi, corrected: false });
+    }
+  });
+  return out;
+}
+
+/**
+ * Marks to paint while reciting: covered words with their best status, words
+ * skipped inside a piece as skipped, and words passed over between pieces as
+ * unclear (grey) — the verdict decides those at the end.
+ */
+export function liveMarks(state: FollowState): Record<number, WordStatus> {
+  const best = bestMarks(state);
+  const out: Record<number, WordStatus> = {};
+  for (const [k, v] of best) out[k] = v.status;
+  let lo = Infinity;
+  let hi = -1;
+  for (const k of best.keys()) {
+    if (k < lo) lo = k;
+    if (k > hi) hi = k;
+  }
+  // Only between the first and last heard word: a recitation that starts at
+  // verse 50 must not grey out verses 1-49.
+  for (let k = lo; k < Math.min(hi, state.cursor); k++) if (!(k in out)) out[k] = "unclear";
+  return out;
+}
+
+/** The cursor as a word index inside the practised range (for the screen). */
+export function liveCursor(state: FollowState): number {
+  return Math.max(state.start, Math.min(state.end, state.live));
+}
+
+export { spoken };

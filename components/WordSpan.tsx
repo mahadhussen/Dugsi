@@ -7,6 +7,7 @@ const statusClass: Record<WordStatus, string> = {
   close: "word-close",
   wrong: "word-wrong",
   missing: "word-missing",
+  unclear: "word-unclear",
 };
 
 export interface WordSpanProps {

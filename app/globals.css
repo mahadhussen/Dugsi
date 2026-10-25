@@ -141,7 +141,7 @@ body {
 }
 
 /* Recitation marks colour the letters themselves, like a teacher's pen:
-   green said right, yellow nearly, red wrong, grey skipped. */
+   green said right, yellow nearly, red wrong, grey skipped, faded unclear. */
 .word-correct {
   color: var(--good);
 }
@@ -155,6 +155,11 @@ body {
   color: var(--muted);
   text-decoration: underline dotted var(--muted);
   text-underline-offset: 0.35em;
+}
+/* voice we could not make out: not a verdict, so no colour of judgement */
+.word-unclear {
+  color: var(--muted);
+  opacity: 0.6;
 }
 /* the next word to recite while following live: a green line under it, no box */
 .word-active {
