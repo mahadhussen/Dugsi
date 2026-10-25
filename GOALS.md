@@ -36,7 +36,7 @@ och sparande.
 
 ## S5 — Klicka och markera
 - [x] Tryck på aya-markören: i Lyssna läser shejken därifrån, i Recitera just den ayan (egen röst)
-- [ ] Aya-meny med från/till (intervall) — motorn har `repeatRange`, menyn återstår
+- [x] Upprepa ett stycke: ayat från–till, 1/3/5/7 gånger eller tills stopp (mätt: 2–3 × 3, sedan vidare)
 - [x] Upprepa: av / denna aya / hela suran (motorn klarar intervall och antal)
 - [ ] Markera text → lyssna på markerat (återstår)
 

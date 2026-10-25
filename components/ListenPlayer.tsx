@@ -304,6 +304,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
           <div className="h-full rounded-full bg-emerald transition-[width] duration-300" style={{ width: `${progress}%` }} />
         </div>
 
+        {perAyah && <RepeatPassage surahId={surahId} ayahCount={ayahCount} current={verse} />}
         <SaveSurah surahId={surahId} reciterId={reciterId} />
       </div>
     </div>
@@ -395,3 +396,71 @@ function SaveSurah({ surahId, reciterId }: { surahId: number; reciterId: string 
     </div>
   );
 }
+
+/**
+ * "Read this part again": pick the verses and how many times, and the Sheikh
+ * reads just that stretch, then carries on. One verse = from and to the same.
+ */
+function RepeatPassage({ surahId, ayahCount, current }: { surahId: number; ayahCount: number; current: number }) {
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState(current);
+  const [to, setTo] = useState(current);
+  const [times, setTimes] = useState<number | null>(3);
+  useEffect(() => {
+    if (!open) {
+      setFrom(current);
+      setTo(current);
+    }
+  }, [current, open]);
+  const verses = Array.from({ length: ayahCount }, (_, i) => i + 1);
+  if (!open) {
+    return (
+      <div className="mt-2 text-center">
+        <button onClick={() => setOpen(true)} className="text-sm font-bold text-ink/60 underline underline-offset-2 hover:text-ink">
+          Repeat a passage…
+        </button>
+      </div>
+    );
+  }
+  const sel = "rounded-lg border-2 border-ink/15 bg-surface px-2 py-1 text-sm font-bold text-ink";
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-sm font-bold text-ink/70">
+      <span>Verses</span>
+      <select aria-label="From verse" className={sel} value={from} onChange={(e) => setFrom(Number(e.target.value))}>
+        {verses.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+      <span>to</span>
+      <select aria-label="To verse" className={sel} value={to} onChange={(e) => setTo(Number(e.target.value))}>
+        {verses.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+      <select aria-label="How many times" className={sel} value={times ?? 0} onChange={(e) => setTimes(Number(e.target.value) || null)}>
+        {[1, 3, 5, 7, 0].map((n) => (
+          <option key={n} value={n}>
+            {n === 0 ? "until I stop" : `${n}×`}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={() => {
+          repeatRange({ surah: surahId, verse: Math.min(from, to) }, { surah: surahId, verse: Math.max(from, to) }, times);
+          setOpen(false);
+        }}
+        className="rounded-full bg-emerald px-3 py-1 text-white shadow-soft"
+      >
+        Play
+      </button>
+      <button onClick={() => setOpen(false)} className="px-1 text-ink/50 hover:text-ink">
+        Cancel
+      </button>
+    </div>
+  );
+}
+
