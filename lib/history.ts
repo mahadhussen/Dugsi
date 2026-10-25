@@ -18,6 +18,9 @@ import { uid } from "./uid";
 export interface StoredMistake {
   i: number;
   h: string | null;
+  /** Kind (added 2026-10): "w" said wrong, "s" skipped. Older rows lack it;
+   *  for them h === null means skipped, as before. */
+  t?: "w" | "s";
 }
 
 /** One finished recitation. Optional fields were added later — old rows may

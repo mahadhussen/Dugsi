@@ -37,7 +37,7 @@ export function runFixture(fx: Fixture, ayat: Ayah[], range?: { start: number; e
     text: s.text,
     words: abs(s.words, s.t0),
     voiced: s.voiced,
-    cutStart: i > 0 && !fx.segments[i - 1].byPause,
+    cutStart: (i > 0 && !fx.segments[i - 1].byPause) || s.t0 === 0,
     cutEnd: !s.byPause,
     source: "model",
   }));

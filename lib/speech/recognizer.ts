@@ -51,6 +51,8 @@ export interface RecognizerHandlers {
   onError?: (message: string) => void;
   /** Called once when recognition has fully stopped, with the final transcript. */
   onDone?: (finalText: string) => void;
+  /** Called once for each result the engine marks final (one phrase). */
+  onFinal?: (text: string) => void;
   /** Given the engine's alternative transcripts for one segment, return the one
    *  to use (e.g. the closest to the expected Quran text). Default: the first. */
   pickBest?: (alternatives: string[]) => string;
@@ -66,6 +68,7 @@ export class Recognizer {
   private active = false;
   private committed = ""; // finalised text from previous sessions
   private sessionFinal = ""; // finalised text in the current session
+  private finalsEmitted = 0; // final results of this session already reported
   private handlers: RecognizerHandlers;
 
   constructor(handlers: RecognizerHandlers = {}) {
@@ -85,6 +88,7 @@ export class Recognizer {
   }
 
   private spawn(Ctor: SpeechRecognitionCtor, lang: string): void {
+    this.finalsEmitted = 0;
     const rec = new Ctor();
     rec.lang = lang;
     rec.continuous = true;
@@ -104,8 +108,13 @@ export class Recognizer {
           for (let j = 0; j < res.length; j++) alts.push(res[j].transcript);
           text = this.handlers.pickBest(alts);
         }
-        if (res.isFinal) final += text + " ";
-        else interim += text;
+        if (res.isFinal) {
+          final += text + " ";
+          if (i >= this.finalsEmitted) {
+            this.finalsEmitted = i + 1;
+            if (text.trim()) this.handlers.onFinal?.(text.trim());
+          }
+        } else interim += text;
       }
       this.sessionFinal = final;
       this.handlers.onTranscript?.((this.committed + final + interim).trim());

@@ -1,33 +1,22 @@
 "use client";
 
+// Recite: the reciter reads aloud, Dugsi follows word by word and judges.
+//
+// This file is the flow (when and why). How the listening works lives in
+// lib/listen/recite-engine.ts; what is true about each word lives in the pure
+// follower (lib/follow). Live marks come from the follower as pieces are
+// decoded; the verdict is ready the moment the last piece is, with no second
+// pass over the recording.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SurahView, { isMaskedSlot } from "./SurahView";
-import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
-import {
-  transcribeWithWhisper,
-  isWhisperSupported,
-  webgpuAvailable,
-  pickWhisperModel,
-  type WhisperModel,
-} from "@/lib/speech/whisperLocal";
-import { startVad, HESITATION_MS, type VadHandle, type Hesitation } from "@/lib/speech/vad";
-import { analyzeRecitation, type RecitationFeedback } from "@/lib/analyze";
+import { isSpeechSupported } from "@/lib/speech/recognizer";
 import type { WordStatus } from "@/lib/align";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
-import { tokenize, normalizeWord } from "@/lib/arabic";
-import { trackLive, mergeLiveStatuses } from "@/lib/live";
 import { useSettings } from "@/lib/settings";
-import { pickBestAlternative } from "@/lib/speech/pickBest";
 import { useAuth } from "@/lib/supabase/AuthProvider";
 import { loadFurthest, saveFurthest, logSession } from "@/lib/supabase/progress";
-import {
-  mapRefTimes,
-  liveClipTimes,
-  mergeClipTimes,
-  clipForMistake,
-  sanePreciseTimes,
-  type TimeRange,
-} from "@/lib/review";
+import { clipForMistake } from "@/lib/review";
 import { saveRecording } from "@/lib/recordings";
 import {
   checkForPriorCrash,
@@ -37,17 +26,17 @@ import {
   clearCrashBreadcrumb,
   reEnableWhisper,
 } from "@/lib/crashGuard";
-import type { TimedWord } from "@/lib/tajweed/timing";
+import { buildRef } from "@/lib/follow/text";
+import { applyPiece, createFollower, liveCursor, liveMarks } from "@/lib/follow/follower";
+import { verdictOf, type Verdict } from "@/lib/follow/verdict";
+import { ReciteEngine, type EngineSnapshot, type Hesitation } from "@/lib/listen/recite-engine";
+import { asr } from "@/lib/listen/asr";
+import { ASR_MODEL } from "@/lib/listen/model";
 import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
 
 type Phase = "idle" | "recording" | "processing" | "done" | "error" | "unsupported";
-type ModelStatus = "idle" | "loading" | "ready" | "error";
 
-// Above this length we skip the Whisper refinement: decoding a very long
-// recording to raw PCM (plus the model's working memory) is exactly the kind of
-// memory spike that gets the tab killed on iOS Safari. The live result stands,
-// and the recording is still kept for "hear yourself".
-const MAX_WHISPER_SECONDS = 180;
+const AUTO_STOP_MS = 6000;
 
 function MicIcon({ className = "" }: { className?: string }) {
   return (
@@ -56,31 +45,6 @@ function MicIcon({ className = "" }: { className?: string }) {
       <path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
-}
-
-function pickMimeType(): string {
-  if (typeof MediaRecorder === "undefined") return "audio/webm";
-  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
-  return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "audio/webm";
-}
-
-// iPhone/iPad Safari can't reliably run the Whisper WASM model (memory limits);
-// there we only run Whisper when WebGPU is available (iOS 18+, efficient path).
-function isIOS(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  return /iP(hone|ad|od)/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
-}
-
-/** Whether this device can safely run the on-device Whisper refinement. */
-function whisperCapable(): boolean {
-  return isWhisperSupported() && (!isIOS() || webgpuAvailable()) && !whisperDisabledByCrashes();
-}
-
-/** Refinement cap: iOS gets a tighter limit — decoding long audio is what
- *  memory-kills the tab there. */
-function maxWhisperSeconds(): number {
-  return isIOS() ? 120 : MAX_WHISPER_SECONDS;
 }
 
 export default function Reciter({
@@ -98,36 +62,20 @@ export default function Reciter({
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const settings = useSettings();
-  const liveMistakesRef = useRef(settings.liveMistakes);
-  liveMistakesRef.current = settings.liveMistakes;
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<RecitationFeedback | null>(null);
-  const [liveText, setLiveText] = useState("");
-  const [seconds, setSeconds] = useState(0);
+  const [feedback, setFeedback] = useState<Verdict | null>(null);
+  const [snap, setSnap] = useState<EngineSnapshot | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
-  const [modelStatus, setModelStatus] = useState<ModelStatus>("idle");
-  const [modelPercent, setModelPercent] = useState(0);
-  const [modelInUse, setModelInUse] = useState<WhisperModel | null>(null);
-  // Decided after mount (depends on the device), so server and client render alike.
-  const [plannedModel, setPlannedModel] = useState<WhisperModel | null>(null);
-  useEffect(() => setPlannedModel(pickWhisperModel(settings.quranModel)), [settings.quranModel]);
-  // Voice activity: long mid-recitation pauses (memorisation weak spots) and
-  // the optional auto-stop. Best-effort — absent when the VAD can't load.
-  const vadRef = useRef<VadHandle | null>(null);
-  const hesitationsRef = useRef<Hesitation[]>([]);
   const [hesitations, setHesitations] = useState<Hesitation[]>([]);
-  const pointerRef = useRef(0); // latest live pointer, readable from callbacks
-  const autoStopRef = useRef(settings.autoStop);
-  autoStopRef.current = settings.autoStop;
-  const stopRef = useRef<() => void>(() => {});
-  const [liveStatuses, setLiveStatuses] = useState<Record<number, WordStatus>>({});
-  const [livePointer, setLivePointer] = useState(0);
-  const [liveExtras, setLiveExtras] = useState(0); // added words heard so far (live)
-  const extrasRef = useRef(0);
-  const [hifz, setHifz] = useState(0); // 0 = off, 1 easy, 2 medium, 3 hide all
-  // Memorisation: hidden words the reader opened (by tap or the Peek buttons),
-  // and how many times they peeked this attempt.
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [hifz, setHifz] = useState(0); // 0 = off, 1 some, 2 most, 3 all
+  const [engineTick, setEngineTick] = useState(0);
+  const engineRef = useRef<ReciteEngine | null>(null);
+  const loggedRef = useRef(false);
+  const secondsRef = useRef(0);
+
+  // Memorisation: hidden words the reader opened (tap or Peek), and how often.
   const [revealed, setRevealed] = useState<Set<number>>(() => new Set());
   const peeksRef = useRef(0);
   const reveal = useCallback((refIndex: number) => {
@@ -142,409 +90,122 @@ export default function Reciter({
     setRevealed(new Set());
     peeksRef.current = 0;
   }, [ayat, hifz]);
-  const [engineTick, setEngineTick] = useState(0); // re-render the status line after re-enable
-  // The user's own recording (always kept) + word timestamps when Whisper ran.
-  const [recording, setRecording] = useState<{ url: string; words: TimedWord[] } | null>(null);
 
-  // Flattened words (for verse↔word mapping) and their normalised forms (for
-  // live tracking).
   const flatWords = useMemo(() => flattenAyat(ayat), [ayat]);
-  const expectedNorm = useMemo(() => flatWords.map((f) => normalizeWord(f.word.uthmani)), [flatWords]);
-  const expectedSet = useMemo(() => new Set(expectedNorm), [expectedNorm]);
+  const ref = useMemo(() => buildRef(ayat), [ayat]);
+  const textWords = useMemo(() => flatWords.map((f) => f.word), [flatWords]);
 
   const clearRecording = useCallback(() => {
-    setRecording((prev) => {
-      if (prev) URL.revokeObjectURL(prev.url);
+    setRecordingUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
       return null;
     });
   }, []);
 
-  const recognizerRef = useRef<Recognizer | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const secondsRef = useRef(0); // mirrors `seconds` for use inside callbacks
-  const liveRef = useRef("");
-  const liveResultShownRef = useRef(false);
-  const loggedRef = useRef(false); // one session record per recitation
-  const discardRef = useRef(false); // drop the next recorder result (surah switch/unmount)
-  // Live-derived word times: refIndex → seconds (on the recording clock) when the
-  // live tracker passed it. Whisper-independent, so "You" playback always works.
-  const liveTimesRef = useRef<Record<number, number>>({});
-  const lastStampRef = useRef(0);
-  const recStartRef = useRef(0);
-  // Earliest reference word the live tracker matched — an anchor prior so a long
-  // surah with a repeated phrase does not window onto the wrong repetition.
-  const firstLiveMatchRef = useRef<number | undefined>(undefined);
-  const [liveClips, setLiveClips] = useState<Record<number, TimeRange>>({});
-
-  // Stop the mic/recorder without processing the result (surah switch, unmount).
-  const discardCapture = useCallback(() => {
-    vadRef.current?.stop();
-    vadRef.current = null;
-    if (recorderRef.current && recorderRef.current.state !== "inactive") {
-      discardRef.current = true;
-      try {
-        recorderRef.current.stop();
-      } catch {
-        /* already stopped */
-      }
-    }
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-  }, []);
-
   useEffect(() => {
-    checkForPriorCrash(); // if a past Whisper run killed the page, note it
-    if (!isSpeechSupported() && !isWhisperSupported()) setPhase("unsupported");
-    // A deliberate close or backgrounding is not a crash — drop the breadcrumb so
-    // it is never miscounted. A real memory kill fires neither event.
+    checkForPriorCrash(); // a past model run that killed the page is counted
+    const canListen = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+    if (!canListen && !isSpeechSupported()) setPhase("unsupported");
+    // A deliberate close or backgrounding is not a crash.
     const onLeave = () => clearCrashBreadcrumb();
-    const onHide = () => {
-      if (document.visibilityState === "hidden") clearCrashBreadcrumb();
-    };
+    const onHide = () => document.visibilityState === "hidden" && clearCrashBreadcrumb();
     window.addEventListener("pagehide", onLeave);
     document.addEventListener("visibilitychange", onHide);
     return () => {
       window.removeEventListener("pagehide", onLeave);
       document.removeEventListener("visibilitychange", onHide);
-      if (timerRef.current) clearInterval(timerRef.current);
-      recognizerRef.current?.cancel();
-      discardCapture();
+      engineRef.current?.cancel();
     };
-  }, [discardCapture]);
+  }, []);
 
-  // When the practice target (surah/section) changes, clear any prior result.
+  // Start fetching the model as soon as reciting is on screen, so the first
+  // verse is judged by it rather than waiting for a 67 MB download.
+  const modelAllowed = settings.quranModel && !whisperDisabledByCrashes();
   useEffect(() => {
-    recognizerRef.current?.cancel();
-    if (timerRef.current) clearInterval(timerRef.current);
-    discardCapture();
+    if (modelAllowed) void asr.load();
+  }, [modelAllowed, engineTick]);
+  const [model, setModel] = useState({ status: asr.status, percent: asr.percent, device: asr.device });
+  useEffect(() => asr.subscribe(() => setModel({ status: asr.status, percent: asr.percent, device: asr.device })), []);
+
+  // A new surah or range: drop any attempt in flight and its result.
+  useEffect(() => {
+    engineRef.current?.cancel();
+    engineRef.current = null;
     setFeedback(null);
+    setSnap(null);
     setError(null);
-    setLiveText("");
-    liveRef.current = "";
-    setLiveStatuses({});
-    setLivePointer(0);
+    setHesitations([]);
     clearRecording();
     setPhase((p) => (p === "unsupported" ? p : "idle"));
-  }, [ayat, clearRecording, discardCapture]);
+  }, [ayat, clearRecording]);
 
-  const stopTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = null;
-  };
+  const stop = useCallback(async () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    setPhase("processing");
+    setProgress("Checking the last verse…");
+    const result = await engine.stop((waiting) =>
+      setProgress(waiting > 1 ? `Checking the last ${waiting} pieces…` : "Checking the last verse…"),
+    );
+    markWhisperFinished();
+    setProgress(null);
+    if (engineRef.current !== engine || !result) return;
+    secondsRef.current = Math.round(result.seconds);
+    setHesitations(result.hesitations);
+    if (result.recording && result.recording.size > 0) {
+      setRecordingUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(result.recording!);
+      });
+      void saveRecording(surahNumber, result.recording, result.verdict.clips, Date.now());
+    }
+    const heardSomething = result.verdict.alignment.words.length > 0 || result.verdict.transcript.trim().length > 0;
+    if (!heardSomething) {
+      setError("We couldn't hear any recitation. Please try again a little closer to the microphone.");
+      setPhase("error");
+      return;
+    }
+    setFeedback(result.verdict);
+    setPhase("done");
+  }, [surahNumber]);
+  const stopRef = useRef(stop);
+  stopRef.current = stop;
 
-  const startTimer = () => {
-    setSeconds(0);
-    secondsRef.current = 0;
-    timerRef.current = setInterval(() => {
-      secondsRef.current += 1;
-      setSeconds(secondsRef.current);
-    }, 1000);
-  };
-
-  // The live (Web Speech) recogniser drives the real-time green highlighting and
-  // provides the instant result at stop; Whisper refines it afterwards when the
-  // device supports it. Live hiccups are never fatal — the recording still is
-  // the source of truth for the final analysis.
-  const makeLiveRecognizer = (): Recognizer => {
-    setLiveText("");
-    liveRef.current = "";
-    let lastTrack = 0;
-    // Incremental tracking: only newly appended tokens are matched each tick, so
-    // the work per update stays constant no matter how long the recitation gets
-    // (re-matching the whole transcript grew unbounded on long surahs).
-    let processedTokens = 0;
-    let trackPointer = 0;
-    return new Recognizer({
-      // When the engine offers alternatives, take the one closest to this surah's
-      // wording — noticeably better live matching for Quranic Arabic.
-      pickBest: (alts) => pickBestAlternative(alts, expectedSet),
-      onTranscript: (text) => {
-        liveRef.current = text;
-        // Show only the tail on screen — rendering an ever-growing paragraph is
-        // wasted layout work during long recitations.
-        const words = text.split(" ");
-        setLiveText(words.length > 25 ? "… " + words.slice(-25).join(" ") : text);
-        // Light throttle to coalesce bursts (rendering is virtualised + memoised,
-        // so we can update often and keep up with fast reading).
-        const now = Date.now();
-        if (now - lastTrack < 60) return;
-        lastTrack = now;
-        const tokens = tokenize(text);
-        if (tokens.length <= processedTokens) return; // interim revision — wait for growth
-        const { statuses, pointer, extras } = trackLive(
-          expectedNorm,
-          tokens.slice(processedTokens),
-          trackPointer,
-          { mistakes: liveMistakesRef.current },
-        );
-        processedTokens = tokens.length;
-        trackPointer = Math.max(trackPointer, pointer);
-        if (extras > 0) {
-          extrasRef.current += extras;
-          setLiveExtras(extrasRef.current);
-        }
-        // Stamp ONLY words that actually matched this tick (never pointer nudges
-        // past unheard words — those stamps would point at the wrong audio).
-        // A batch of matches is spread between the previous stamp and now, since
-        // the engine often commits several words at once.
-        if (recStartRef.current > 0) {
-          const tSec = (Date.now() - recStartRef.current) / 1000;
-          const fresh: number[] = [];
-          for (const key in statuses) {
-            const idx = Number(key);
-            // Only words actually heard carry a timestamp — a word flagged as
-            // skipped or substituted was never (correctly) said at this moment.
-            if (statuses[idx] !== "correct" && statuses[idx] !== "close") continue;
-            if (firstLiveMatchRef.current === undefined || idx < firstLiveMatchRef.current) {
-              firstLiveMatchRef.current = idx;
-            }
-            if (liveTimesRef.current[idx] === undefined) fresh.push(idx);
-          }
-          if (fresh.length > 0) {
-            fresh.sort((a, b) => a - b);
-            const from = lastStampRef.current;
-            fresh.forEach((idx, k) => {
-              liveTimesRef.current[idx] = from + ((tSec - from) * (k + 1)) / fresh.length;
-            });
-            lastStampRef.current = tSec;
-          }
-        }
-
-        // Merge sticky: once a word is green it stays green, a word flagged
-        // red recovers when re-read, and the cursor never moves backward. This
-        // keeps the marking consistent and smooth instead of flickering as the
-        // recogniser revises interim results.
-        setLiveStatuses((prev) => mergeLiveStatuses(prev, statuses));
-        setLivePointer((prev) => (pointer > prev ? pointer : prev));
-        pointerRef.current = Math.max(pointerRef.current, pointer);
-        if (trackProgress) {
-          const verse = flatWords[Math.min(flatWords.length - 1, pointer)]?.ayah;
-          if (verse) saveFurthest(userId, surahNumber, verse);
-        }
+  const start = async () => {
+    engineRef.current?.cancel();
+    setError(null);
+    setFeedback(null);
+    setHesitations([]);
+    setRevealed(new Set());
+    peeksRef.current = 0;
+    loggedRef.current = false;
+    clearRecording();
+    const range = { start: 0, end: ref.norm.length };
+    const engine = new ReciteEngine({
+      ref,
+      range,
+      words: textWords,
+      useModel: modelAllowed,
+      autoStopMs: settings.autoStop ? AUTO_STOP_MS : null,
+      onUpdate: (s) => {
+        if (engineRef.current === engine) setSnap(s);
       },
-      onError: () => {
-        /* live hiccups are non-fatal — the recording carries the result */
-      },
-      onDone: () => {
-        /* the final result is produced in stop()/processAccurate */
-      },
+      onAutoStop: () => void stopRef.current(),
     });
-  };
-
-  // Finalise from the live transcript when Whisper isn't run (not capable, or
-  // the recording was too long to decode safely).
-  const finalizeFromLive = () => {
-    if (liveResultShownRef.current) return; // stop() already showed the result
-    const live = liveRef.current.trim();
-    if (live) {
-      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech", firstLiveMatchRef.current));
-      setPhase("done");
-    } else {
-      setError("We couldn't hear any recitation. Please try again in a quieter place.");
+    engineRef.current = engine;
+    // Dev-only handle for inspecting a live attempt from the console.
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __dugsiEngine?: ReciteEngine }).__dugsiEngine = engine;
+    if (modelAllowed) markWhisperRunning();
+    setPhase("recording");
+    const ok = await engine.start();
+    if (!ok && engineRef.current === engine) {
+      markWhisperFinished();
+      setError("Microphone access was denied. Please allow the mic and try again.");
       setPhase("error");
     }
   };
 
-  // One automatic engine for everyone: record the mic (always — powers "hear
-  // yourself"), mark words live via the browser recogniser, and refine with
-  // on-device Whisper afterwards when the device supports it.
-  const startCapture = async () => {
-    // The recorder is best-effort: if the mic stream fails but the browser
-    // recogniser works, reciting still functions (just without playback).
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const mimeType = pickMimeType();
-      const recorder = new MediaRecorder(stream, { mimeType });
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        chunksRef.current = []; // free the buffered audio
-        if (discardRef.current) {
-          discardRef.current = false;
-          return;
-        }
-        // Keep the recording no matter what happens next — in memory for this
-        // session, and on-device so "hear yourself" works in the history too.
-        // Clip times come from the live tracker (always available); Whisper
-        // overwrites them with precise ones when it runs.
-        if (blob.size > 0) {
-          const url = URL.createObjectURL(blob);
-          setRecording((prev) => {
-            if (prev) URL.revokeObjectURL(prev.url);
-            return { url, words: [] };
-          });
-          void saveRecording(surahNumber, blob, liveClipTimes(liveTimesRef.current), Date.now());
-        }
-        if (whisperCapable() && blob.size > 0 && secondsRef.current <= maxWhisperSeconds()) {
-          void processAccurate(blob);
-        } else {
-          finalizeFromLive();
-        }
-      };
-      recorder.start();
-      recorderRef.current = recorder;
-      recStartRef.current = Date.now();
-      // Silero VAD on the same stream: note long pauses, and (if chosen) stop
-      // by itself after a long silence. Loads from a CDN; silently absent if not.
-      const AUTO_STOP_MS = 6000;
-      void startVad(
-        stream,
-        () => (recStartRef.current > 0 ? (Date.now() - recStartRef.current) / 1000 : 0),
-        {
-          onSilence: (ms, tSec) => {
-            if (ms === HESITATION_MS) {
-              // Only a pause *inside* a recitation counts — not the run-up before
-              // the first word, and not the tail after the last one.
-              if (pointerRef.current > 0 && pointerRef.current < flatWords.length) {
-                const h: Hesitation = { at: tSec - ms / 1000, seconds: ms / 1000, beforeRefIndex: pointerRef.current };
-                hesitationsRef.current = [...hesitationsRef.current, h];
-                setHesitations(hesitationsRef.current);
-              }
-            } else if (ms === AUTO_STOP_MS && autoStopRef.current && pointerRef.current > 0) {
-              stopRef.current();
-            }
-          },
-        },
-        [HESITATION_MS, AUTO_STOP_MS],
-      ).then((handle) => {
-        // If the reciter already stopped while the model was loading, drop it.
-        if (!handle) return;
-        if (recorderRef.current !== recorder || recorder.state === "inactive") handle.stop();
-        else vadRef.current = handle;
-      });
-    } catch {
-      recorderRef.current = null;
-      recStartRef.current = 0;
-      if (!isSpeechSupported()) {
-        setError("Microphone access was denied. Please allow the mic and try again.");
-        setPhase("error");
-        return;
-      }
-    }
-
-    // Live marking via the browser recogniser, in parallel with the recording.
-    if (isSpeechSupported()) {
-      try {
-        const live = makeLiveRecognizer();
-        recognizerRef.current = live;
-        live.start("ar-SA");
-      } catch {
-        /* no live marking — the recording still produces the result */
-      }
-    }
-    setPhase("recording");
-    startTimer();
-  };
-
-  const processAccurate = async (blob: Blob) => {
-    // If we already showed an instant result from the browser recogniser, Whisper
-    // just refines it in the background and must never remove it.
-    const hadLive = liveResultShownRef.current;
-    if (!hadLive) {
-      setPhase("processing");
-      setProgress("Transcribing your recitation…");
-    }
-    try {
-      // Breadcrumb: if the tab is memory-killed during this call, the next app
-      // start sees it and (after repeats) disables Whisper on this device.
-      markWhisperRunning();
-      const result = await transcribeWithWhisper(
-        blob,
-        (p) => {
-          if (p.model) setModelInUse(p.model);
-          if (p.stage === "loading-model" && typeof p.percent === "number") {
-            setModelStatus("loading");
-            setModelPercent(p.percent);
-            if (!hadLive) setProgress(`Downloading the ${p.model?.id === "quran" ? "Quran-tuned" : "recitation"} model… ${p.percent}%`);
-          } else if (p.stage === "transcribing" && !hadLive) {
-            setProgress("Transcribing your recitation…");
-          }
-        },
-        pickWhisperModel(settings.quranModel),
-      );
-      markWhisperFinished();
-      setModelStatus("ready");
-      setModelInUse(result.model);
-      // Upgrade the kept recording with word-level timings so the per-verse "You"
-      // playback can line up with each mistake.
-      if (result.words?.length) {
-        setRecording((prev) => (prev ? { ...prev, words: result.words } : prev));
-      }
-      if (result.text.trim()) {
-        const fb = analyzeRecitation(
-          ayat,
-          result.text,
-          result.words,
-          result.model.id === "quran" ? "on-device Whisper, Quran-tuned" : "on-device Whisper",
-          firstLiveMatchRef.current,
-        );
-        setFeedback(fb);
-        setPhase("done");
-        // Re-save with precise Whisper word times layered over the live-derived
-        // ones, so the history review can replay each mistaken word exactly.
-        // Whisper's timestamps are sanity-checked against the real recording
-        // length first — broken ones would point at the wrong audio.
-        if (blob.size > 0 && result.words?.length) {
-          const precise = sanePreciseTimes(
-            mapRefTimes(
-              fb.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
-              result.words,
-            ),
-            secondsRef.current,
-          );
-          const merged = mergeClipTimes(precise, liveClipTimes(liveTimesRef.current));
-          void saveRecording(surahNumber, blob, merged, Date.now());
-        }
-      } else if (!hadLive) {
-        setError("We couldn't hear any recitation. Please try again in a quieter place.");
-        setPhase("error");
-      }
-    } catch {
-      // Whisper failed (e.g. couldn't load / not enough memory). Fall back to
-      // the live transcript — never leave the reciter with nothing.
-      markWhisperFinished();
-      setModelStatus("error");
-      finalizeFromLive();
-    } finally {
-      setProgress(null);
-    }
-  };
-
-  const start = () => {
-    setError(null);
-    setFeedback(null);
-    setLiveStatuses({});
-    setLivePointer(0);
-    setLiveExtras(0);
-    extrasRef.current = 0;
-    setRevealed(new Set()); // hide the words again for a fresh attempt
-    peeksRef.current = 0;
-    hesitationsRef.current = [];
-    setHesitations([]);
-    pointerRef.current = 0;
-    clearRecording();
-    liveResultShownRef.current = false;
-    loggedRef.current = false;
-    discardRef.current = false;
-    liveTimesRef.current = {};
-    lastStampRef.current = 0;
-    recStartRef.current = 0;
-    firstLiveMatchRef.current = undefined;
-    setLiveClips({});
-    void startCapture();
-  };
-
-  // Resume point (from the account or this device) and a stable progress writer.
-  // Scrolling/active-follow are handled by the virtualised list itself.
+  // Resume point (from the account or this device).
   const [initialTopVerse, setInitialTopVerse] = useState(0);
   useEffect(() => {
     if (startVerse && startVerse > 0) {
@@ -568,50 +229,38 @@ export default function Reciter({
     [trackProgress, userId, surahNumber],
   );
 
-  const stop = () => {
-    stopTimer();
-    vadRef.current?.stop();
-    vadRef.current = null;
-    recognizerRef.current?.cancel(); // stop the live recogniser
-    setLiveClips(liveClipTimes(liveTimesRef.current)); // for per-word "You" playback
-    // Show the instant result from the live transcript right away, so finishing
-    // always shows something even if the refinement is slow or fails.
-    const live = liveRef.current.trim();
-    if (live) {
-      liveResultShownRef.current = true;
-      setFeedback(analyzeRecitation(ayat, live, [], "on-device speech", firstLiveMatchRef.current));
-      setPhase("done");
-    } else {
-      liveResultShownRef.current = false;
-      setPhase("processing");
-    }
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") {
-      recorder.stop(); // → onstop keeps the recording and refines/finalises
-    } else if (!live) {
-      // No recorder and nothing heard live — don't get stuck on a spinner.
-      setError("We couldn't hear any recitation. Please try again in a quieter place.");
-      setPhase("error");
-    }
-  };
+  // Live picture while reciting.
+  const recording = phase === "recording";
+  const follow = snap?.follow ?? null;
+  const livePointer = follow ? liveCursor(follow) : 0;
+  const liveStatuses = useMemo<Record<number, WordStatus>>(() => {
+    if (!follow) return {};
+    const marks = liveMarks(follow);
+    if (settings.liveMistakes) return marks;
+    // Positive-only marking: keep what was said right, hide the rest.
+    const out: Record<number, WordStatus> = {};
+    for (const k in marks) if (marks[k] === "correct" || marks[k] === "close") out[k] = marks[k];
+    return out;
+  }, [follow, settings.liveMistakes]);
 
-  stopRef.current = stop;
-
-  // Results appear above the page: bring them into view when they land.
-  const resultsRef = useRef<HTMLDivElement | null>(null);
+  // Reading position follows the reciter on long surahs.
   useEffect(() => {
-    if (phase === "done" && feedback) {
-      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [phase, feedback]);
+    if (!recording || !trackProgress || !follow) return;
+    const verse = flatWords[Math.min(flatWords.length - 1, follow.cursor)]?.ayah;
+    if (verse) saveFurthest(userId, surahNumber, verse);
+  }, [recording, trackProgress, follow, flatWords, userId, surahNumber]);
 
-  // QA: `?demo=result` renders a canned result (a few slips) without a mic.
+  // QA: `?demo=result` renders a result from a canned recitation (a skipped
+  // word every 7th, a wrong one every 11th) through the real follower.
   useEffect(() => {
     if (typeof window === "undefined" || phase !== "idle") return;
     if (new URLSearchParams(window.location.search).get("demo") !== "result") return;
-    const words = flatWords.map((f) => f.word.uthmani);
-    const spoken = words.filter((_, i) => i % 7 !== 3).map((w, i) => (i % 11 === 5 ? "كتاب" : w));
-    setFeedback(analyzeRecitation(ayat, spoken.join(" "), [], "demo", 0));
+    let s = createFollower(ref);
+    ayat.forEach((a, vi) => {
+      const words = a.words.map((w) => w.uthmani).filter((_, i) => (vi * 3 + i) % 7 !== 3).map((w, i) => ((vi + i) % 11 === 5 ? "كتاب" : w));
+      s = applyPiece(s, { id: vi, t0: vi * 4, t1: vi * 4 + 3.5, text: words.join(" "), source: "browser" });
+    });
+    setFeedback(verdictOf(s, { words: textWords, engine: "demo" }));
     setPhase("done");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ayat]);
@@ -619,104 +268,81 @@ export default function Reciter({
   const reset = () => {
     setFeedback(null);
     setError(null);
-    setLiveText("");
     clearRecording();
     setPhase("idle");
   };
 
-  const statuses: Record<number, WordStatus> | undefined = useMemo(
-    () =>
-      feedback
-        ? Object.fromEntries(feedback.alignment.words.map((w) => [w.refIndex, w.status]))
-        : undefined,
+  const scored = !!feedback && feedback.reliable;
+  const statuses = useMemo<Record<number, WordStatus> | undefined>(
+    () => (feedback ? Object.fromEntries(feedback.alignment.words.map((w) => [w.refIndex, w.status])) : undefined),
     [feedback],
   );
   const maddVerdicts = useMemo(
-    () =>
-      feedback
-        ? Object.fromEntries(feedback.timing.checks.map((c) => [c.refIndex, c.verdict]))
-        : undefined,
+    () => (feedback ? Object.fromEntries(feedback.timing.checks.map((c) => [c.refIndex, c.verdict])) : undefined),
     [feedback],
   );
 
-  // Per-mistake review. "You" replays the mistaken word from the recording:
-  // precise Whisper times when available, otherwise the live tracker's window —
-  // and skipped words play the passage around them (they were never spoken).
+  // Per-mistake review: "You" replays the reciter's own word from the recording
+  // (precise model times), "Correct" plays the qari.
   const mistakes = useMemo<Mistake[]>(() => {
     if (!feedback) return [];
-    const precise = sanePreciseTimes(
-      mapRefTimes(
-        feedback.alignment.words.map((w) => ({ refIndex: w.refIndex, heard: w.heard })),
-        recording?.words ?? [],
-      ),
-      seconds,
-    );
-    const times = mergeClipTimes(precise, liveClips);
-    return feedback.alignment.words
-      .filter((w) => w.status === "wrong" || w.status === "missing")
+    return feedback.mistakes
+      .filter((m) => m.kind === "wrong" || m.kind === "skipped")
       .slice(0, 30)
-      .map((w) => {
-        const fw = flatWords[w.refIndex];
-        const skipped = w.status === "missing";
+      .map((m) => {
+        const fw = flatWords[m.refIndex];
+        const skipped = m.kind === "skipped";
         return {
-          refIndex: w.refIndex,
-          uthmani: fw?.word.uthmani ?? w.expected,
+          refIndex: m.refIndex,
+          uthmani: fw?.word.uthmani ?? "",
           translit: fw?.word.translit,
-          heard: w.heard,
+          heard: m.heard,
           verse: fw?.ayah ?? 1,
           indexInAyah: fw?.indexInAyah,
           skipped,
-          time: clipForMistake(times, w.refIndex, skipped),
+          time: clipForMistake(feedback.clips, m.refIndex, skipped),
         };
       });
-  }, [feedback, recording, liveClips, seconds, flatWords]);
+  }, [feedback, flatWords]);
 
-  // Record one session per finished recitation (signed-in only). The first
-  // finalised result wins; a later Whisper refinement won't double-log.
+  // One saved session per finished, trustworthy recitation — for everyone.
+  // (It used to need an account, so signed-out readers kept no history.)
   useEffect(() => {
-    // Only record sessions we actually heard well enough to score — logging a
-    // low-confidence guess would corrupt streaks, scores and mastery.
-    if (phase === "done" && feedback && feedback.reliable && userId && !loggedRef.current) {
-      loggedRef.current = true;
-      const missed = feedback.alignment.words
-        .filter((w) => w.status === "wrong" || w.status === "missing")
-        .slice(0, 40)
-        .map((w) => ({ i: w.refIndex, h: w.heard }));
-      // Which verses the attempt covered (for verse goals and per-verse mastery).
-      const versesHit = new Set<number>();
-      for (const w of feedback.alignment.words) {
-        const v = flatWords[w.refIndex]?.ayah;
-        if (v) versesHit.add(v);
-      }
-      const verseList = Array.from(versesHit);
-      logSession(userId, {
-        surah: surahNumber,
-        score: feedback.score,
-        correct: countStatus(feedback, "correct"),
-        wrong: countStatus(feedback, "wrong"),
-        missing: countStatus(feedback, "missing"),
-        extra: feedback.alignment.extras.length,
-        seconds: secondsRef.current,
-        verses: verseList.length,
-        from_verse: verseList.length ? Math.min(...verseList) : undefined,
-        to_verse: verseList.length ? Math.max(...verseList) : undefined,
-        peeks: peeksRef.current,
-        hifz,
-        hesitations: hesitationsRef.current.length,
-        mistakes: missed,
-      });
+    if (phase !== "done" || !feedback || !feedback.reliable || loggedRef.current) return;
+    if (feedback.engine === "demo") return;
+    loggedRef.current = true;
+    const missed = feedback.mistakes
+      .filter((m) => m.kind === "wrong" || m.kind === "skipped")
+      .slice(0, 40)
+      .map((m) => ({ i: m.refIndex, h: m.heard, t: m.kind === "wrong" ? ("w" as const) : ("s" as const) }));
+    const versesHit = new Set<number>();
+    for (const w of feedback.alignment.words) {
+      if (w.status === "unclear") continue;
+      const v = flatWords[w.refIndex]?.ayah;
+      if (v) versesHit.add(v);
     }
-  }, [phase, feedback, userId, surahNumber, flatWords, hifz]);
+    const verseList = Array.from(versesHit);
+    const count = (st: WordStatus) => feedback.alignment.words.filter((w) => w.status === st).length;
+    logSession(userId, {
+      surah: surahNumber,
+      score: feedback.score,
+      correct: count("correct"),
+      wrong: count("wrong"),
+      missing: count("missing"),
+      extra: feedback.extras.length,
+      seconds: secondsRef.current,
+      verses: verseList.length,
+      from_verse: verseList.length ? Math.min(...verseList) : undefined,
+      to_verse: verseList.length ? Math.max(...verseList) : undefined,
+      peeks: peeksRef.current,
+      hifz,
+      hesitations: hesitations.length,
+      mistakes: missed,
+    });
+  }, [phase, feedback, userId, surahNumber, flatWords, hifz, hesitations]);
 
-  // Live word-by-word following now runs in both engines (Fast directly, High
-  // accuracy via a concurrent browser recogniser). Keep the live marks visible
-  // through the short "processing" step in accurate mode until the final lands.
-  const liveMode = phase === "recording";
   const showingLive = (phase === "recording" || phase === "processing") && !feedback;
-  // A scored verdict is only shown when we heard clearly enough (confidence gate).
-  const scored = !!feedback && feedback.reliable;
 
-  // Live tally for the HUD while reciting.
   const liveCounts = useMemo(() => {
     const c = { correct: 0, missing: 0, wrong: 0 };
     for (const k in liveStatuses) {
@@ -728,12 +354,10 @@ export default function Reciter({
     return c;
   }, [liveStatuses]);
 
-  // Memorisation peeking: open the next hidden word (or its whole verse) from
-  // where the reciter is. Counted per attempt, so the summary can be honest
-  // about how much help was used.
+  // Memorisation peeking from where the reciter is.
   const nextHidden = (): number | null => {
     if (hifz <= 0) return null;
-    const from = phase === "recording" ? livePointer : 0;
+    const from = recording ? livePointer : 0;
     const visible = showingLive ? liveStatuses : scored ? statuses : undefined;
     for (let idx = from; idx < flatWords.length; idx++) {
       const st = visible?.[idx];
@@ -762,8 +386,6 @@ export default function Reciter({
     });
   };
 
-  // Memoise the surah so the (frequent) live-transcript text updates don't
-  // re-invoke it — it only rebuilds when statuses / cursor / target actually change.
   const surahEl = useMemo(
     () => (
       <SurahView
@@ -771,7 +393,7 @@ export default function Reciter({
         surahNumber={surahNumber}
         statuses={showingLive ? liveStatuses : scored ? statuses : undefined}
         maddVerdicts={scored ? maddVerdicts : undefined}
-        activeIndex={liveMode ? livePointer : undefined}
+        activeIndex={recording ? livePointer : undefined}
         showTajweed={!showingLive && !scored && settings.showTajweed}
         maskLevel={hifz}
         initialTopVerse={initialTopVerse}
@@ -795,7 +417,7 @@ export default function Reciter({
       liveStatuses,
       statuses,
       maddVerdicts,
-      liveMode,
+      recording,
       livePointer,
       scored,
       hifz,
@@ -804,13 +426,18 @@ export default function Reciter({
     ],
   );
 
+  // Results appear above the page: bring them into view when they land.
+  const resultsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (phase === "done" && feedback) resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [phase, feedback]);
+
   if (phase === "unsupported") {
     return (
       <div>
         <div className="rounded-2xl border border-amber-400/30 bg-amber-400/15 p-4 text-sm text-amber-700">
-          Your browser doesn&apos;t support on-device recitation yet. Open Dugsi in{" "}
-          <strong>Google Chrome</strong> (or Safari on iPhone) to use voice feedback — you can still
-          read the surah and tajweed guide below.
+          Your browser can&apos;t use the microphone here. Open Dugsi in <strong>Chrome</strong> or <strong>Safari</strong>{" "}
+          to recite — you can still read the surah below.
         </div>
         <div className="mt-4">
           <SurahView ayat={ayat} surahNumber={surahNumber} showTajweed />
@@ -819,11 +446,11 @@ export default function Reciter({
     );
   }
 
+  const seconds = Math.floor(snap?.seconds ?? 0);
+
   return (
     <div className="space-y-4">
-      {error && (
-        <div className="animate-in rounded-2xl border-2 border-red-500/30 bg-red-500/10 p-4 text-base font-semibold text-red-700">{error}</div>
-      )}
+      {error && <div className="animate-in rounded-2xl border-2 border-red-500/30 bg-red-500/10 p-4 text-base font-semibold text-red-700">{error}</div>}
 
       {feedback && phase === "done" && (
         <div ref={resultsRef} className="scroll-mt-20">
@@ -832,7 +459,7 @@ export default function Reciter({
             onReset={reset}
             mistakes={mistakes}
             surahNumber={surahNumber}
-            recordingUrl={recording?.url}
+            recordingUrl={recordingUrl ?? undefined}
             hesitations={hesitations.map((h) => ({
               ...h,
               word: flatWords[h.beforeRefIndex]?.word.uthmani ?? "",
@@ -848,27 +475,19 @@ export default function Reciter({
       {/* Control dock — pinned above the tab bar while the page scrolls */}
       <div className="sticky bottom-[5.6rem] z-30">
         <div className="card p-3">
-          {phase === "recording" && (
+          {recording && (
             <div className="mb-2 px-1 text-center">
               <p className="ayah truncate text-2xl text-ink/80" dir="rtl">
-                {liveText || "…"}
+                {snap?.heard || "…"}
               </p>
-              <LiveTally
-                correct={liveCounts.correct}
-                missing={liveCounts.missing}
-                wrong={liveCounts.wrong}
-                extra={liveExtras}
-                detecting={settings.liveMistakes}
-              />
+              <LiveTally correct={liveCounts.correct} missing={liveCounts.missing} wrong={liveCounts.wrong} extra={0} detecting={settings.liveMistakes} />
             </div>
           )}
           <div className="flex items-center justify-between gap-3">
-            {/* Hide words (memorise) */}
             <HifzToggle level={hifz} onSelect={setHifz} onPeekWord={peekWord} onPeekVerse={peekVerse} />
 
-            {/* Mic */}
-            {phase === "recording" ? (
-              <button onClick={stop} className="relative grid h-20 w-20 shrink-0 place-items-center" aria-label="Stop reciting">
+            {recording ? (
+              <button onClick={() => void stop()} className="relative grid h-20 w-20 shrink-0 place-items-center" aria-label="Stop reciting">
                 <span className="absolute inset-0 animate-ring rounded-full bg-red-500/40" />
                 <span className="absolute inset-0 rounded-full bg-red-500/15" />
                 <span className="relative grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-red-600 text-white shadow-soft transition active:scale-95">
@@ -877,7 +496,7 @@ export default function Reciter({
               </button>
             ) : (
               <button
-                onClick={start}
+                onClick={() => void start()}
                 disabled={phase === "processing"}
                 className="group relative grid h-20 w-20 shrink-0 place-items-center disabled:opacity-60"
                 aria-label="Start reciting"
@@ -893,17 +512,14 @@ export default function Reciter({
               </button>
             )}
 
-            {/* Status */}
             <div className="min-w-0 flex-1 text-right text-sm font-bold text-ink/70">
-              {phase === "recording" ? (
+              {recording ? (
                 <span className="inline-flex items-center gap-1.5 text-red-600">
                   <span className="rec-dot h-2.5 w-2.5 rounded-full bg-red-500" />
                   {formatTime(seconds)}
                 </span>
               ) : phase === "processing" ? (
                 <span>{progress ?? "Checking…"}</span>
-              ) : modelStatus === "loading" ? (
-                <span>Preparing the checker… {modelPercent}%</span>
               ) : phase === "done" || phase === "error" ? (
                 <span>Tap the mic to recite again</span>
               ) : (
@@ -912,10 +528,9 @@ export default function Reciter({
             </div>
           </div>
           <EngineStatus
-            modelStatus={modelStatus}
-            modelPercent={modelPercent}
-            model={modelInUse ?? plannedModel}
-            engineTick={engineTick}
+            model={model}
+            allowed={modelAllowed}
+            disabledByCrash={whisperDisabledByCrashes()}
             onReEnable={() => {
               reEnableWhisper();
               setEngineTick((t) => t + 1);
@@ -927,46 +542,43 @@ export default function Reciter({
   );
 }
 
-/** No modes to choose any more — the best available engine is picked
- *  automatically. This line just tells the reciter what their device does. */
+/** What is listening, in one honest line. */
 function EngineStatus({
-  modelStatus,
-  modelPercent,
   model,
-  engineTick,
+  allowed,
+  disabledByCrash,
   onReEnable,
 }: {
-  modelStatus: ModelStatus;
-  modelPercent: number;
-  model: WhisperModel | null;
-  engineTick: number;
+  model: { status: string; percent: number; device: string | null };
+  allowed: boolean;
+  disabledByCrash: boolean;
   onReEnable: () => void;
 }) {
-  // engineTick is read so the line re-evaluates after a manual re-enable.
-  void engineTick;
-  const [caps, setCaps] = useState({ capable: false, disabled: false });
-  useEffect(() => setCaps({ capable: whisperCapable(), disabled: whisperDisabledByCrashes() }), [engineTick]);
-  const { capable, disabled } = caps;
-  return (
-    <p className="mt-2 truncate text-center text-xs font-semibold text-ink/40">
-      {modelStatus === "loading" ? (
-        `Preparing the precise on device check… ${modelPercent}%`
-      ) : capable ? (
-        model?.id === "quran"
-          ? "Live word marking (via your browser), plus a precise Quran-tuned check that runs on your device."
-          : "Live word marking (via your browser), plus a precise check that runs on your device."
-      ) : disabled ? (
-        <>
-          Live word marking via your browser. The on device check is off after a crash here.{" "}
-          <button onClick={onReEnable} className="font-semibold text-emerald-bright underline underline-offset-2">
-            Try it again
-          </button>
-        </>
-      ) : (
-        "Live word marking via your browser. Free, and your recording stays on your device."
-      )}
-    </p>
-  );
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  if (!hydrated) return <p className="mt-2 h-4" />;
+  let text: React.ReactNode;
+  if (disabledByCrash) {
+    text = (
+      <>
+        Listening via your browser — the Quran model is off after a crash on this device.{" "}
+        <button onClick={onReEnable} className="font-semibold text-emerald-bright underline underline-offset-2">
+          Try it again
+        </button>
+      </>
+    );
+  } else if (!allowed) {
+    text = "Listening via your browser (the Quran model is switched off in Options).";
+  } else if (model.status === "ready") {
+    text = `Listening with Tarteel's Quran model on your device${model.device === "webgpu" ? " (graphics chip)" : ""} — your voice stays here.`;
+  } else if (model.status === "loading") {
+    text = `Getting the Quran listening model ready… ${model.percent}% (about ${ASR_MODEL.approxMb} MB, only once)`;
+  } else if (model.status === "failed") {
+    text = "The Quran model could not load here, so your browser's speech service listens instead.";
+  } else {
+    text = "Tap the mic to start.";
+  }
+  return <p className="mt-2 text-center text-xs font-semibold text-ink/45">{text}</p>;
 }
 
 /** The running tally shown under the live transcript while reciting. */
@@ -1044,7 +656,7 @@ function ResultsPanel({
   recordingUrl,
   hesitations,
 }: {
-  feedback: RecitationFeedback;
+  feedback: Verdict;
   onReset: () => void;
   mistakes: Mistake[];
   surahNumber: number;
@@ -1052,6 +664,7 @@ function ResultsPanel({
   hesitations: (Hesitation & { word: string; verse: number })[];
 }) {
   const rushed = feedback.timing.checks.filter((c) => c.verdict === "rushed");
+  const count = (st: WordStatus) => feedback.alignment.words.filter((w) => w.status === st).length;
 
   // Confidence gate: if we could not hear clearly, never show a score or red
   // marks — that would tell a correct reciter she failed. Show an honest state.
@@ -1060,8 +673,8 @@ function ResultsPanel({
       <div className="animate-in rounded-3xl border-2 border-amber-400/40 bg-amber-400/15 p-5 shadow-soft">
         <h2 className="text-2xl font-extrabold text-ink">We could not hear you clearly</h2>
         <p className="mt-2 text-base font-semibold text-ink/70">
-          To avoid marking your recitation wrong by mistake, we are not scoring this attempt. Try
-          again a little closer to the microphone, in a quieter place, and recite at a steady pace.
+          To avoid marking your recitation wrong by mistake, we are not scoring this attempt. Try again a little closer to
+          the microphone, in a quieter place, and recite at a steady pace.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button onClick={onReset} className="btn-primary">
@@ -1096,37 +709,39 @@ function ResultsPanel({
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <Stat label="Correct words" value={countStatus(feedback, "correct")} tone="good" />
-        <Stat label="Needs work" value={countStatus(feedback, "wrong")} tone="bad" />
-        <Stat label="Skipped" value={countStatus(feedback, "missing")} tone="warn" />
-        <Stat label="Added words" value={feedback.alignment.extras.length} tone="warn" />
+        <Stat label="Correct words" value={count("correct")} tone="good" />
+        <Stat label="Needs work" value={count("wrong")} tone="bad" />
+        <Stat label="Skipped" value={count("missing")} tone="warn" />
+        <Stat label="Not heard" value={feedback.unclear} tone="muted" />
       </div>
 
-      {feedback.alignment.extras.length > 0 && (
+      {feedback.unclear > 0 && (
+        <p className="mt-3 rounded-xl bg-surface-2 p-3 text-sm font-semibold text-ink/60">
+          The faded words on the page are ones we could not hear clearly — noise, a quiet stretch, or the model missing
+          them. They are not counted against you. Recite them again if you like.
+        </p>
+      )}
+
+      {feedback.extras.length > 0 && (
         <p className="mt-2 text-sm font-semibold text-ink/50">
           Words heard that are not in the text:{" "}
           <span className="font-arabic text-sm text-ink/70" dir="rtl">
-            {feedback.alignment.extras.slice(0, 12).join(" · ")}
+            {feedback.extras.slice(0, 12).join(" · ")}
           </span>
         </p>
       )}
 
       {rushed.length > 0 && (
         <div className="mt-4 rounded-xl bg-amber-400/15 p-3 text-base font-semibold text-amber-800">
-          <strong>Tajweed tip:</strong> {rushed.length} elongation{rushed.length > 1 ? "s" : ""}{" "}
-          looked rushed (marked ⏱ below). Hold the madd letters longer — especially the 6-count madd
-          in <span className="font-arabic">ٱلضَّآلِّينَ</span>.
-          <span className="block text-xs text-amber-700/80">
-            Timing estimate from word-level timestamps — treat it as a hint.
-          </span>
+          <strong>Tajweed tip:</strong> {rushed.length} long madd{rushed.length > 1 ? "s" : ""} looked much too short
+          (marked ⏱). The six-count madd, as in <span className="font-arabic">ٱلضَّآلِّينَ</span>, is held long.
+          <span className="block text-xs text-amber-700/80">A timing estimate from word timestamps — treat it as a hint.</span>
         </div>
       )}
 
       {hesitations.length > 0 && (
         <div className="mt-4 rounded-xl border-2 border-ink/10 bg-surface p-3 text-sm">
-          <p className="text-xs font-extrabold uppercase tracking-wide text-ink/50">
-            Hesitations ({hesitations.length})
-          </p>
+          <p className="text-xs font-extrabold uppercase tracking-wide text-ink/50">Hesitations ({hesitations.length})</p>
           <p className="mt-1 text-sm font-semibold text-ink/55">
             You paused for a while before these words — the places memory is still thin.
           </p>
@@ -1148,15 +763,13 @@ function ResultsPanel({
       <MistakeReview mistakes={mistakes} surahNumber={surahNumber} recordingUrl={recordingUrl} />
 
       <details className="mt-4 text-base">
-        <summary className="cursor-pointer font-bold text-ink/55 transition hover:text-ink/80">
-          What we heard (transcript)
-        </summary>
+        <summary className="cursor-pointer font-bold text-ink/55 transition hover:text-ink/80">What we heard (transcript)</summary>
         <p className="ayah mt-2 text-xl" dir="rtl">
           {feedback.transcript}
         </p>
         <p className="mt-1 text-xs text-ink/40">
-          Recognised free ({feedback.engine}). Recognition can misread classical Arabic — if a word
-          is marked wrong but you said it right, it may be the recogniser, not you.
+          Heard by {feedback.engine}. Dugsi checks the words, not the vowel marks. Recognition can still slip — if a word
+          is marked wrong but you said it right, it may be the recogniser, not you. Tap “You” to hear yourself.
         </p>
       </details>
     </div>
@@ -1191,8 +804,8 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone: "good" | "bad" | "warn" }) {
-  const color = tone === "good" ? "var(--good)" : tone === "bad" ? "var(--bad)" : "var(--warn)";
+function Stat({ label, value, tone }: { label: string; value: number; tone: "good" | "bad" | "warn" | "muted" }) {
+  const color = tone === "good" ? "var(--good)" : tone === "bad" ? "var(--bad)" : tone === "warn" ? "var(--warn)" : "var(--muted)";
   return (
     <div className="rounded-2xl border-2 border-ink/10 bg-surface-2 p-3 text-center">
       <div className="text-3xl font-extrabold" style={{ color }}>
@@ -1203,9 +816,6 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: "goo
   );
 }
 
-function countStatus(feedback: RecitationFeedback, status: WordStatus): number {
-  return feedback.alignment.words.filter((w) => w.status === status).length;
-}
 
 function formatTime(s: number): string {
   const mm = Math.floor(s / 60);
