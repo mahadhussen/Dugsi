@@ -16,6 +16,64 @@
    egen stavning. Alternativ: (a) som nu, (b) inte visa alls (räkna som rätt),
    (c) räkna som fel (anklagar rätt läsning när modellen stavar fel). Följd av
    (a): korta ord som قل/كل blir också "nästan rätt" (34 ordformer). Mahads beslut.
+4. **Får ett hört ord på högst två bokstäver kallas fel?** ("من", "لم", "لا").
+   Uppmätt: av 20 falska fel på 40 färska rätta läsningar är 10 sådana, och 1 av
+   2 hos de försämrade mästarna. Inget av de 48 riktiga felen som fångades i
+   felkorpusen var så kort, men den korpusen saknar byten mellan korta ord, och
+   "من" för "ما" eller "لم" för "لن" är klassiska elevfel. Alternativ: (a) som
+   nu, korta ord kan bli fel, (b) korta ord blir "kunde inte höra" (halverar de
+   falska felen och missar elevens korta byten). Mahads beslut.
+5. **Ska poängen spegla ohörda ord?** I dag räknas de inte: Al-Fatiha med 6 av
+   29 ord mumlade till icke-ord får 90, samma som perfekt (rutan "Not heard 6"
+   syns). Alternativ: (a) som nu, (b) ohörda ord drar ned poängen (en mumlare
+   får lägre poäng, men också den som läser i brus eller med dålig mikrofon).
+   Mahads beslut.
+
+## 2026-10-25 — Naadirs tredje NOT CLEAN: färsk data jag inte sett
+
+Naadir byggde ny data som reglerna inte trimmats mot: 18 försämrade
+mästarläsningar (eko, brus, rum, 32 kbit/s), 40 Majed-läsningar på 20 andra
+suror, 10 ord för ord, 17 ord för ord med en vers överhoppad, 28 felläsningar
+av nya slag. Ett blockerande fel: ord som modellen tappar ur hörd röst döms
+överhoppade (Qahtani i rum, Sudais i brus, Qahtani med eko, Alafasy på 32 kbit/s).
+Whisper sprider sina ordtider över ett tappat ord, så det syns aldrig som en
+lucka i tiden. Datan ligger nu i `test/fixtures/recite/corpus/` (fem nya mappar)
+med tak i `test/corpus.verdict.test.ts`.
+
+Tre nya belägg för ohörd röst (`runVerdict` i verdict.ts), var och en med test,
+motprov och sabotageprov:
+
+- **Läsarens egen takt:** sekunder röst per textbokstav, medianen över bitarna.
+  En bit som håller mer röst än dess ord tar (minst halva det saknade ordens
+  tid) kan ha hållit dem. Det fångar eko, rum och dålig linje.
+- **Ett kort ord (högst tre bokstäver) som saknas intill ett otydligt hört ord:**
+  modellen har dragit ihop dem ("معقد" för "مَا قَدَّمَتْ"). Bara ett kort ord:
+  ett förvanskat ord rymmer inte ett långt ord eller en vers. Det bredare
+  kravet (otydlig granne vid alla glapp) gav recall 50 → 21 och förkastades.
+- **Ord på högst två bokstäver som saknas inne i en bit:** de smälter ihop med
+  nästa i tal ("fil-arḍ").
+
+| Mått (Naadirs kommandon) | `2da2aaf` | `3b3abd5` | nu |
+|---|---|---|---|
+| 18 försämrade mästare: falska fel / överhopp | 3 / 10 | 2 / 11 | **2 / 0** |
+| 40 färska Majed: falska fel / överhopp | 38 / 33 | 20 / 17 | **20 / 0** |
+| 10 färska ord för ord: falska | 0 | 0 | **0** |
+| 17 färska ord för ord med överhopp: fångade av 73 / falska intill | 38 / 6 | 50 / 6 | **50 / 6** |
+| 28 färska felläsningar: fångade / falska på andra ord | 5 / 7 | 10 / 4 | **12 / 3** |
+| ord för ord med brus: falska överhopp / fångade av 122 | 11 / 27 | 0 / 98 | **0 / 98** |
+| gamla korpusarna: mästare, Majed falska överhopp | 0, 26 | 0, 6 | **0, 0** |
+| gamla överhoppskorpusen: fångade / falska utanför | 117 / 58 | 114 / 16 | **114 / 9** |
+
+Ett test ändrat, med skäl: i tts-fatiha-wrong-word sade rösten "رب الناس" och
+modellen skrev "ربياس". Testet godtog förut "överhoppat" för 1:2:4, men det var
+en falsk dom, eftersom biten håller rösten för det utbytta ordet. Nu kräver
+testet "fel" eller "kunde inte höra", och aldrig "överhoppat".
+
+Artikelregeln gäller nu också efter و، ف، ب، ك، ل (وال، فال، بال، كال، لل),
+med minst tre bokstäver efter. "والقمر" för "والشمس" blir fel, men "والاد" för
+"والأرض" förblir modellens stavning. "Nästan rätt" för sådana byten: وال 19 % → 1,2 %,
+بال 20 % → 1,0 %, فال 25 % → 2,5 %, لل 16 % → 3,1 % (Naadirs mål var 2 %. Kvar är
+närbesläktade former som للذكر/للذكرين). Inga nya falska fel.
 
 ## 2026-10-25 — Naadirs andra NOT CLEAN: riktig modellutdata
 

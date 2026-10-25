@@ -345,11 +345,20 @@ export function statusOfPair(heard: string, expected: string, sim: number): Word
   // catching part of it, not another word.
   if (st === "wrong") return isQuranWord(heard) && 2 * heard.length > expected.length ? "wrong" : "unclear";
   if (st !== "close") return st;
-  // Alike on paper only through the article they share: "ٱلْوَٰحِدُ" for
-  // "ٱلصَّمَدُ" is another word, not a slip.
-  if (heard.length > 3 && expected.length > 3 && heard.startsWith("ال") && expected.startsWith("ال") && isQuranWord(heard) && wordSim(heard.slice(2), expected.slice(2)) < CLOSE) return "wrong";
+  // Alike on paper only through the article they share (with "و", "ف", "ب"
+  // or "ل" before it): "ٱلْوَٰحِدُ" for "ٱلصَّمَدُ", "وَٱلْقَمَرِ" for
+  // "وَٱلشَّمْسِ" are other words, not slips.
+  // After a particle and the article, three letters or more in both: two
+  // ("والاد" for "وَٱلْأَرْضِ") are too few to tell another word from the
+  // model's spelling.
+  const rest = (a: string) => (a === "ال" ? 2 : 3);
+  const pre = ARTICLES.find((a) => heard.startsWith(a) && expected.startsWith(a) && heard.length >= a.length + rest(a) && expected.length >= a.length + rest(a));
+  if (pre && isQuranWord(heard) && wordSim(heard.slice(pre.length), expected.slice(pre.length)) < CLOSE) return "wrong";
   return st;
 }
+
+/** The article and the particles that join it, longest first. */
+const ARTICLES = ["وال", "فال", "بال", "كال", "لل", "ال"];
 
 /** Best status of every word some piece covered, plus what was heard for it. */
 export interface Mark {

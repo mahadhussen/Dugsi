@@ -11,7 +11,7 @@ import { evaluateMadd, type TimedWord, type TimingReport } from "@/lib/tajweed/t
 import type { TimeRange } from "@/lib/review";
 import type { Word } from "@/lib/quran/types";
 import { alignWindow } from "./align";
-import { CLOSE } from "./phonetic";
+import { CLOSE, CORRECT } from "./phonetic";
 import { isQuranWord } from "./lexicon";
 import { bestMarks, voicedSeconds, type FollowState, type PieceRecord } from "./follower";
 
@@ -358,6 +358,39 @@ function edgeSlots(
 }
 
 /** Is a run of unsaid words [a, b) skipped, or did we just not hear it? */
+/** Letters of the text words a piece was placed on. */
+function placedLetters(state: FollowState, p: PieceRecord): number {
+  let n = 0;
+  for (const q of p.align?.pairs ?? []) for (let k = q.ref; k < q.refEnd; k++) n += state.ref.norm[k].length;
+  return n;
+}
+function runLetters(state: FollowState, a: number, b: number): number {
+  let n = 0;
+  for (let k = a; k < b; k++) n += state.ref.norm[k].length;
+  return n;
+}
+/** The reader's own pace: median seconds of voice per text letter over the
+ *  pieces placed (at least three), or null. */
+function readerPace(state: FollowState): number | null {
+  const rates: number[] = [];
+  for (const p of state.pieces) {
+    if (p.kind !== "aligned" || !p.input.voiced) continue;
+    const letters = placedLetters(state, p);
+    const v = voicedSeconds(p.input);
+    if (letters >= 4 && v > 0) rates.push(v / letters);
+  }
+  if (rates.length < 3) return null;
+  rates.sort((x, y) => x - y);
+  return rates[Math.floor(rates.length / 2)];
+}
+/** Voice in a piece beyond what the words placed in it take at the reader's pace. */
+const excessVoice = (state: FollowState, p: PieceRecord, pace: number) => Math.max(0, voicedSeconds(p.input) - pace * placedLetters(state, p));
+/** How alike this piece heard text word k (0 if it did not). */
+function pairSim(p: PieceRecord, k: number): number {
+  const q = p.align?.pairs.find((x) => k >= x.ref && k < x.refEnd);
+  return q ? q.sim : 0;
+}
+
 function runVerdict(
   state: FollowState,
   best: ReturnType<typeof bestMarks>,
@@ -371,6 +404,19 @@ function runVerdict(
   const pb = state.pieces[before.piece];
   const pa = state.pieces[after.piece];
 
+  // Voice the words do not account for. Whisper spreads its word times over
+  // a word it left out, so a dropped word rarely shows as a gap in time; it
+  // shows as a piece that holds more voice than its words take at the
+  // reader's own pace (an echo, a noisy room, a low-quality line).
+  const pace = readerPace(state);
+  const runTakes = pace ? pace * runLetters(state, a, b) : 0;
+  const tooLong = (...ps: PieceRecord[]) => !!pace && ps.reduce((t, p) => t + excessVoice(state, p, pace), 0) >= 0.5 * runTakes;
+  // One short word missing next to a word heard unclearly: the model may have
+  // run the two together ("معقد" for "مَا قَدَّمَتْ", "ايهانا" for "إِنِّى وَهَنَ").
+  // A garbled word can hide a short word, not a long one and not a verse.
+  const blurred = (pb: PieceRecord, pa: PieceRecord) =>
+    b - a === 1 && state.ref.norm[a].length <= 3 && (pairSim(pb, a - 1) < CORRECT || pairSim(pa, b) < CORRECT);
+
   if (pb === pa) {
     // Inside one piece: believe a skip unless there was voice in between.
     const t1 = timeOf(pb, a - 1);
@@ -378,8 +424,14 @@ function runVerdict(
     // No word times (the browser's recogniser): it drops words inside a
     // phrase too, so a gap proves nothing.
     if (!t1 || !t2) return "unclear";
-    return overlap(unexplained.get(pb) ?? [], t1.end, t2.start) >= UNEXPLAINED_S ? "unclear" : "missing";
+    if (overlap(unexplained.get(pb) ?? [], t1.end, t2.start) >= UNEXPLAINED_S) return "unclear";
+    if (blurred(pb, pb) || tooLong(pb)) return "unclear";
+    // Short words join the next in speech ("فِي ٱلْأَرْضِ" is "fil-arḍ"), and
+    // the model writes them as one.
+    if (Array.from({ length: b - a }, (_, j) => state.ref.norm[a + j]).every((w) => w.length <= 2)) return "unclear";
+    return "missing";
   }
+  if (blurred(pb, pa) || tooLong(pb, pa)) return "unclear";
 
   // Between pieces. Out of time order (a re-read) is too ambiguous to accuse,
   // and so is a gap at a cut the length cap made (the word may be in two halves).

@@ -9,6 +9,14 @@
 //   skip     24 readings with one verse left out
 //   wrong    50 readings with one word said as another
 //
+// and a second set General Naadir made later, which the rules were not tuned on:
+//
+//   masters-degraded   18 of the masters with echo, noise, a room, 32 kbit/s
+//   correct-more       40 right readings (Majed) of 20 other surahs
+//   word-by-word       10 right readings, one word per piece
+//   skip-word-by-word  17 word-by-word readings with one verse left out
+//   wrong-more         28 misreadings of other kinds (inflection, mutashabih…)
+//
 // The ceilings are what the follower does today; a change that raises one
 // must say why. "Fel dom är värre än ingen dom": the accusation counts may
 // only go down.
@@ -47,13 +55,13 @@ test("17 master readings: no word skipped, one known word wrong", async () => {
   assert.deepEqual(list(rows, "wrong"), ["qahtani-fast 2:2"]);
 });
 
-test("54 right readings by another voice: at most 7 words wrong, 6 skipped", async () => {
+test("54 right readings by another voice: at most 7 words wrong, none skipped", async () => {
   const rows = await judged("correct");
   assert.equal(rows.length, 54);
   const wrong = list(rows, "wrong");
   const missing = list(rows, "missing");
   assert.ok(wrong.length <= 7, `wrong ${wrong.length}: ${wrong.join(", ")}`);
-  assert.ok(missing.length <= 6, `skipped ${missing.length}: ${missing.join(", ")}`);
+  assert.deepEqual(missing, []);
 });
 
 test("24 readings with a verse left out: the verse is skipped, little else is accused", async () => {
@@ -74,7 +82,7 @@ test("24 readings with a verse left out: the verse is skipped, little else is ac
     }
   }
   assert.ok(caught >= 114, `skipped words caught ${caught}/${inVerse}`);
-  assert.ok(elsewhere.length <= 16, `accused elsewhere ${elsewhere.length}: ${elsewhere.join(", ")}`);
+  assert.ok(elsewhere.length <= 9, `accused elsewhere ${elsewhere.length}: ${elsewhere.join(", ")}`);
 });
 
 test("50 readings with one word changed: 48 caught as wrong, little else accused", async () => {
@@ -91,5 +99,67 @@ test("50 readings with one word changed: 48 caught as wrong, little else accused
     }
   }
   assert.ok(caught >= 48, `caught ${caught}/50`);
-  assert.ok(elsewhere.length <= 2, `accused elsewhere ${elsewhere.length}: ${elsewhere.join(", ")}`);
+  assert.ok(elsewhere.length <= 1, `accused elsewhere ${elsewhere.length}: ${elsewhere.join(", ")}`);
+});
+
+// ── The held-out set ──────────────────────────────────────────────────────
+
+const tally = (rows: Awaited<ReturnType<typeof judged>>) => ({ wrong: list(rows, "wrong"), missing: list(rows, "missing") });
+
+test("18 degraded master readings (echo, noise, room, low bit rate): nothing skipped, two known words wrong", async () => {
+  const rows = await judged("masters-degraded");
+  assert.equal(rows.length, 18);
+  const { wrong, missing } = tally(rows);
+  assert.deepEqual(missing, []);
+  assert.ok(wrong.length <= 2, `wrong ${wrong.join(", ")}`);
+});
+
+test("40 more right readings: at most 20 words wrong, none skipped", async () => {
+  const rows = await judged("correct-more");
+  assert.equal(rows.length, 40);
+  const { wrong, missing } = tally(rows);
+  assert.deepEqual(missing, []);
+  // Mostly a short word the model heard as another short word ("من", "لم"):
+  // see NEEDS-DECISION 4 in WORKLOG.
+  assert.ok(wrong.length <= 20, `wrong ${wrong.length}: ${wrong.join(", ")}`);
+});
+
+test("10 right readings word by word: nothing accused", async () => {
+  const rows = await judged("word-by-word");
+  assert.equal(rows.length, 10);
+  assert.deepEqual(tally(rows), { wrong: [], missing: [] });
+});
+
+test("17 word-by-word readings with a verse left out: 50 of its 73 words caught, at most 6 accused beside it", async () => {
+  const rows = await judged("skip-word-by-word");
+  assert.equal(rows.length, 17);
+  let caught = 0;
+  const elsewhere: string[] = [];
+  for (const r of rows) {
+    const k = (r.fx.expect as { skipVerse: number }).skipVerse;
+    for (const w of r.words) {
+      const l = r.loc(w.refIndex);
+      if (Number(l.split(":")[0]) === k) caught += w.status === "missing" ? 1 : 0;
+      else if (w.status === "wrong" || w.status === "missing") elsewhere.push(`${r.fx.name} ${l}=${w.status}`);
+    }
+  }
+  assert.ok(caught >= 50, `caught ${caught}/73`);
+  assert.ok(elsewhere.length <= 6, `accused elsewhere ${elsewhere.length}: ${elsewhere.join(", ")}`);
+});
+
+test("28 more misreadings: at least 12 caught, at most 3 other words accused", async () => {
+  const rows = await judged("wrong-more");
+  assert.equal(rows.length, 28);
+  let caught = 0;
+  const elsewhere: string[] = [];
+  for (const r of rows) {
+    const at = (r.fx.expect as { wrongAt: string }).wrongAt;
+    for (const w of r.words) {
+      const l = r.loc(w.refIndex);
+      if (l === at) caught += w.status === "wrong" ? 1 : 0;
+      else if (w.status === "wrong" || w.status === "missing") elsewhere.push(`${r.fx.name} ${l}=${w.status}`);
+    }
+  }
+  assert.ok(caught >= 12, `caught ${caught}/28`);
+  assert.ok(elsewhere.length <= 3, `accused elsewhere ${elsewhere.length}: ${elsewhere.join(", ")}`);
 });

@@ -81,10 +81,15 @@ test("tts-fatiha-skip-word: exactly the left-out word", async () => {
   assert.deepEqual(where("missing"), ["2:2"]);
 });
 
-test("tts-fatiha-wrong-word: the replaced word is not passed as correct", async () => {
+test("tts-fatiha-wrong-word: the replaced word is never passed, and never called skipped", async () => {
+  // The voice said "رب الناس"; the model wrote "ربياس", the other word run
+  // into its neighbour. Something was said where ٱلْعَٰلَمِينَ belongs (the
+  // piece holds more voice than "رب" takes), so "skipped" would be a false
+  // verdict; what was said was not made out, so it is not heard clearly.
   const { verdict, flat } = await run("tts-fatiha-wrong-word");
   const w = verdict.alignment.words.find((x) => flat[x.refIndex].ayah === 2 && flat[x.refIndex].indexInAyah === 3);
-  assert.ok(w && (w.status === "wrong" || w.status === "missing"), `2:4 was ${w?.status}`);
+  assert.ok(w && (w.status === "wrong" || w.status === "unclear"), `2:4 was ${w?.status}`);
+  assert.equal(verdict.mistakes.filter((m) => m.kind === "skipped").length, 0);
 });
 
 test("tts-fatiha-repeat: reading a verse twice is no mistake and adds no words", async () => {
@@ -211,6 +216,11 @@ test("wrong means another word of the Quran was heard; letters that are no word 
   assert.equal(st("العمسان", "ٱلْإِنسَٰنَ"), "close"); // the model's spelling
   assert.equal(st("لت", "لَيْلَةِ"), "unclear"); // a scrap of the word
   assert.equal(st("سمت", "ٱلصَّمَدُ"), "close");
+  // The article after a particle: another word, not a slip...
+  assert.equal(st("والقمر", "وَٱلشَّمْسِ"), "wrong");
+  assert.equal(st("والعصر", "وَٱلْفَجْرِ"), "wrong");
+  // ...but two letters after it are too few to tell from the model's spelling.
+  assert.equal(st("والاد", "وَٱلْأَرْضِ"), "close");
 });
 
 test("a word the recogniser split in two still lines up", () => {
@@ -466,6 +476,70 @@ test("carrying on at the reciter's place needs a reciter who has begun", async (
   const piece: PieceInput = { id: 1, t0: 5, t1: 7, text: "اله الوحد", source: "browser" };
   assert.equal(placeInput(state, piece, 4, true).align?.start, 4); // begun: verse 2, its word changed
   assert.notEqual(placeInput(state, piece, 4, false).align?.start, 4); // first piece: not forced there
+});
+
+/** One piece per verse, the way the model hands them over, but with word
+ *  `drop` (verse:word) left out of what it wrote. `voiceKept`: the voice of
+ *  the dropped word is still in the piece (the model lost it, Whisper spread
+ *  its word times over the rest); otherwise the word was not said at all. */
+function versePieces(ayat: Ayah[], drop: [number, number], voiceKept: boolean, heardAs: Record<string, string> = {}): PieceInput[] {
+  const out: PieceInput[] = [];
+  const len = (w: string) => 0.12 * spoken(w).length; // seconds: about a letter's worth each
+  let t = 0;
+  ayat.forEach((a, id) => {
+    const isDrop = (i: number) => a.number === drop[0] && i === drop[1] - 1;
+    const voiced = a.words.map((w) => w.uthmani).filter((_, i) => voiceKept || !isDrop(i));
+    const t0 = t;
+    const t1 = t + voiced.reduce((x, w) => x + len(w), 0);
+    t = t1 + 0.5;
+    const text = a.words
+      .map((w, i) => (isDrop(i) ? null : heardAs[`${a.number}:${i + 1}`] ?? w.uthmani))
+      .filter((w): w is string => w !== null);
+    const step = (t1 - t0) / text.length;
+    out.push({
+      id,
+      t0,
+      t1,
+      text: text.join(" "),
+      words: text.map((w, k) => ({ text: w, start: t0 + k * step, end: t0 + (k + 1) * step })),
+      voiced: [[t0, t1]],
+      source: "model",
+    });
+  });
+  return out;
+}
+
+test("a word the model lost from a piece is unclear when the piece holds its voice; skipped when it does not", async () => {
+  const s = await loadSurah(1);
+  // Whisper spreads the remaining words over the voice: no gap in time, but
+  // the piece takes longer than its words at the reader's pace.
+  const lost = judge(s.ayat, versePieces(s.ayat, [6, 2], true));
+  assert.deepEqual(lost.at("missing"), []);
+  assert.deepEqual(lost.at("unclear"), ["6:2"]);
+  const skipped = judge(s.ayat, versePieces(s.ayat, [6, 2], false));
+  assert.deepEqual(skipped.at("missing"), ["6:2"]);
+});
+
+test("a short word missing beside a word heard unclearly is unclear; beside clear words it is skipped", async () => {
+  const s = await loadSurah(1);
+  // ٱلْمَغْضُوبِ heard as "منضوب": غَيْرِ may be inside it.
+  const blurred = judge(s.ayat, versePieces(s.ayat, [7, 5], false, { "7:6": "منضوب" }));
+  assert.deepEqual(blurred.at("missing"), []);
+  const clear = judge(s.ayat, versePieces(s.ayat, [7, 5], false));
+  assert.deepEqual(clear.at("missing"), ["7:5"]);
+  // A long word cannot hide in a garbled neighbour: ٱلصِّرَٰطَ left out beside
+  // ٱهْدِنَا heard as "احدنا" is skipped.
+  const long = judge(s.ayat, versePieces(s.ayat, [6, 2], false, { "6:1": "احدنا" }));
+  assert.deepEqual(long.at("missing"), ["6:2"]);
+});
+
+test("a word of two letters missing inside a piece is unclear: it joins the next in speech", async () => {
+  const s = await loadSurah(2);
+  const set = s.ayat.slice(0, 5);
+  const la = judge(set, versePieces(set, [2, 3], false)); // لَا in ذَٰلِكَ ٱلْكِتَٰبُ لَا رَيْبَ
+  assert.deepEqual(la.at("missing"), []);
+  const rayb = judge(set, versePieces(set, [2, 4], false)); // رَيْبَ: a word of its own
+  assert.deepEqual(rayb.at("missing"), ["2:4"]);
 });
 
 test("a stray word next to a gap is never what was said instead, when the gap was not clean", async () => {

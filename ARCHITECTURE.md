@@ -50,7 +50,9 @@ mikrofon ─► AudioWorklet (16 kHz mono) ─► Segmenter (pauser, max 15 s)
   för varje ord i Uthmani och modern stavning (`lexicon-data.json`, byggd av
   `scripts/build-lexicon.ts`, kontrollerad mot texten i test). "Fel ord" kräver
   ett annat Koranord; bokstäver som inte är något ord är "kunde inte höra".
-- `lib/follow/verdict.ts` — slutdomen: poäng, sammanfattning, konfidensgrind,
+- `lib/follow/verdict.ts` — slutdomen. "Överhoppat" kräver att inget tyder på
+  ohörd röst: ingen lucka i ordtiderna, ingen bit som håller mer röst än dess
+  ord tar i läsarens egen takt, inget kort ord intill ett otydligt hört ord.: poäng, sammanfattning, konfidensgrind,
   fellista med typ (fel ord, överhoppat, förväxlad aya, upprepat och rättat,
   tvekan). Ger samma `RecitationFeedback` som resultatpanelen redan visar.
 - `lib/listen/segmenter.ts` — ren tal/paus-detektor över 16 kHz-ramar med
