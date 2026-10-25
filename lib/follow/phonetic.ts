@@ -3,8 +3,11 @@
 // The Quran is printed in Uthmani spelling and the model writes modern
 // spelling, so the same spoken word can differ in its long-vowel letters
 // (ٱلصَّلَوٰةَ / الصلاة, ذَٰلِكَ / ذالك, إِبْرَٰهِيمَ / إبراهيم) and its hamza seat.
-// Those letters are cheap to add, drop or swap here; every other letter costs
-// in full, so a changed consonant (a real recitation mistake) still shows.
+// Those letters are cheap to add, drop or swap here. Letters that sound alike
+// (ص and س, د and ت: the recogniser writes one for the other) cost half, and
+// the article before a sun letter is silent ("ٱلصَّمَدُ" sounds "ṣṣamad"), so it
+// may be missing from what was heard. Every other letter costs in full, so a
+// different word ("الواحد" for "الصمد") shows as one.
 
 import { normalizeWord } from "@/lib/arabic";
 
@@ -31,6 +34,29 @@ export function skeleton(norm: string): string {
  */
 export function wordSim(a: string, b: string): number {
   if (a === b) return 1;
+  const artA = a.length > 3 && a.startsWith("ال");
+  const artB = b.length > 3 && b.startsWith("ال");
+  // The article both words share says nothing about whether they are the
+  // same word: "الواحد" and "الصمد" are different words, not 60 % alike.
+  if (artA && artB) return levSim(a.slice(2), b.slice(2));
+  // Before a sun letter the article is not heard, so a heard word without it
+  // is compared with the rest ("سمد" for "الصمد").
+  if (artA !== artB) {
+    const [art, bare] = artA ? [a, b] : [b, a];
+    if (SUN.has(art[2])) return Math.max(levSim(a, b), levSim(art.slice(2), bare));
+  }
+  return levSim(a, b);
+}
+
+/** Letters after which the article's lām is assimilated (silent). */
+const SUN = new Set(["ت", "ث", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ل", "ن"]);
+
+/** Pairs that sound alike: emphatic and plain, and voiced and unvoiced at a stop. */
+const NEAR = new Set(["سص", "سث", "تط", "دض", "دت", "ذز", "ذظ", "زظ", "ضظ", "قك", "حه"].flatMap((p) => [p, p[1] + p[0]]));
+const NEAR_SUB = 0.5;
+
+function levSim(a: string, b: string): number {
+  if (a === b) return 1;
   const m = a.length;
   const n = b.length;
   if (m === 0 || n === 0) return 0;
@@ -44,7 +70,7 @@ export function wordSim(a: string, b: string): number {
     curr[0] = prev[0] + delA;
     for (let j = 1; j <= n; j++) {
       const bj = b[j - 1];
-      const sub = ai === bj ? 0 : SOFT.has(ai) && SOFT.has(bj) ? SOFT_SUB : 1;
+      const sub = ai === bj ? 0 : SOFT.has(ai) && SOFT.has(bj) ? SOFT_SUB : NEAR.has(ai + bj) ? NEAR_SUB : 1;
       const insB = SOFT.has(bj) ? SOFT_INDEL : 1;
       curr[j] = Math.min(prev[j - 1] + sub, prev[j] + delA, curr[j - 1] + insB);
     }

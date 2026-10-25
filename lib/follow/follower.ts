@@ -138,7 +138,7 @@ function tokensOf(input: PieceInput): { tokens: string[]; tokenWord: number[] } 
   return { tokens, tokenWord: tokens.map(() => -1) };
 }
 
-function voicedSeconds(input: PieceInput): number {
+export function voicedSeconds(input: PieceInput): number {
   return (input.voiced ?? []).reduce((s, [a, b]) => s + Math.max(0, b - a), 0);
 }
 
@@ -306,8 +306,17 @@ export function statusOfSim(sim: number): WordStatus {
 }
 
 /** Best status of every word some piece covered, plus what was heard for it. */
-export function bestMarks(state: FollowState): Map<number, { status: WordStatus; heard: string | null; piece: number; corrected: boolean }> {
-  const out = new Map<number, { status: WordStatus; heard: string | null; piece: number; corrected: boolean }>();
+export interface Mark {
+  status: WordStatus;
+  heard: string | null;
+  /** How alike the heard word was (0 for a skipped word). */
+  sim: number;
+  piece: number;
+  corrected: boolean;
+}
+
+export function bestMarks(state: FollowState): Map<number, Mark> {
+  const out = new Map<number, Mark>();
   const everWrong = new Set<number>();
   state.pieces.forEach((p, pi) => {
     if (p.kind !== "aligned" || !p.align) return;
@@ -319,35 +328,14 @@ export function bestMarks(state: FollowState): Map<number, { status: WordStatus;
         const prev = out.get(k);
         if (!prev || RANK[st] > RANK[prev.status]) {
           // Said wrong once, right later (in any number of steps): corrected.
-          out.set(k, { status: st, heard, piece: pi, corrected: st !== "wrong" && everWrong.has(k) });
+          out.set(k, { status: st, heard, sim: pair.sim, piece: pi, corrected: st !== "wrong" && everWrong.has(k) });
         }
       }
     }
     for (const k of p.align.skipped) {
-      if (!out.has(k)) out.set(k, { status: "missing", heard: null, piece: pi, corrected: false });
+      if (!out.has(k)) out.set(k, { status: "missing", heard: null, sim: 0, piece: pi, corrected: false });
     }
   });
-  return out;
-}
-
-/**
- * Marks to paint while reciting: covered words with their best status, words
- * skipped inside a piece as skipped, and words passed over between pieces as
- * unclear (grey) — the verdict decides those at the end.
- */
-export function liveMarks(state: FollowState): Record<number, WordStatus> {
-  const best = bestMarks(state);
-  const out: Record<number, WordStatus> = {};
-  for (const [k, v] of best) out[k] = v.status;
-  let lo = Infinity;
-  let hi = -1;
-  for (const k of best.keys()) {
-    if (k < lo) lo = k;
-    if (k > hi) hi = k;
-  }
-  // Only between the first and last heard word: a recitation that starts at
-  // verse 50 must not grey out verses 1-49.
-  for (let k = lo; k < Math.min(hi, state.cursor); k++) if (!(k in out)) out[k] = "unclear";
   return out;
 }
 

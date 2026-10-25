@@ -27,8 +27,8 @@ import {
   reEnableWhisper,
 } from "@/lib/crashGuard";
 import { buildRef } from "@/lib/follow/text";
-import { applyPiece, createFollower, liveCursor, liveMarks } from "@/lib/follow/follower";
-import { verdictOf, type Verdict } from "@/lib/follow/verdict";
+import { applyPiece, createFollower, liveCursor } from "@/lib/follow/follower";
+import { liveMarks, verdictOf, type Verdict } from "@/lib/follow/verdict";
 import { ReciteEngine, type EngineSnapshot, type Hesitation } from "@/lib/listen/recite-engine";
 import { asr } from "@/lib/listen/asr";
 import { ASR_MODEL } from "@/lib/listen/model";
@@ -206,7 +206,7 @@ export default function Reciter({
     }
     setFeedback(result.verdict);
     setPhase("done");
-  }, [surahNumber]);
+  }, [surahNumber, wordOffset]);
   const stopRef = useRef(stop);
   stopRef.current = stop;
 
@@ -592,6 +592,7 @@ export default function Reciter({
           <EngineStatus
             model={model}
             allowed={modelAllowed}
+            noGpu={iosNoGpu && settings.quranModel}
             disabledByCrash={whisperDisabledByCrashes()}
             onReEnable={() => {
               reEnableWhisper();
@@ -608,11 +609,14 @@ export default function Reciter({
 function EngineStatus({
   model,
   allowed,
+  noGpu,
   disabledByCrash,
   onReEnable,
 }: {
   model: { status: string; percent: number; device: string | null };
   allowed: boolean;
+  /** An iPhone whose Safari has no WebGPU: the model is not run there. */
+  noGpu: boolean;
   disabledByCrash: boolean;
   onReEnable: () => void;
 }) {
@@ -629,6 +633,8 @@ function EngineStatus({
         </button>
       </>
     );
+  } else if (noGpu) {
+    text = "This iPhone's browser can't run the Quran model yet (it needs WebGPU, in iOS 26 and later), so its speech service listens instead and may send audio to Apple.";
   } else if (!allowed) {
     text = "Listening via your browser's speech service (the Quran model is off in Options; in Chrome the service sends audio to Google).";
   } else if (model.status === "ready") {

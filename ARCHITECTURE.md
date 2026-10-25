@@ -109,8 +109,10 @@ för aya från everyayah i stället.
 
 ## Testning
 
-- Rena kärnor (follow, segmenter, plan, memory, timings-tolkning) har enhetstester
-  mot facit.
+- Rena kärnor har enhetstester mot facit: follow (`test/follow.test.ts`),
+  segmentern, sammanslagningsregeln (`test/policy.test.ts`), svaga ställen
+  (`test/weak-spots.test.ts`) och aya-tidernas tolkning
+  (`test/surah-timing.test.ts`, mot sparade svar från mp3quran).
 - Riktiga transkriptioner från modellen (Alafasy, Husary, syntetiska fel med
   överhoppad aya, fel ord, upprepning) ligger som fixturer, så spåraren prövas mot
   modellens faktiska utdata och inte mot påhittad text.

@@ -295,7 +295,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
 
         <p className="mt-2 text-center text-sm font-bold text-ink/70">
           {listen.status === "error"
-            ? "Couldn't load the audio. Try another Sheikh."
+            ? "Couldn't load the audio. Tap play to try again, or pick another Sheikh."
             : listen.playing
               ? perAyah
                 ? `Verse ${verse} of ${ayahCount}${loopLabel}${listen.status === "loading" ? " · loading…" : ""}`

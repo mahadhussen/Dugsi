@@ -10,10 +10,10 @@ import { loadSurah } from "../lib/quran";
 import { flattenAyat, type Ayah } from "../lib/quran/types";
 import { runFixture, type Fixture } from "../lib/follow/fixture";
 import { buildRef } from "../lib/follow/text";
-import { applyHint, applyPiece, createFollower, liveMarks, type PieceInput } from "../lib/follow/follower";
-import { verdictOf } from "../lib/follow/verdict";
+import { applyHint, applyPiece, createFollower, type PieceInput } from "../lib/follow/follower";
+import { liveMarks, verdictOf } from "../lib/follow/verdict";
 import { alignWindow, placePiece } from "../lib/follow/align";
-import { wordSim, spoken, CORRECT } from "../lib/follow/phonetic";
+import { wordSim, spoken, CLOSE, CORRECT } from "../lib/follow/phonetic";
 import { tokenize } from "../lib/arabic";
 
 const fixture = (name: string): Fixture => JSON.parse(readFileSync(`test/fixtures/recite/${name}.json`, "utf8"));
@@ -116,6 +116,44 @@ test("afasy-fatiha-phone: through a phone band, noise and 12 % faster it still f
   assert.deepEqual(where("wrong"), []);
 });
 
+// ── A different word at a verse's edge (General Naadir's probe) ───────────
+// The same voice reads each verse right and with one word changed; the model's
+// real output of both is in the fixtures.
+
+for (const [bad, ok, at, heard] of [
+  ["tts-asr-haqq-ending", "tts-asr", "3:9", "بالحق"],
+  ["tts-ikhlas-wahid", "tts-ikhlas", "2:2", "الوحد"],
+] as const) {
+  test(`${bad}: the changed word is wrong, with what was heard; read right, nothing is`, async () => {
+    const b = await run(bad);
+    const o = await run(ok);
+    assert.equal(b.verdict.reliable, true);
+    assert.deepEqual(b.where("wrong"), [at]);
+    assert.deepEqual(b.where("missing"), []);
+    assert.deepEqual(b.verdict.mistakes.map((m) => [m.kind, m.heard]), [["wrong", heard]]);
+    assert.deepEqual(o.where("wrong"), []);
+    assert.deepEqual(o.where("missing"), []);
+    assert.deepEqual(o.verdict.mistakes, []);
+    assert.ok(b.verdict.score < o.verdict.score, `bad ${b.verdict.score} vs right ${o.verdict.score}`);
+  });
+}
+
+test("tts-baqarah-khasirun: 2:5 ending with الخاسرون is wrong at its last word, nothing else", async () => {
+  const { verdict, where } = await run("tts-baqarah-khasirun");
+  assert.equal(verdict.reliable, true);
+  assert.deepEqual(where("wrong"), ["5:8"]);
+  assert.deepEqual(where("missing"), []);
+  assert.deepEqual(verdict.mistakes.map((m) => [m.kind, m.heard]), [["wrong", "الخسرون"]]);
+});
+
+test("a nearly-right word costs less than a wrong one, and the summary names it", async () => {
+  const { verdict } = await run("tts-ikhlas");
+  const close = verdict.alignment.words.filter((w) => w.status === "close");
+  assert.ok(close.length > 0);
+  for (const w of close) assert.ok(w.score >= CLOSE && w.score < CORRECT);
+  assert.match(verdict.summary, /nearly right/);
+});
+
 // ── The rules, one by one ─────────────────────────────────────────────────
 
 test("spelling differences between Uthmani and modern script are the same word", () => {
@@ -128,6 +166,20 @@ test("spelling differences between Uthmani and modern script are the same word",
   for (const [u, m] of pairs) assert.ok(wordSim(spoken(u), spoken(m)) >= CORRECT, `${u} vs ${m}: ${wordSim(spoken(u), spoken(m))}`);
   // ...but a changed consonant is not
   assert.ok(wordSim(spoken("قَلْب"), spoken("كلب")) < CORRECT);
+});
+
+test("letters that sound alike are near, a different word is not", () => {
+  const sim = (a: string, b: string) => wordSim(spoken(a), spoken(b));
+  // The article before a sun letter is silent, and ص/س, د/ت are written for each other.
+  assert.ok(sim("سمد", "ٱلصَّمَدُ") >= CLOSE);
+  assert.ok(sim("سمت", "ٱلصَّمَدُ") >= CLOSE);
+  // A shared article does not make two words alike.
+  assert.ok(sim("الواحد", "ٱلصَّمَدُ") < CLOSE, `${sim("الواحد", "ٱلصَّمَدُ")}`);
+  assert.ok(sim("التي", "ٱلَّذِى") < CLOSE);
+  // A dropped ʿayn in a long word is not "said right" any more.
+  assert.ok(sim("الالمين", "ٱلْعَٰلَمِينَ") < CORRECT);
+  // Before a moon letter the lām is heard, so a missing article still costs.
+  assert.ok(sim("حمد", "ٱلْحَمْدُ") < CORRECT);
 });
 
 test("a word the recogniser split in two still lines up", () => {
@@ -315,6 +367,28 @@ test("a piece the model failed to decode is unclear, never skipped", async () =>
   const { at } = judge(s.ayat, breaths(s.ayat, 99, undefined, { dropPiece: 3 }));
   assert.deepEqual(at("missing"), []);
   assert.deepEqual(at("unclear"), ["4:1", "4:2", "4:3"]);
+});
+
+test("a one-word verse the model wrote nothing for is unclear, never skipped (55:64)", async () => {
+  const s = await loadSurah(55);
+  const set = s.ayat.slice(59, 70); // 55:60–70, one piece per verse
+  const empty = (voice: number) =>
+    breaths(set, 99).map((p, i) => (i === 4 ? { ...p, text: "", words: [], voiced: [[p.t0, p.t0 + voice]] as [number, number][] } : p));
+  const said = judge(set, empty(0.8));
+  assert.deepEqual(said.at("missing"), []);
+  assert.deepEqual(said.at("unclear"), ["64:1"]);
+  // A click is not a word: with almost no voice the verse was skipped.
+  assert.deepEqual(judge(set, empty(0.1)).at("missing"), ["64:1"]);
+  assert.deepEqual(judge(set, breaths(set, 99, 64)).at("missing"), ["64:1"]);
+});
+
+test("words before the first piece heard are never skipped (backlog trimmed while the model loads)", async () => {
+  for (const n of [1, 112, 67]) {
+    const s = await loadSurah(n);
+    const { at, v } = judge(s.ayat, breaths(s.ayat, 99).slice(2));
+    assert.deepEqual(at("missing"), [], `surah ${n}`);
+    assert.deepEqual(v.mistakes, [], `surah ${n}`);
+  }
 });
 
 test("with the browser as judge, a dropped phrase or word is unclear, never skipped", async () => {

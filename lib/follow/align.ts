@@ -10,7 +10,7 @@
 // verse the recogniser missed, or jumped), pairs of heard words are looked up
 // in the whole text and the best-scoring candidate place is aligned too.
 
-import { CLOSE, skeleton, wordSim } from "./phonetic";
+import { CLOSE, CORRECT, skeleton, wordSim } from "./phonetic";
 import type { RefText } from "./text";
 
 export interface Pair {
@@ -205,11 +205,24 @@ const DIST_CAP = 0.7;
 const JUMP = 1.0; // extra cost of a place found by searching the whole text
 
 /** Where in [lo, hi) does this piece belong, given the reciter was at `cursor`? */
+/** Text words the alignment heard as said right. */
+const clearWords = (a: Alignment) => a.pairs.filter((p) => p.sim >= CORRECT).reduce((n, p) => n + (p.refEnd - p.ref), 0);
+
 export function placePiece(ref: RefText, heard: string[], cursor: number, lo: number, hi: number): Placement | null {
   const m = heard.length;
   const wLo = Math.max(lo, cursor - BACK);
   const wHi = Math.min(hi, cursor + AHEAD + 2 * m);
-  const local = alignWindow(ref, heard, wLo, wHi, (i) => -Math.min(DIST_CAP, DIST * (i < cursor ? BACK_FACTOR : 1) * Math.abs(i - cursor)));
+  let local = alignWindow(ref, heard, wLo, wHi, (i) => -Math.min(DIST_CAP, DIST * (i < cursor ? BACK_FACTOR : 1) * Math.abs(i - cursor)));
+  // Leaving the reciter's place says they went back or skipped ahead, and
+  // that takes two words heard clearly. On less, when the piece's first word
+  // is the next word of the text, the reciter simply carried on: "اله الوحد"
+  // after verse 1 of Al-Ikhlas is verse 2 with its second word changed, not
+  // "لَّهُۥ … أَحَدٌۢ" eight words further on.
+  if (local && local.start !== cursor && cursor < hi && clearWords(local) < 2) {
+    const on = alignWindow(ref, heard, cursor, wHi, (i) => (i === cursor ? 0 : -1e9));
+    const first = on?.pairs[0];
+    if (on && first && first.ref === cursor && first.heard === 0 && first.sim >= CLOSE && on.score > -0.2) local = on;
+  }
   let best: Placement | null = local ? { align: local, jumped: false } : null;
 
   if (m >= 2) {

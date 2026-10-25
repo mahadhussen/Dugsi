@@ -182,7 +182,7 @@ function decksReady(): [HTMLAudioElement, HTMLAudioElement] | null {
       armed[i] = null;
       if (!mine()) return;
       if (!perAyah()) forgetResolved(reciterId);
-      if (state.playing) set({ status: "error" });
+      if (state.playing) fail();
     });
     return a;
   };
@@ -338,7 +338,7 @@ async function load(deck: number, at: Ref): Promise<boolean> {
   if (token[deck] !== mine) return false;
   if (!file) {
     wanted[deck] = null;
-    if (deck === live) set({ status: "error" });
+    if (deck === live) fail();
     return false;
   }
   const src = await playableUrl(file);
@@ -404,6 +404,14 @@ function loopAgain(): boolean {
 }
 
 let raf = 0;
+
+/** The audio could not be loaded or played: stop, show it, and let one tap on
+ *  play load it again (play() reloads after an error). */
+function fail(): void {
+  cancelAnimationFrame(raf);
+  set({ playing: false, status: "error" });
+}
+
 function tickWhilePlaying(): void {
   cancelAnimationFrame(raf);
   const step = () => {
@@ -437,7 +445,7 @@ function playLive(): void {
     })
     .catch((err: unknown) => {
       // A rapid change of ayah aborts the previous play — that is expected.
-      if ((err as { name?: string })?.name !== "AbortError" && state.playing) set({ status: "error" });
+      if ((err as { name?: string })?.name !== "AbortError" && state.playing) fail();
     });
 }
 

@@ -11,11 +11,15 @@ import { evaluateMadd, type TimedWord, type TimingReport } from "@/lib/tajweed/t
 import type { TimeRange } from "@/lib/review";
 import type { Word } from "@/lib/quran/types";
 import { alignWindow } from "./align";
-import { bestMarks, type FollowState, type PieceRecord } from "./follower";
+import { CLOSE } from "./phonetic";
+import { bestMarks, voicedSeconds, type FollowState, type PieceRecord } from "./follower";
 
 /** Voice the model produced no word for, at least this long, makes the words
  *  around it unclear instead of skipped. */
 const UNEXPLAINED_S = 0.8;
+/** A piece the model wrote nothing for, with this much voice, may have held the
+ *  words around it. Lower than above: none of its voice is explained by a word. */
+const EMPTY_VOICE_S = 0.3;
 /** Slack around a recognised word's timestamps before voice counts as unexplained. */
 const PAD_S = 0.25;
 
@@ -119,41 +123,7 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
   const extras: string[] = [];
   for (const p of aligned) for (const e of p.align!.extras) if (e > 0 && e < p.tokens.length - 1) extras.push(p.tokens[e]);
 
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const k of best.keys()) {
-    lo = Math.min(lo, k);
-    hi = Math.max(hi, k);
-  }
-  const unexplained = new Map<PieceRecord, Interval[]>();
-  for (const p of state.pieces) unexplained.set(p, unexplainedVoice(p));
-
-  // Final status of every word in the recited span.
-  const statusOf = new Map<number, WordStatus>();
-  if (lo <= hi) {
-    for (let k = lo; k <= hi; k++) {
-      const m = best.get(k);
-      if (!m || m.status === "missing") continue;
-      // A word heard wrong only at the very edge of a piece — its first or last
-      // word — is the model's onset or tail, not proof (measured twice on
-      // Alafasy: "إِذْ مِ" for بِسْمِ, "وَلَا تَوَمِمَّا" for ٱلصَّلَوٰةَ وَمِمَّا).
-      if (m.status === "wrong" && atEdge(state.pieces[m.piece], k)) statusOf.set(k, "unclear");
-      else statusOf.set(k, m.status);
-    }
-    // Every run of words no piece said: skipped, or unclear?
-    let k = lo;
-    while (k <= hi) {
-      if (statusOf.has(k)) {
-        k++;
-        continue;
-      }
-      const a = k;
-      while (k <= hi && !statusOf.has(k)) k++;
-      const b = k; // run is [a, b)
-      const verdict = runVerdict(state, best, unexplained, a, b);
-      for (let i = a; i < b; i++) statusOf.set(i, verdict);
-    }
-  }
+  const { statusOf, heardOf } = judgeWords(state, best);
 
   const clips: Record<number, TimeRange> = {};
   for (const [k, m] of best) {
@@ -168,15 +138,17 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
     words.push({
       refIndex: k,
       expected: state.ref.norm[k],
-      heard: st === "missing" || st === "unclear" ? null : m?.heard ?? null,
+      heard: st === "missing" || st === "unclear" ? null : heardOf.get(k) ?? m?.heard ?? null,
       status: st,
-      score: 0,
+      // What the word earns: said right 1, nearly right as alike as it was
+      // heard (a recogniser's misspelling must not cost like a wrong word).
+      score: st === "correct" ? 1 : st === "close" ? m?.sim ?? CLOSE : 0,
     });
   }
   const judged = words.filter((w) => w.status !== "unclear");
   const correct = judged.filter((w) => w.status === "correct").length;
   const close = judged.filter((w) => w.status === "close").length;
-  const accuracy = judged.length ? correct / judged.length : 0;
+  const accuracy = judged.length ? judged.reduce((t, w) => t + w.score, 0) / judged.length : 0;
   const unclear = words.length - judged.length;
 
   // Madd timing from the words that carry a duration. Word timestamps are too
@@ -195,7 +167,9 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
   const timing = evaluateMadd(timed, expected, 0.5);
   const rushed = timing.checks.filter((c) => c.verdict === "rushed").length;
   const maddPenalty = timing.checks.length ? (rushed / timing.checks.length) * 10 : 0;
-  const score = Math.max(0, Math.round(accuracy * 100 - maddPenalty));
+  // 100 means every word heard was said right: a nearly-right word never rounds up to it.
+  const raw = Math.max(0, Math.round(accuracy * 100 - maddPenalty));
+  const score = correct < judged.length ? Math.min(99, raw) : raw;
 
   const heardTokens = aligned.reduce((s, p) => s + p.tokens.length, 0);
   const matchRate = judged.length ? (correct + close) / judged.length : 0;
@@ -217,7 +191,7 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
   const mistakes: TypedMistake[] = [];
   for (const w of words) {
     const m = best.get(w.refIndex);
-    if (w.status === "wrong") mistakes.push({ refIndex: w.refIndex, kind: "wrong", heard: m?.heard ?? null });
+    if (w.status === "wrong") mistakes.push({ refIndex: w.refIndex, kind: "wrong", heard: w.heard });
     else if (w.status === "missing") mistakes.push({ refIndex: w.refIndex, kind: "skipped", heard: null });
     else if (m?.corrected) mistakes.push({ refIndex: w.refIndex, kind: "corrected", heard: null });
   }
@@ -244,12 +218,116 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
   };
 }
 
-/** Is text word k heard as the first or last word of its piece? */
-function atEdge(p: PieceRecord, k: number): boolean {
+/**
+ * The status of every word from the first to the last one heard — the one
+ * place this is decided. The live picture while reciting and the verdict at
+ * the end both come from here, so they can never disagree.
+ */
+export function judgeWords(
+  state: FollowState,
+  best: ReturnType<typeof bestMarks> = bestMarks(state),
+): { statusOf: Map<number, WordStatus>; heardOf: Map<number, string> } {
+  const statusOf = new Map<number, WordStatus>();
+  const heardOf = new Map<number, string>();
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const k of best.keys()) {
+    lo = Math.min(lo, k);
+    hi = Math.max(hi, k);
+  }
+  if (lo > hi) return { statusOf, heardOf };
+  const unexplained = new Map<PieceRecord, Interval[]>();
+  for (const p of state.pieces) unexplained.set(p, unexplainedVoice(p));
+
+  for (let k = lo; k <= hi; k++) {
+    const m = best.get(k);
+    if (!m || m.status === "missing") continue;
+    // A word heard wrong only as a fragment at a piece's edge — a cut the
+    // length cap made, the moment listening began, a word heard in pieces
+    // ("إِذْ مِ" for بِسْمِ) or a scrap too short to be a word — is the model's
+    // onset or tail, not proof. A whole other word there is a real mistake.
+    if (m.status === "wrong" && fragmentAtEdge(state.pieces[m.piece], k)) statusOf.set(k, "unclear");
+    else statusOf.set(k, m.status);
+  }
+  // Every run of words no piece placed: said as something else, skipped, or unclear?
+  let k = lo;
+  while (k <= hi) {
+    if (statusOf.has(k)) {
+      k++;
+      continue;
+    }
+    const a = k;
+    while (k <= hi && !statusOf.has(k)) k++;
+    const b = k; // run is [a, b)
+    // A word said in the slot just after the piece before, or just before the
+    // piece after, but not matched to anything (the free end of a piece takes
+    // it as "added"): that is what was said instead of these words.
+    const slot = edgeSlots(state, best, a, b);
+    for (const [i, said] of slot) {
+      statusOf.set(i, said.fragment ? "unclear" : "wrong");
+      if (!said.fragment) heardOf.set(i, said.text);
+    }
+    const rest = Array.from({ length: b - a }, (_, j) => a + j).filter((i) => !slot.has(i));
+    if (rest.length) {
+      const verdict = runVerdict(state, best, unexplained, Math.min(...rest), Math.max(...rest) + 1);
+      for (const i of rest) statusOf.set(i, verdict);
+    }
+  }
+  return { statusOf, heardOf };
+}
+
+/** Marks to paint while reciting — the same judgement as the verdict. */
+export function liveMarks(state: FollowState): Record<number, WordStatus> {
+  const out: Record<number, WordStatus> = {};
+  for (const [k, v] of judgeWords(state).statusOf) out[k] = v;
+  return out;
+}
+
+const isFragment = (tokens: string[]) => tokens.length !== 1 || tokens[0].length <= 2;
+
+/** Is text word k heard wrong only as a fragment at an edge of its piece? */
+function fragmentAtEdge(p: PieceRecord, k: number): boolean {
   if (!p.align) return false;
-  const pair = p.align.pairs.find((x) => k >= x.ref && k < x.refEnd);
+  const pairs = p.align.pairs;
+  const pair = pairs.find((x) => k >= x.ref && k < x.refEnd);
   if (!pair) return false;
-  return pair === p.align.pairs[0] || pair === p.align.pairs[p.align.pairs.length - 1];
+  const first = pair === pairs[0];
+  const last = pair === pairs[pairs.length - 1];
+  if (!first && !last) return false;
+  if ((first && (p.input.cutStart || p.input.t0 === 0)) || (last && p.input.cutEnd)) return true;
+  return isFragment(p.tokens.slice(pair.heard, pair.heardEnd)) || pair.refEnd - pair.ref > 1;
+}
+
+/** Unmatched words at the tail of the piece before a run, or the head of the
+ *  piece after it, paired with the run's words in order. */
+function edgeSlots(
+  state: FollowState,
+  best: ReturnType<typeof bestMarks>,
+  a: number,
+  b: number,
+): Map<number, { text: string; fragment: boolean }> {
+  const out = new Map<number, { text: string; fragment: boolean }>();
+  const before = best.get(a - 1);
+  const after = best.get(b);
+  const pb = before ? state.pieces[before.piece] : null;
+  const pa = after ? state.pieces[after.piece] : null;
+  if (pb?.align && pb.align.end === a && !(pb.input.cutEnd)) {
+    const lastPair = pb.align.pairs[pb.align.pairs.length - 1];
+    const tail = pb.tokens.slice(lastPair ? lastPair.heardEnd : 0);
+    tail.slice(0, b - a).forEach((t, j) => out.set(a + j, { text: t, fragment: isFragment([t]) }));
+  }
+  if (pa?.align && pa.align.start === b && !(pa.input.cutStart || pa.input.t0 === 0)) {
+    const firstPair = pa.align.pairs[0];
+    const head = pa.tokens.slice(0, firstPair ? firstPair.heard : 0);
+    head
+      .slice(-Math.min(head.length, b - a))
+      .reverse()
+      .forEach((t, j) => {
+        const i = b - 1 - j;
+        if (i >= a && !out.has(i)) out.set(i, { text: t, fragment: isFragment([t]) });
+      });
+  }
+  return out;
 }
 
 /** Is a run of unsaid words [a, b) skipped, or did we just not hear it? */
@@ -290,8 +368,11 @@ function runVerdict(
   const iB = state.pieces.indexOf(pb);
   const iA = state.pieces.indexOf(pa);
   for (let i = iB + 1; i < iA; i++) {
-    const k = state.pieces[i].kind;
-    if (k === "unclear" || k === "aligned") return "unclear";
+    const p = state.pieces[i];
+    if (p.kind === "unclear" || p.kind === "aligned") return "unclear";
+    // Voice the model wrote nothing for: a one-word verse ("مُدْهَآمَّتَانِ")
+    // can come back empty, and was still said.
+    if (p.kind === "empty" && voicedSeconds(p.input) >= EMPTY_VOICE_S) return "unclear";
   }
   // Could the piece before have been the copy right in front of the piece
   // after (identical verse openings, 2:97/2:98)? Then it is not known which
@@ -320,6 +401,8 @@ function summaryOf(words: AlignedWord[], rushed: number, maddTotal: number): str
   const wrong = judged.filter((w) => w.status === "wrong").length;
   const unclear = words.length - judged.length;
   const parts = [`${correct}/${judged.length} words recited correctly.`];
+  const close = judged.filter((w) => w.status === "close").length;
+  if (close > 0) parts.push(`${close} word${close > 1 ? "s" : ""} nearly right.`);
   if (missing > 0) parts.push(`${missing} word${missing > 1 ? "s" : ""} skipped.`);
   if (wrong > 0) parts.push(wrong > 1 ? `${wrong} words need work.` : "1 word needs work.");
   if (unclear > 0) parts.push(`${unclear} word${unclear > 1 ? "s" : ""} we could not hear clearly, so they are not counted.`);

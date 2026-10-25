@@ -11,6 +11,54 @@
    deployas). Alternativ: (a) lokal https-server på wifi, (b) förhandsdeploy på
    Vercel, (c) merga. Ingen deploy görs utan ja.
 
+## 2026-10-25 — Naadirs NOT CLEAN: villkor 1–4 och efterpunkterna
+
+Naadir dömde NOT CLEAN med fyra villkor. Vart och ett är rättat och bevisat:
+
+1. **En härledning av ordstatus.** `judgeWords` i `lib/follow/verdict.ts` ger
+   status för varje ord; live-markeringen (`liveMarks`) och domen använder samma
+   funktion. Bevis: Naadirs livediff ger 0 avvikelser över 17 inspelningar (12
+   fixturer och hans 5 TTS-prov).
+2. **Fel ord vid aya-kanten fångas, utan att en rätt läsning anklagas.**
+   Al-Asr 3:9 (بالحق), Al-Baqarah 5:8 (الخسرون) och Al-Ikhlas 2:2 (الوحد) blir
+   fel med hört ord. Samma röst som läser rätt får inga fel, och felläsningen
+   får alltid lägre poäng (89 mot 95, 93 mot 96). Proven ligger nu som fixturer
+   (`tts-asr*`, `tts-ikhlas*`, `tts-baqarah-khasirun`) med tester. Tre regler:
+   - Likhet: en artikel som båda orden har räknas inte ("الواحد" och "الصمد" är
+     inte 60 % lika), artikeln före en solbokstav är tyst ("سمد" för "الصمد"), och
+     ljudlika bokstäver (ص/س, د/ت, ط/ت, ض/د, ذ/ز/ظ, ق/ك, ح/ه) kostar halvt.
+   - Att lämna läsarens plats (bakåt eller förbi ord) kräver två klart hörda ord.
+     Annars, när bitens första ord är textens nästa ord, fortsätter läsaren där.
+   - "Nästan rätt" ger delpoäng lika med likheten, och 100 kräver att varje ord
+     satt. Beslut: likheten som delpoäng. Alternativ: halv poäng (gav 93 mot 93
+     i Al-Ikhlas-paret), eller räkna nästan rätt som rätt (döljer slarv).
+     Sammanfattningen säger nu "N words nearly right".
+3. **`stop` läser aktuell `wordOffset`** (beroendet tillagt). Bevis:
+   eslint-plugin-react-hooks 5.1 (körd utanför repot) ger 0 fynd om beroenden i
+   allt grenen ändrat. Två äldre fynd ligger i filer som är oförändrade mot main.
+4. **Facit för aya-tiderna:** `test/surah-timing.test.ts` mot sparade svar från
+   mp3quran (Alafasy 112 och 1, Hudhaify 112 numrerad 0..3 underkänns), plus
+   0..6-skiftet i Al-Fatiha, fallande och nollånga tider. Sabotageprov: tre
+   avsiktliga fel i tolkningen fälls var för sig. `test/policy.test.ts` för
+   sammanslagningsregeln. ARCHITECTURE.md säger nu exakt vilka tester som finns.
+
+Efterpunkterna:
+
+- En bit som modellen skrev tom för, med minst 0,3 s röst, gör glappet ohört i
+  stället för överhoppat (55:64 مدهامتان, ett ord). Utan röst är det fortfarande
+  överhoppat.
+- Avkodningskön trimmas bara medan modellen laddas ner. Förut kunde en långsam
+  telefon tappa bitar mitt i, och orden i dem blev överhoppade.
+- Spelaren efter nätfel: stannar, visar spela, och ett tryck laddar om (bevisat i
+  ljudattrappen: förut visade knappen paus och ett tryck pausade bara).
+- iPhone utan WebGPU får en sann text i stället för "modellen är avstängd i
+  Options".
+
+Känt och oförändrat (mätt mot läget före): Al-Baqarah 1–120 i andetag om 3 ord
+lämnar 151 överhoppade ord ofångade (de blir ohörda, aldrig fel). "يجادلون" för
+"يخادعون" blir nästan rätt, inte fel. Heisenbergs fall H gäller den gamla
+motorn som tappade misslyckade bitar; i dag blir de ohörda.
+
 ## 2026-10-25 — Bygget, skiva för skiva
 
 - S1 `92574a6` följaren, S2–S3 `f0bcea7` modellen live, S4–S5 `3f05f85` lyssning

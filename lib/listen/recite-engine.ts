@@ -271,9 +271,12 @@ export class ReciteEngine {
   private enqueuePiece(seg: Segment) {
     if (this.mode !== "model") return; // the browser recogniser carries this attempt
     this.queue.push({ kind: "piece", audio: seg.audio, t0: seg.startSample / SR, seg });
-    // While the model downloads, keep a bounded backlog.
+    // While the model downloads, keep a bounded backlog: the oldest pieces go,
+    // and words before the first piece heard are never judged skipped.
+    // Once the model runs nothing is dropped, however slow the phone: a piece
+    // dropped from the middle would read as skipped words.
     let total = 0;
-    for (let i = this.queue.length - 1; i >= 0; i--) {
+    for (let i = this.queue.length - 1; i >= 0 && asr.status !== "ready"; i--) {
       total += this.queue[i].audio.length / SR;
       if (total > QUEUE_LIMIT_SECONDS) {
         this.queue.splice(0, i + 1);
