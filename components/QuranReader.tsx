@@ -262,7 +262,17 @@ function ListenSection({
     }
     return o;
   }, [surah]);
-  const activeIndex = pos && offsets.has(pos.verse) ? offsets.get(pos.verse)! + pos.word : undefined;
+  // word -1: a whole-surah recording, where we know the verse but not the
+  // word — the whole verse lights up (and the page follows its first word).
+  const activeIndex = pos && offsets.has(pos.verse) ? offsets.get(pos.verse)! + Math.max(0, pos.word) : undefined;
+  const verseLit = useMemo(() => {
+    if (!pos || pos.word !== -1 || !offsets.has(pos.verse)) return undefined;
+    const first = offsets.get(pos.verse)!;
+    const n = surah.ayat.find((a) => a.number === pos.verse)?.words.length ?? 0;
+    const out: Record<number, "correct"> = {};
+    for (let i = 0; i < n; i++) out[first + i] = "correct";
+    return out;
+  }, [pos, offsets, surah]);
   const onWordChange = useCallback((p: { verse: number; word: number } | null) => setPos(p), []);
 
   return (
@@ -271,8 +281,9 @@ function ListenSection({
         <SurahView
           ayat={surah.ayat}
           surahNumber={surahId}
-          showTajweed={settings.showTajweed}
+          showTajweed={settings.showTajweed && !verseLit}
           activeIndex={activeIndex}
+          statuses={verseLit}
           showTranslation={settings.showTranslation}
           showTranslit={settings.showTranslit}
           initialTopVerse={startVerse}
