@@ -99,17 +99,20 @@ reading-progress marker.
     nothing is counted twice). Recordings stay on the device by design.
 16. **Installable.** A web manifest and a tiny service worker let Dugsi be
     added to the home screen like an app.
-17. **Quran-tuned recognition.** The precise on-device check now prefers
-    Tarteel's open **whisper-base-ar-quran** (Apache-2.0), a Whisper fine-tuned
-    on recitation, through a community ONNX export. It is tried where the
-    device has headroom (WebGPU, or a non-iOS browser) and falls back to
-    whisper-tiny automatically if it can't load. Toggle under *Goals &
-    reminders → Reciting*.
-18. **Hesitation detection + auto-stop.** Silero VAD (MIT) runs on the device
-    while you recite: a pause longer than 2.5 s mid-recitation is noted with
-    the word you were stuck before, and shown after the attempt as your
-    memorisation weak spots. Optional auto-stop ends the recording after 6 s of
-    silence. Loads from a CDN only when reciting; silently absent otherwise.
+17. **Tarteel-style live following, on the device.** While you recite, your
+    voice is cut at your pauses and each piece is heard by Tarteel's open
+    **whisper-tiny-ar-quran** (Apache-2.0) in a background worker — on the
+    graphics chip where the browser allows it — and laid against the text by a
+    deterministic follower (`lib/follow`). Words turn green, yellow or red a
+    second or two after each pause, and when a verse was not caught and you
+    carry on, the follower finds you in the next one. A stretch where there was
+    voice but the model heard nothing is shown faded and **never counted as
+    skipped**; only a verse nobody said is. The verdict is ready the moment the
+    last piece is decoded. Without the model (switched off, or it cannot run)
+    the browser's speech service listens instead, as before.
+18. **Hesitation detection + auto-stop.** The same pause detector notes a pause
+    longer than 2.5 s mid-recitation with the word you were stuck before, and
+    can stop the recording after 6 s of silence.
 19. **Word-by-word qari timings.** Word-level timestamps from quran-align
     (CC BY 4.0) for Alafasy, Al-Husary (Muallim), Ash-Shuraim and Al-Minshawi:
     words light up as the Sheikh recites them on the Listen page (with 0.75× /
@@ -135,15 +138,17 @@ reading-progress marker.
     Translation, transliteration and tajweed colouring are plain switches in
     the Options sheet. Light theme by default, dark under *Options → Dark
     screen*.
-22. **Gapless listening, saved for offline.** The recitation is driven by a
-    small engine outside the page (`lib/listen-engine.ts`) that keeps two
-    players: one sounds the current verse while the other quietly loads the
-    next one — across the surah boundary too — so the handover makes no gap.
-    Because the engine lives outside the reader, flowing into the next surah
-    no longer tears the player down mid-verse. *Save this surah to listen
-    without internet* keeps the Sheikh's recording in the browser's own cache
-    (`lib/audio-cache.ts`); a saved surah then plays straight from the device,
-    with nothing re-hosted and nothing bundled into the app.
+22. **Listening without pauses.** For 33 Sheikhs a surah plays as ONE
+    recording (mp3quran.net, with the start of every verse from their documented
+    API): nothing loads between verses, so there is no pause between them on any
+    phone; the verse being recited lights up, ⏮ ⏭ step verse by verse, and
+    repeat cycles this verse / this surah. The next surah is loaded in the last
+    25 s of the current one. Other Sheikhs play verse by verse, with the next
+    verse fetched into memory ahead (iPhone does not load audio ahead itself).
+    The play button never turns into a spinner. Tap a verse marker: while
+    listening the Sheikh carries on from there; while reciting he reads just
+    that verse, in his own voice. *Save this surah to listen without internet*
+    keeps the recording in the browser's own cache.
 23. **Sources & licences page** (`/about`) crediting every text, audio, model
     and library source; `THIRD_PARTY.md` has the full review.
 
@@ -164,14 +169,14 @@ updated.
 
 ### Honest limits
 
-- Recognition is general-Arabic, not Quran-specialised, so it can still misread
-  classical Arabic — a word marked wrong may be the recogniser, not the reciter
-  (High-accuracy mode reduces this).
+- The Quran model is about 93 % word-accurate on recitation, so it can still
+  slip — a word marked wrong may be the recogniser, not the reciter (tap
+  "You" to hear yourself). Dugsi judges words, not vowel marks.
 - Madd-timing is a timestamp **heuristic**, not a phonetic measurement. It flags
   obviously rushed elongations; it does not judge makharij or ghunnah quality.
-- High-accuracy mode downloads a model on first use (needs internet once), and is
-  slower on older phones. Fast mode is always available as a fallback.
-- Needs **Chrome** (desktop/Android) or **Safari** (iOS). Firefox isn't supported.
+- The model downloads once (about 67 MB) and is slower on older phones without
+  a usable graphics chip; the browser's speech service stands in where it
+  cannot run.
 - **Always learn tajweed with a qualified teacher.** This is a practice aid.
 
 ---
@@ -208,7 +213,11 @@ components/
   PlayButton.tsx           Per-verse listen button (uses the chosen Sheikh)
   Legend.tsx               Tajweed colour key
 lib/
-  speech/vad.ts            Silero VAD (CDN, on-device): hesitations, auto-stop
+  listen/segmenter.ts      Cuts the recitation at the reciter's pauses (also hesitations, auto-stop)
+  listen/recite-engine.ts  Mic → pieces → Tarteel's Quran model (worker) → follower
+  listen/surah-timing.ts   Whole-surah recordings + verse timings (mp3quran ayat_timing)
+  follow/                  The deterministic follower and verdict (tested on real model output)
+  memory/weak-spots.ts     How each word goes wrong, put right since, due for review
   quran/timings.ts         Word-level qari timings loader (quran-align data)
   quran/timings/<qari>/    Vendored per-surah timing JSON (CC BY 4.0)
   history.ts               Local-first session history + cloud merge/sync
@@ -228,9 +237,7 @@ lib/
   arabic.ts                Normalisation, tokenisation, similarity
   align.ts                 Needleman–Wunsch word alignment (heard vs expected)
   analyze.ts               Orchestrates alignment + timing + scoring (client-side)
-  audio.ts                 Decode recorded audio → mono 16 kHz PCM for Whisper
   speech/recognizer.ts     Web Speech API wrapper (Fast engine)
-  speech/whisperLocal.ts   On-device Whisper via transformers.js (High accuracy)
   tajweed/rules.ts         Rule colours + descriptions
   tajweed/timing.ts        Madd-timing engine (Whisper word timestamps)
 ```

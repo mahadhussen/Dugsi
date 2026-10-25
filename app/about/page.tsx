@@ -50,7 +50,7 @@ const DATA: Source[] = [
   },
   {
     name: "MP3Quran.net",
-    what: "Recitations for Sheikhs who were only ever recorded as whole surahs, such as Al Zain Mohammad Ahmad. Their public catalogue is read in your browser to find the reciter's own download server, so the address always comes from the source; the surah then streams from there.",
+    what: "Whole-surah recordings with the start and end of every verse, from their documented public API (ayat_timing). Listening plays a surah as one recording, so nothing has to load between verses and there is no pause between them; tapping a verse or repeating one is a jump inside that recording. Also the source for Sheikhs only ever recorded as whole surahs, such as Al Zain Mohammad Ahmad. Everything is read and streamed in your browser.",
     licence: "Free public archive of freely distributed recitations; Dugsi links, nothing is copied or re-hosted",
     url: "https://mp3quran.net",
   },
@@ -88,29 +88,16 @@ const MODELS: Source[] = [
     url: "https://github.com/openai/whisper",
   },
   {
-    name: "whisper-base-ar-quran (Tarteel AI)",
-    what: "Whisper base fine-tuned on Quranic recitation. Used through a community ONNX export (YunusZJ/whisper-base-ar-quran-ONNX) when the device can run it.",
+    name: "whisper-tiny-ar-quran (Tarteel AI)",
+    what: "Whisper tiny fine-tuned on Quranic recitation (7 % word error rate on recitation). It is what listens while you recite, on your device: your voice is cut at your pauses and each piece is heard by this model. Used unmodified through the community ONNX export Sharjeelbaig/whisper-tiny-ar-quran-onnx, pinned to one revision (cd93bde).",
     licence: "Apache-2.0",
-    url: "https://huggingface.co/tarteel-ai/whisper-base-ar-quran",
-  },
-  {
-    name: "whisper-tiny (Xenova ONNX export)",
-    what: "The lighter general model used on phones and as the fallback.",
-    licence: "MIT / Apache-2.0",
-    url: "https://huggingface.co/Xenova/whisper-tiny",
-  },
-  {
-    name: "Silero VAD",
-    what: "Voice activity detection: notices long pauses (hesitations) and powers auto-stop. Runs on the device.",
-    licence: "MIT",
-    url: "https://github.com/snakers4/silero-vad",
+    url: "https://huggingface.co/tarteel-ai/whisper-tiny-ar-quran",
   },
 ];
 
 const LIBS: Source[] = [
-  { name: "Transformers.js (Hugging Face)", what: "Runs Whisper in the browser.", licence: "Apache-2.0", url: "https://github.com/huggingface/transformers.js" },
-  { name: "ONNX Runtime Web (Microsoft)", what: "Runs the VAD and Whisper models.", licence: "MIT", url: "https://github.com/microsoft/onnxruntime" },
-  { name: "@ricky0123/vad-web", what: "Browser wrapper for Silero VAD.", licence: "ISC", url: "https://github.com/ricky0123/vad" },
+  { name: "Transformers.js (Hugging Face)", what: "Runs the Quran model in the browser, in a background worker.", licence: "Apache-2.0", url: "https://github.com/huggingface/transformers.js" },
+  { name: "ONNX Runtime Web (Microsoft)", what: "Runs the model (on the graphics chip where the browser allows it).", licence: "MIT", url: "https://github.com/microsoft/onnxruntime" },
   { name: "adhan-js (Batoul Apps)", what: "Prayer time calculation.", licence: "MIT", url: "https://github.com/batoulapps/adhan-js" },
   { name: "Amiri typeface (Khaled Hosny)", what: "Arabic in the interface, the basmala glyph, and the fallback while the mushaf typeface loads.", licence: "SIL Open Font License 1.1", url: "https://github.com/aliftype/amiri" },
   { name: "Next.js, React, Tailwind CSS, react-virtuoso, Supabase JS", what: "The app framework and UI.", licence: "MIT / Apache-2.0", url: "https://github.com/vercel/next.js" },
