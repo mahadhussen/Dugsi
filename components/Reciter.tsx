@@ -27,6 +27,7 @@ import {
   reEnableWhisper,
 } from "@/lib/crashGuard";
 import { buildRef } from "@/lib/follow/text";
+import { normalizeWord } from "@/lib/arabic";
 import { applyPiece, createFollower, liveCursor } from "@/lib/follow/follower";
 import { liveMarks, verdictOf, type Verdict } from "@/lib/follow/verdict";
 import { ReciteEngine, type EngineSnapshot, type Hesitation } from "@/lib/listen/recite-engine";
@@ -304,13 +305,21 @@ export default function Reciter({
   }, [recording, trackProgress, follow, flatWords, userId, surahNumber]);
 
   // QA: `?demo=result` renders a result from a canned recitation (a skipped
-  // word every 7th, a wrong one every 11th) through the real follower.
+  // word every 7th, a wrong one every 11th, one letter dropped every 13th)
+  // through the real follower.
   useEffect(() => {
     if (typeof window === "undefined" || phase !== "idle") return;
     if (new URLSearchParams(window.location.search).get("demo") !== "result") return;
     let s = createFollower(ref);
     ayat.forEach((a, vi) => {
-      const words = a.words.map((w) => w.uthmani).filter((_, i) => (vi * 3 + i) % 7 !== 3).map((w, i) => ((vi + i) % 11 === 5 ? "كتاب" : w));
+      const slip = (w: string) => {
+        const n = normalizeWord(w);
+        return n.length > 3 ? n.slice(0, 1) + n.slice(2) : w;
+      };
+      const words = a.words
+        .map((w) => w.uthmani)
+        .filter((_, i) => (vi * 3 + i) % 7 !== 3)
+        .map((w, i) => ((vi + i) % 11 === 5 ? "كتاب" : (vi + i) % 13 === 8 ? slip(w) : w));
       s = applyPiece(s, { id: vi, t0: vi * 4, t1: vi * 4 + 3.5, text: words.join(" "), source: "browser" });
     });
     setFeedback(verdictOf(s, { words: textWords, engine: "demo" }));
@@ -777,7 +786,12 @@ function ResultsPanel({
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-        <Stat label="Correct words" value={count("correct")} tone="good" />
+        <Stat
+          label="Correct words"
+          value={count("correct")}
+          tone="good"
+          note={count("close") > 0 ? `+ ${count("close")} nearly right` : undefined}
+        />
         <Stat label="Needs work" value={count("wrong")} tone="bad" />
         <Stat label="Skipped" value={count("missing")} tone="warn" />
         <Stat label="Not heard" value={feedback.unclear} tone="muted" />
@@ -872,7 +886,18 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone: "good" | "bad" | "warn" | "muted" }) {
+function Stat({
+  label,
+  value,
+  tone,
+  note,
+}: {
+  label: string;
+  value: number;
+  tone: "good" | "bad" | "warn" | "muted";
+  /** A second, smaller line (words that were nearly right). */
+  note?: string;
+}) {
   const color = tone === "good" ? "var(--good)" : tone === "bad" ? "var(--bad)" : tone === "warn" ? "var(--warn)" : "var(--muted)";
   return (
     <div className="rounded-2xl border-2 border-ink/10 bg-surface-2 p-3 text-center">
@@ -880,6 +905,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: "goo
         {value}
       </div>
       <div className="text-sm font-bold text-ink/60">{label}</div>
+      {note && <div className="mt-0.5 text-xs font-semibold text-ink/50">{note}</div>}
     </div>
   );
 }
