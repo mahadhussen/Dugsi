@@ -20,3 +20,6 @@ npm-debug.log*
 
 # Internal technical review brief — kept local, not published
 DUGSI_REVIEW_BRIEF.md
+
+# Before/after evidence (skill: bevis) — never committed
+.artifacts/
