@@ -16,7 +16,7 @@ och sparande.
 - [x] Tester mot riktiga modelltranskriptioner
 
 ## S2 — Lyssnaren (mikrofon till text på enheten)
-- [x] Segmenter (paus, max 12 s, tvekan, auto-stopp) med tester på riktigt ljud
+- [x] Segmenter (paus, max 15 s, tvekan, auto-stopp) med tester på riktigt ljud
 - [x] ASR-worker med Tarteel whisper-tiny-ar-quran, WebGPU eller WASM
 - [x] Reciteringsmotorn med explicita tillstånd
 - [x] Eval-skript: hela kedjan på riktiga ljudfiler
@@ -41,7 +41,8 @@ och sparande.
 - [ ] Markera text → lyssna på markerat (återstår)
 
 ## S6 — Sparande som förstår felen
-- [x] Härledda svaga ställen per ord och aya, feltyp, förväxlade ayat, tvekan
+- [x] Härledda svaga ställen per ord: hoppar över eller säger fel (och vad), rättat sedan
+- [ ] Förväxlade ayat och tvekan in i minnet (domen hittar hopp och tvekan, de sparas inte ännu)
 - [x] Repetition (Leitner) och "dags att repetera"
 - [x] Svaga ställen med Lyssna och Öva
 
