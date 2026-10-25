@@ -10,6 +10,7 @@ import type { AlignedWord, AlignmentResult, WordStatus } from "@/lib/align";
 import { evaluateMadd, type TimedWord, type TimingReport } from "@/lib/tajweed/timing";
 import type { TimeRange } from "@/lib/review";
 import type { Word } from "@/lib/quran/types";
+import { alignWindow } from "./align";
 import { bestMarks, type FollowState, type PieceRecord } from "./follower";
 
 /** Voice the model produced no word for, at least this long, makes the words
@@ -113,8 +114,10 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
   const best = bestMarks(state);
   const aligned = state.pieces.filter((p) => p.kind === "aligned" && p.align);
   const transcript = state.pieces.map((p) => p.input.text).filter(Boolean).join(" ");
+  // Added words: only inside a piece. A stray token at a piece's very edge is
+  // the model's onset or tail noise (Alafasy's "اذ"), not something recited.
   const extras: string[] = [];
-  for (const p of aligned) for (const e of p.align!.extras) extras.push(p.tokens[e]);
+  for (const p of aligned) for (const e of p.align!.extras) if (e > 0 && e < p.tokens.length - 1) extras.push(p.tokens[e]);
 
   let lo = Infinity;
   let hi = -Infinity;
@@ -131,9 +134,10 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
     for (let k = lo; k <= hi; k++) {
       const m = best.get(k);
       if (!m || m.status === "missing") continue;
-      // A word at a cut made by the length cap may be cut in two: if that is
-      // its only evidence of being wrong, we did not hear it, it was not wrong.
-      if (m.status === "wrong" && atCut(state.pieces[m.piece], k)) statusOf.set(k, "unclear");
+      // A word heard wrong only at the very edge of a piece — its first or last
+      // word — is the model's onset or tail, not proof (measured twice on
+      // Alafasy: "إِذْ مِ" for بِسْمِ, "وَلَا تَوَمِمَّا" for ٱلصَّلَوٰةَ وَمِمَّا).
+      if (m.status === "wrong" && atEdge(state.pieces[m.piece], k)) statusOf.set(k, "unclear");
       else statusOf.set(k, m.status);
     }
     // Every run of words no piece said: skipped, or unclear?
@@ -195,10 +199,20 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
 
   const heardTokens = aligned.reduce((s, p) => s + p.tokens.length, 0);
   const matchRate = judged.length ? (correct + close) / judged.length : 0;
+  // Of everything said, how much found its place in this text? Reciting a
+  // different surah than the one on screen leaves most pieces unplaced, and a
+  // verdict from the few that happen to match would be nonsense.
+  const placed = aligned.length;
+  const unplaced = state.pieces.filter((p) => p.kind === "unclear").length;
+  const placedShare = placed + unplaced ? placed / (placed + unplaced) : 0;
   // Confidence gate: enough heard, enough judged, the recogniser clearly
-  // working, and most of the recited span actually heard.
+  // working, most of the recited span heard, and most of the voice placed.
   const reliable =
-    heardTokens >= 3 && judged.length >= 2 && matchRate >= 0.45 && (words.length === 0 || unclear / words.length <= 0.6);
+    heardTokens >= 3 &&
+    judged.length >= 2 &&
+    matchRate >= 0.45 &&
+    placedShare >= 0.5 &&
+    (words.length === 0 || unclear / words.length <= 0.6);
 
   const mistakes: TypedMistake[] = [];
   for (const w of words) {
@@ -230,12 +244,12 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
   };
 }
 
-/** Is text word k heard only at the very edge of a piece cut by the length cap? */
-function atCut(p: PieceRecord, k: number): boolean {
+/** Is text word k heard as the first or last word of its piece? */
+function atEdge(p: PieceRecord, k: number): boolean {
   if (!p.align) return false;
   const pair = p.align.pairs.find((x) => k >= x.ref && k < x.refEnd);
   if (!pair) return false;
-  return (!!p.input.cutStart && pair.heard === 0) || (!!p.input.cutEnd && pair.heardEnd === p.tokens.length);
+  return pair === p.align.pairs[0] || pair === p.align.pairs[p.align.pairs.length - 1];
 }
 
 /** Is a run of unsaid words [a, b) skipped, or did we just not hear it? */
@@ -256,7 +270,9 @@ function runVerdict(
     // Inside one piece: believe a skip unless there was voice in between.
     const t1 = timeOf(pb, a - 1);
     const t2 = timeOf(pb, b);
-    if (!t1 || !t2) return b - a <= 3 ? "missing" : "unclear";
+    // No word times (the browser's recogniser): it drops words inside a
+    // phrase too, so a gap proves nothing.
+    if (!t1 || !t2) return "unclear";
     return overlap(unexplained.get(pb) ?? [], t1.end, t2.start) >= UNEXPLAINED_S ? "unclear" : "missing";
   }
 
@@ -264,10 +280,27 @@ function runVerdict(
   // and so is a gap at a cut the length cap made (the word may be in two halves).
   if (pb.input.t0 > pa.input.t0) return "unclear";
   if (pb.input.cutEnd || pa.input.cutStart) return "unclear";
-  // Any piece in between that we could not place means voice we could not read.
+  // Without a voice map (the browser's recogniser) a gap between two of its
+  // results says nothing about whether the words were said: it drops whole
+  // phrases when it restarts.
+  if (!pb.input.voiced || !pa.input.voiced) return "unclear";
+  // Any piece said in between — one we could not place, or one placed
+  // somewhere else (a refrain or a look-alike verse landing on another copy) —
+  // means voice there that may well have been these words.
   const iB = state.pieces.indexOf(pb);
   const iA = state.pieces.indexOf(pa);
-  for (let i = iB + 1; i < iA; i++) if (state.pieces[i].kind === "unclear") return "unclear";
+  for (let i = iB + 1; i < iA; i++) {
+    const k = state.pieces[i].kind;
+    if (k === "unclear" || k === "aligned") return "unclear";
+  }
+  // Could the piece before have been the copy right in front of the piece
+  // after (identical verse openings, 2:97/2:98)? Then it is not known which
+  // words were left out.
+  if (pb.align) {
+    const len = pb.align.end - pb.align.start;
+    const alt = alignWindow(state.ref, pb.tokens, Math.max(state.start, b - 2 * len - 10), b, (i) => -0.002 * Math.abs(b - len - i));
+    if (alt && alt.end === b && alt.matched >= pb.align.matched) return "unclear";
+  }
   // Voice after the last word of the piece before, or before the first word of
   // the piece after: something was said there that the model did not write.
   const tb = timeOf(pb, a - 1);
@@ -288,7 +321,7 @@ function summaryOf(words: AlignedWord[], rushed: number, maddTotal: number): str
   const unclear = words.length - judged.length;
   const parts = [`${correct}/${judged.length} words recited correctly.`];
   if (missing > 0) parts.push(`${missing} word${missing > 1 ? "s" : ""} skipped.`);
-  if (wrong > 0) parts.push(`${wrong} word${wrong > 1 ? "s" : ""} need work.`);
+  if (wrong > 0) parts.push(wrong > 1 ? `${wrong} words need work.` : "1 word needs work.");
   if (unclear > 0) parts.push(`${unclear} word${unclear > 1 ? "s" : ""} we could not hear clearly, so they are not counted.`);
   if (maddTotal > 0 && rushed > 0) parts.push(`${rushed} elongation${rushed > 1 ? "s" : ""} may have been rushed.`);
   else if (maddTotal > 0) parts.push("Elongations look well held.");

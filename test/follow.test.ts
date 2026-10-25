@@ -112,8 +112,8 @@ test("afasy-fatiha-phone: through a phone band, noise and 12 % faster it still f
   assert.equal(verdict.reliable, true);
   assert.equal(state.cursor, 29);
   assert.deepEqual(where("missing"), []);
-  // Known limit, measured: the telephone band strips the "s" of بِسْمِ.
-  assert.ok(where("wrong").length <= 1);
+  // The telephone band strips the "s" of بِسْمِ ("إِذْ مِ"): never a wrong word.
+  assert.deepEqual(where("wrong"), []);
 });
 
 // ── The rules, one by one ─────────────────────────────────────────────────
@@ -225,4 +225,132 @@ test("garbage in: no verdict, rather than a wrong one", () => {
   s = applyPiece(s, piece(1, "ثث خخ"));
   const v = verdictOf(s, { words: flattenAyat(ayat).map((f) => f.word), engine: "test" });
   assert.equal(v.reliable, false);
+});
+
+
+// ── Cases found by the review (BOB and Heisenberg, 2026-10-25) ────────────
+
+/** Pieces the way the model hands them over: `n` words per breath, with word
+ *  times and a voice map, so the verdict can tell silence from unread voice. */
+function breaths(ayat: Ayah[], n: number, skipVerse?: number, opts: { dropPiece?: number; source?: "model" | "browser" } = {}): PieceInput[] {
+  const out: PieceInput[] = [];
+  let t = 0;
+  let id = 0;
+  for (const a of ayat) {
+    if (a.number === skipVerse) continue;
+    const words = a.words.map((w) => w.uthmani);
+    for (let i = 0; i < words.length; i += n) {
+      const part = words.slice(i, i + n);
+      const t0 = t;
+      const t1 = t + part.length * 0.6;
+      const myId = id++;
+      t = t1 + 0.5;
+      if (opts.dropPiece === myId) {
+        out.push({ id: myId, t0, t1, text: "", failed: true, voiced: [[t0, t1]], source: "model" });
+        continue;
+      }
+      if (opts.source === "browser") {
+        out.push({ id: myId, t0, t1, text: part.join(" "), source: "browser" });
+        continue;
+      }
+      out.push({
+        id: myId,
+        t0,
+        t1,
+        text: part.join(" "),
+        words: part.map((w, k) => ({ text: w, start: t0 + k * 0.6, end: t0 + k * 0.6 + 0.55 })),
+        voiced: [[t0, t1]],
+        source: "model",
+      });
+    }
+  }
+  return out;
+}
+function judge(ayat: Ayah[], pieces: PieceInput[], from?: number) {
+  const ref = buildRef(ayat);
+  let s = createFollower(ref, undefined, from);
+  for (const p of pieces) s = applyPiece(s, p);
+  const flat = flattenAyat(ayat);
+  const v = verdictOf(s, { words: flat.map((f) => f.word), engine: "test" });
+  const at = (st: string) => v.alignment.words.filter((w) => w.status === st).map((w) => `${flat[w.refIndex].ayah}:${flat[w.refIndex].indexInAyah + 1}`);
+  return { v, at, flat };
+}
+
+test("69:33 ends in بِٱللَّهِ ٱلْعَظِيمِ — that is the verse, not 'sadaqa Allahu l-azim'", async () => {
+  const s = await loadSurah(69);
+  const { at, v } = judge(s.ayat, breaths(s.ayat, 99));
+  assert.deepEqual(at("missing"), []);
+  assert.equal(v.reliable, true);
+});
+
+test("Ar-Rahman: skipping one refrain never marks the next, recited refrain as skipped", async () => {
+  const s = await loadSurah(55);
+  for (const skip of [13, 16, 18, 21, 40]) {
+    const { at, flat } = judge(s.ayat, breaths(s.ayat, 99, skip));
+    const recitedMissing = at("missing").filter((k) => Number(k.split(":")[0]) !== skip);
+    assert.deepEqual(recitedMissing, [], `skip ${skip}`);
+    void flat;
+  }
+});
+
+test("2:68–2:70 share their opening: skipping 2:68 never accuses 2:69 (three-word breaths)", async () => {
+  const s = await loadSurah(2);
+  const ayat = s.ayat.slice(60, 75);
+  for (const skip of [68, 69, 97]) {
+    const set = skip === 97 ? s.ayat.slice(90, 105) : ayat;
+    const { at } = judge(set, breaths(set, 3, skip));
+    assert.deepEqual(at("missing").filter((k) => Number(k.split(":")[0]) !== skip), [], `skip ${skip}`);
+  }
+});
+
+test("reciting a different surah than the one on screen gives no verdict", async () => {
+  const shown = await loadSurah(67);
+  const said = await loadSurah(78);
+  const { v } = judge(shown.ayat, breaths(said.ayat, 6));
+  assert.equal(v.reliable, false);
+});
+
+test("a piece the model failed to decode is unclear, never skipped", async () => {
+  const s = await loadSurah(1);
+  const { at } = judge(s.ayat, breaths(s.ayat, 99, undefined, { dropPiece: 3 }));
+  assert.deepEqual(at("missing"), []);
+  assert.deepEqual(at("unclear"), ["4:1", "4:2", "4:3"]);
+});
+
+test("with the browser as judge, a dropped phrase or word is unclear, never skipped", async () => {
+  const s = await loadSurah(112);
+  const pieces = breaths(s.ayat, 99, undefined, { source: "browser" });
+  pieces.splice(1, 1); // the recogniser dropped verse 2's result
+  pieces[1] = { ...pieces[1], text: "لم يلد ولم" }; // and a word inside verse 3
+  const { at } = judge(s.ayat, pieces);
+  assert.deepEqual(at("missing"), []);
+});
+
+test("reciting from verse 61 of Al-Baqarah anchors there, not on an earlier copy of the phrase", async () => {
+  const s = await loadSurah(2);
+  const ref = buildRef(s.ayat);
+  for (const v of [61, 69, 70, 71]) {
+    const part = s.ayat.slice(v - 1, v + 2);
+    const pieces = breaths(part, 4);
+    const ayatAll = s.ayat;
+    let st = createFollower(ref, undefined, ref.verseFirst.get(v));
+    for (const p of pieces) st = applyPiece(st, p);
+    const flat = flattenAyat(ayatAll);
+    const verdict = verdictOf(st, { words: flat.map((f) => f.word), engine: "test" });
+    const missing = verdict.alignment.words.filter((w) => w.status === "missing");
+    assert.equal(missing.length, 0, `from ${v}: ${missing.length} false skips`);
+    assert.equal(flat[verdict.alignment.words[0].refIndex].ayah, v);
+  }
+});
+
+test("said wrong, then right on a second reading: corrected, and a substitution is 'wrong', not skip + added", () => {
+  const ayat = ayatOf(["قل هو الله احد", "الله الصمد"]);
+  let s = createFollower(buildRef(ayat));
+  s = applyPiece(s, piece(0, "قل هو كتاب احد"));
+  const first = s.pieces[0].align!;
+  assert.deepEqual(first.skipped, []);
+  assert.deepEqual(first.extras, []);
+  s = applyPiece(s, piece(1, "قل هو الله احد الله الصمد"));
+  const v = verdictOf(s, { words: flattenAyat(ayat).map((f) => f.word), engine: "test" });
+  assert.ok(v.mistakes.some((m) => m.refIndex === 2 && m.kind === "corrected"));
 });

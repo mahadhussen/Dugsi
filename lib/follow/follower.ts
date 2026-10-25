@@ -37,6 +37,8 @@ export interface PieceInput {
    *  pause: the word there may be cut in two and is never judged wrong. */
   cutStart?: boolean;
   cutEnd?: boolean;
+  /** The model could not decode this piece: there was voice, nothing was read. */
+  failed?: boolean;
   /** "model" = the on-device Quran model; "browser" = the browser recogniser
    *  standing in when the model cannot run (no word times, no voice map). */
   source: "model" | "browser";
@@ -73,10 +75,13 @@ export interface FollowState {
   pieces: PieceRecord[];
 }
 
-export function createFollower(ref: RefText, range?: { start: number; end: number }): FollowState {
+export function createFollower(ref: RefText, range?: { start: number; end: number }, from?: number): FollowState {
   const start = Math.max(0, range?.start ?? 0);
   const end = Math.min(ref.norm.length, range?.end ?? ref.norm.length);
-  return { ref, start, end, cursor: start, live: start, started: false, pieces: [] };
+  // Reciting from a verse mid-surah: start looking there, not at word 0, or a
+  // phrase that also occurs earlier anchors on the earlier copy.
+  const at = Math.max(start, Math.min(end, from ?? start));
+  return { ref, start, end, cursor: at, live: at, started: false, pieces: [] };
 }
 
 // ── Opening and closing formulas ───────────────────────────────────────────
@@ -85,30 +90,28 @@ const ISTIADHA = ["اعوذ", "بالله", "من", "الشيطان", "الرج�
 const BASMALA = ["بسم", "الله", "الرحمن", "الرحيم"];
 const SADAQA = ["صدق", "الله", "العظيم"];
 
-/** How many leading tokens spell `formula` (joined-string match tolerates the
- *  recogniser splitting or joining words), or 0. */
-function formulaPrefix(tokens: string[], formula: string[]): number {
+/** How many tokens of `tokens` spell `formula`, taken from the start (or the
+ *  end), or 0. The joined-string match tolerates the recogniser splitting or
+ *  joining words; the formula's first word must itself be there, so a verse
+ *  that merely ends like it (69:33 "…بِٱللَّهِ ٱلْعَظِيمِ") or starts like the
+ *  basmala (41:2 "…ٱلرَّحْمَٰنِ ٱلرَّحِيمِ") is never taken for it. */
+function formulaSpan(tokens: string[], formula: string[], fromEnd: boolean): number {
   const target = formula.join("");
   let best = 0;
   let bestSim = 0;
   for (let n = Math.max(1, formula.length - 2); n <= Math.min(tokens.length, formula.length + 2); n++) {
-    const sim = wordSim(target, tokens.slice(0, n).join(""));
+    const part = fromEnd ? tokens.slice(tokens.length - n) : tokens.slice(0, n);
+    if (wordSim(part[0], formula[0]) < 0.6) continue;
+    const sim = wordSim(target, part.join(""));
     if (sim > bestSim) {
       bestSim = sim;
       best = n;
     }
   }
-  return bestSim >= 0.72 ? best : 0;
+  return bestSim >= 0.78 ? best : 0;
 }
-
-function formulaSuffix(tokens: string[], formula: string[]): number {
-  const rev = [...tokens].reverse();
-  const n = formulaPrefix(
-    rev.map((t) => [...t].reverse().join("")),
-    [...formula].reverse().map((w) => [...w].reverse().join("")),
-  );
-  return n;
-}
+const formulaPrefix = (tokens: string[], formula: string[]) => formulaSpan(tokens, formula, false);
+const formulaSuffix = (tokens: string[], formula: string[]) => formulaSpan(tokens, formula, true);
 
 /** Does the text itself start with the basmala here (Al-Fatiha 1:1, An-Naml 27:30)? */
 function textHasBasmalaAt(ref: RefText, i: number): boolean {
@@ -157,6 +160,7 @@ export function placeInput(state: FollowState, input: PieceInput, cursor: number
   const formula = [...all.slice(0, lead), ...all.slice(all.length - tail)];
   const base = { input, tokens, tokenWord, formula, from: cursor, jumped: false };
 
+  if (input.failed) return { ...base, kind: "unclear", align: null };
   if (tokens.length === 0) {
     return { ...base, kind: formula.length ? "preamble" : voicedSeconds(input) >= 1 ? "unclear" : "empty", align: null };
   }
@@ -175,9 +179,55 @@ export function placeInput(state: FollowState, input: PieceInput, cursor: number
   return { ...base, kind: "aligned", align: a, jumped: !!place?.jumped };
 }
 
+/**
+ * Identical openings (2:68, 2:69 and 2:70 all begin "قَالُوا۟ ٱدْعُ لَنَا رَبَّكَ
+ * يُبَيِّن لَّنَا") cannot be told apart from one piece: which copy it was is
+ * decided by what follows. When a piece lands further on and leaves a gap, the
+ * pieces before it are moved up to meet it if their words fit just as well
+ * there — so the verse actually skipped is the one reported.
+ */
+function backfill(ref: RefText, pieces: PieceRecord[], lo: number): PieceRecord[] {
+  const last = pieces.length - 1;
+  const target = pieces[last].align;
+  if (!target) return pieces;
+  const prevIdx = last - 1;
+  const prev = pieces[prevIdx];
+  if (!prev || prev.kind !== "aligned" || !prev.align || prev.align.end >= target.start) return pieces;
+  // Try blocks [k..prev] that start at a verse start, nearest first: move the
+  // whole block up to end where the new piece starts, every piece fitting at
+  // least as well, and the block landing on a verse start too. A lone word that
+  // merely matches the end of the next verse ("ٱلْمِيزَانَ", 55:7/55:8) moves no
+  // block, because its block does not fit there.
+  for (let k = prevIdx; k >= Math.max(0, prevIdx - 8); k--) {
+    const pk = pieces[k];
+    if (pk.kind !== "aligned" || !pk.align) return pieces;
+    if (k < prevIdx && pk.align.end !== pieces[k + 1].align!.start) return pieces; // block must be contiguous
+    if (ref.inAyah[pk.align.start] !== 0) continue;
+    const moved: PieceRecord[] = [];
+    let s = target.start;
+    let ok = true;
+    for (let j = prevIdx; j >= k; j--) {
+      const pj = pieces[j];
+      const len = pj.align!.end - pj.align!.start;
+      const alt = alignWindow(ref, pj.tokens, Math.max(lo, s - 2 * len - 10), s, (i) => -0.002 * Math.abs(s - len - i));
+      if (!alt || alt.end !== s || alt.matched < pj.align!.matched || alt.score < pj.align!.score - 0.15) {
+        ok = false;
+        break;
+      }
+      moved.unshift({ ...pj, align: alt });
+      s = alt.start;
+    }
+    if (!ok) return pieces;
+    if (ref.inAyah[s] !== 0) continue;
+    return [...pieces.slice(0, k), ...moved, pieces[last]];
+  }
+  return pieces;
+}
+
 function advance(state: FollowState, rec: PieceRecord): FollowState {
-  const pieces = [...state.pieces, rec];
+  let pieces = [...state.pieces, rec];
   if (rec.kind !== "aligned" || !rec.align) return { ...state, pieces };
+  pieces = backfill(state.ref, pieces, state.start);
   const cursor = rec.align.end;
   // The screen follows the piece, but a hint that already ran ahead stays
   // ahead (the reciter is already in the next verse while this one decoded).
@@ -258,15 +308,18 @@ export function statusOfSim(sim: number): WordStatus {
 /** Best status of every word some piece covered, plus what was heard for it. */
 export function bestMarks(state: FollowState): Map<number, { status: WordStatus; heard: string | null; piece: number; corrected: boolean }> {
   const out = new Map<number, { status: WordStatus; heard: string | null; piece: number; corrected: boolean }>();
+  const everWrong = new Set<number>();
   state.pieces.forEach((p, pi) => {
     if (p.kind !== "aligned" || !p.align) return;
     for (const pair of p.align.pairs) {
       const st = statusOfSim(pair.sim);
       const heard = p.tokens.slice(pair.heard, pair.heardEnd).join(" ");
       for (let k = pair.ref; k < pair.refEnd; k++) {
+        if (st === "wrong") everWrong.add(k);
         const prev = out.get(k);
         if (!prev || RANK[st] > RANK[prev.status]) {
-          out.set(k, { status: st, heard, piece: pi, corrected: !!prev && prev.status === "wrong" });
+          // Said wrong once, right later (in any number of steps): corrected.
+          out.set(k, { status: st, heard, piece: pi, corrected: st !== "wrong" && everWrong.has(k) });
         }
       }
     }

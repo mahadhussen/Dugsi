@@ -40,6 +40,7 @@ export interface Alignment {
 const SKIP = -0.5;
 const EXTRA = -0.4;
 const JOIN = -0.1;
+const SUB_FLOOR = -0.8; // above SKIP + EXTRA (-0.9)
 const matchScore = (sim: number) => 2 * (sim - 0.5);
 
 const enum Op {
@@ -84,7 +85,9 @@ export function alignWindow(
   for (let i = 1; i <= W; i++) {
     const ri = r[lo + i - 1];
     for (let j = 1; j <= m; j++) {
-      let best = S[at(i - 1, j - 1)] + matchScore(wordSim(ri, heard[j - 1]));
+      // A heard word in a text word's slot is a substitution ("said X
+      // instead"), never cheaper to explain as a skip plus an added word.
+      let best = S[at(i - 1, j - 1)] + Math.max(SUB_FLOOR, matchScore(wordSim(ri, heard[j - 1])));
       let op = Op.Diag;
       if (j >= 2) {
         const v = S[at(i - 1, j - 2)] + matchScore(wordSim(ri, heard[j - 2] + heard[j - 1])) + JOIN;
@@ -169,8 +172,9 @@ export function alignWindow(
   };
 }
 
-/** Candidate start positions for `heard` anywhere in the text, best first. */
-export function anchorCandidates(ref: RefText, heard: string[], max = 4): number[] {
+/** Candidate start positions for `heard` anywhere in the text, best first;
+ *  equal evidence goes to the place nearest `near` (the reciter's position). */
+export function anchorCandidates(ref: RefText, heard: string[], max = 4, near = 0): number[] {
   const votes = new Map<number, number>();
   for (let j = 0; j + 1 < heard.length; j++) {
     const exact = ref.pairs.get(`${heard[j]} ${heard[j + 1]}`) ?? [];
@@ -180,7 +184,7 @@ export function anchorCandidates(ref: RefText, heard: string[], max = 4): number
   }
   return Array.from(votes.entries())
     .filter(([, v]) => v >= 1)
-    .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+    .sort((a, b) => b[1] - a[1] || Math.abs(a[0] - near) - Math.abs(b[0] - near))
     .slice(0, max)
     .map(([c]) => c);
 }
@@ -194,6 +198,9 @@ export interface Placement {
 const BACK = 40; // words behind the cursor a re-read may start
 const AHEAD = 60; // words ahead a piece may start (a missed verse or two)
 const DIST = 0.012; // start cost per word away from the cursor
+// Going back costs more than going on: a repeated refrain (Ar-Rahman) or a
+// look-alike verse must land on the next copy, not the one already recited.
+const BACK_FACTOR = 1.6;
 const DIST_CAP = 0.7;
 const JUMP = 1.0; // extra cost of a place found by searching the whole text
 
@@ -202,11 +209,11 @@ export function placePiece(ref: RefText, heard: string[], cursor: number, lo: nu
   const m = heard.length;
   const wLo = Math.max(lo, cursor - BACK);
   const wHi = Math.min(hi, cursor + AHEAD + 2 * m);
-  const local = alignWindow(ref, heard, wLo, wHi, (i) => -Math.min(DIST_CAP, DIST * Math.abs(i - cursor)));
+  const local = alignWindow(ref, heard, wLo, wHi, (i) => -Math.min(DIST_CAP, DIST * (i < cursor ? BACK_FACTOR : 1) * Math.abs(i - cursor)));
   let best: Placement | null = local ? { align: local, jumped: false } : null;
 
   if (m >= 2) {
-    for (const c of anchorCandidates(ref, heard)) {
+    for (const c of anchorCandidates(ref, heard, 4, cursor)) {
       if (c >= wLo && c + m <= wHi) continue; // already inside the window
       if (c + m <= lo || c >= hi) continue; // outside the practised range
       const g = alignWindow(ref, heard, Math.max(lo, c - 12), Math.min(hi, c + 2 * m + 12), (i) => -JUMP - 0.004 * Math.abs(i - c));
