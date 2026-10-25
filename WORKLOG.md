@@ -28,6 +28,44 @@
    syns). Alternativ: (a) som nu, (b) ohörda ord drar ned poängen (en mumlare
    får lägre poäng, men också den som läser i brus eller med dålig mikrofon).
    Mahads beslut.
+6. **Får ett överhoppat ord på högst två bokstäver ("لا", "من", "في") dömas
+   överhoppat?** I dag aldrig inne i en bit: modellen tappar sådana ord i
+   sammanhängande tal ("fil-arḍ"). Uppmätt: utan regeln blir 1 av 40 färska
+   rätta läsningar felaktigt "överhoppad", med regeln fångas 0 av 154 verkligt
+   överhoppade korta ord (syntetiskt prov, Naadir), förut 92. Alternativ:
+   (a) som nu, aldrig, (b) döm dem som andra ord (fler falska överhopp när
+   modellen tappar ett kort ord). Beslutet togs av mig i runda 4 utan att
+   läggas här; det är Mahads.
+
+## 2026-10-25 — Naadirs fjärde NOT CLEAN: röst som segmenteraren inte tog
+
+Ny osedd uppsättning: 16 mästare under en annan läsares sorl (−12 dB), brunt
+brus, tyst röst och rumsklang, samt 24 riktiga överhopp skurna ur mästarnas
+rena inspelningar. Blockerande: när segmenteraren inte gör någon bit av rösten
+(sorl, tyst insats) döms orden överhoppade (Sudais 1:5 och 1:6:1).
+
+Regel: tystnaden mellan två bitar, utöver läsarens vanliga paus (medianen),
+som rymmer minst halva de saknade ordens tid i läsarens takt gör glappet
+ohört. Mätt på segmenterarens röstkarta, inte modellens ordtider (som går in i
+varandra mellan bitar). Falska fall: 70–137 % av ordens tid. Riktiga överhopp:
+högst 5 %.
+
+| Mått | `281a3ec` | nu |
+|---|---|---|
+| 16 mästare i sorl/brus/tyst/rum: falska fel / överhopp | 3 / 7 | **3 / 0** |
+| 24 skurna överhopp: versord / ord fångade, falska | 9/10 · 10/20, 1 | **9/10 · 10/20, 1** |
+| övriga tal (alla korpusar, svep, recall) | – | oförändrade |
+
+Testet för 55:64 ändrat: klicket låg i en tystnad lika lång som versen, vilket
+nu läses som röst segmenteraren inte tog. Klicket ligger nu i en vanlig paus
+(versen överhoppad, ska dömas överhoppad), och ett nytt fall visar en tystnad
+lika lång som versen (ohört).
+
+Öppet, inte blockerande: takt-regeln läser tajwid-förlängning som ohörd röst i
+Naadirs syntetiska prov (långa överhoppade ord fångas 140/200, mål 190).
+En fast andel av bitens tid som tolerans räcker inte (35 % klarar målet men ger
+falska överhopp tillbaka redan vid 25 %). Nästa försök: tolerans efter läsarens
+egen spridning i takt.
 
 ## 2026-10-25 — Naadirs tredje NOT CLEAN: färsk data jag inte sett
 

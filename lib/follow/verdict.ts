@@ -385,6 +385,20 @@ function readerPace(state: FollowState): number | null {
 }
 /** Voice in a piece beyond what the words placed in it take at the reader's pace. */
 const excessVoice = (state: FollowState, p: PieceRecord, pace: number) => Math.max(0, voicedSeconds(p.input) - pace * placedLetters(state, p));
+/** Seconds without voice between the end of one piece's voice and the start of the next's. */
+const silence = (pb: PieceRecord, pa: PieceRecord) =>
+  Math.min(...pa.input.voiced!.map((v) => v[0])) - Math.max(...pb.input.voiced!.map((v) => v[1]));
+/** The reader's usual pause between two pieces that follow each other in the text (median; 0.6 s with no example). */
+function usualPause(state: FollowState): number {
+  const gaps: number[] = [];
+  const placed = state.pieces.filter((p) => p.kind === "aligned" && p.align && p.input.voiced?.length);
+  for (let i = 0; i + 1 < placed.length; i++) {
+    if (placed[i + 1].align!.start === placed[i].align!.end) gaps.push(silence(placed[i], placed[i + 1]));
+  }
+  if (!gaps.length) return 0.6;
+  gaps.sort((x, y) => x - y);
+  return gaps[Math.floor(gaps.length / 2)];
+}
 /** How alike this piece heard text word k (0 if it did not). */
 function pairSim(p: PieceRecord, k: number): number {
   const q = p.align?.pairs.find((x) => k >= x.ref && k < x.refEnd);
@@ -432,6 +446,10 @@ function runVerdict(
     return "missing";
   }
   if (blurred(pb, pa) || tooLong(pb, pa)) return "unclear";
+  // Silence between the two pieces beyond the reader's usual pause, long
+  // enough for half the missing words: voice the segmenter did not take (a
+  // soft voice, a reciter under the murmur of a classroom) may have been them.
+  if (pace && pb.input.voiced?.length && pa.input.voiced?.length && silence(pb, pa) - usualPause(state) >= 0.5 * runTakes) return "unclear";
 
   // Between pieces. Out of time order (a re-read) is too ambiguous to accuse,
   // and so is a gap at a cut the length cap made (the word may be in two halves).

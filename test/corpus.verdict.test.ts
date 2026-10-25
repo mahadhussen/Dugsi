@@ -17,6 +17,13 @@
 //   skip-word-by-word  17 word-by-word readings with one verse left out
 //   wrong-more         28 misreadings of other kinds (inflection, mutashabih…)
 //
+// and a third, again unseen when the rules were written:
+//
+//   masters-classroom  16 of the masters under another reciter's murmur, brown
+//                      noise, a quiet voice, slow in a reverberant room
+//   masters-cut        24 real skips cut out of the masters' clean recordings
+//                      (a whole verse, or one word)
+//
 // The ceilings are what the follower does today; a change that raises one
 // must say why. "Fel dom är värre än ingen dom": the accusation counts may
 // only go down.
@@ -162,4 +169,35 @@ test("28 more misreadings: at least 12 caught, at most 3 other words accused", a
   }
   assert.ok(caught >= 12, `caught ${caught}/28`);
   assert.ok(elsewhere.length <= 3, `accused elsewhere ${elsewhere.length}: ${elsewhere.join(", ")}`);
+});
+
+// ── The second held-out set ───────────────────────────────────────────────
+
+test("16 masters in a classroom murmur, noise or a quiet voice: nothing skipped, three known words wrong", async () => {
+  const rows = await judged("masters-classroom");
+  assert.equal(rows.length, 16);
+  const { wrong, missing } = tally(rows);
+  assert.deepEqual(missing, []);
+  assert.ok(wrong.length <= 3, `wrong ${wrong.join(", ")}`);
+});
+
+test("24 skips cut out of master recordings: 9 of 10 verse words and 10 of 20 single words caught, one other accused", async () => {
+  const rows = await judged("masters-cut");
+  assert.equal(rows.length, 24);
+  let verseCaught = 0;
+  let wordCaught = 0;
+  const elsewhere: string[] = [];
+  for (const r of rows) {
+    const e = r.fx.expect as { skipVerse?: number; skipWord?: string };
+    const isTarget = (l: string) => (e.skipVerse ? Number(l.split(":")[0]) === e.skipVerse : l === e.skipWord);
+    for (const w of r.words) {
+      const l = r.loc(w.refIndex);
+      if (isTarget(l)) {
+        if (w.status === "missing") e.skipVerse ? verseCaught++ : wordCaught++;
+      } else if (w.status === "wrong" || w.status === "missing") elsewhere.push(`${r.fx.name} ${l}=${w.status}`);
+    }
+  }
+  assert.ok(verseCaught >= 9, `verse words caught ${verseCaught}/10`);
+  assert.ok(wordCaught >= 10, `single words caught ${wordCaught}/20`);
+  assert.ok(elsewhere.length <= 1, `accused elsewhere ${elsewhere.length}: ${elsewhere.join(", ")}`);
 });

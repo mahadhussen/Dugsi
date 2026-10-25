@@ -418,9 +418,17 @@ test("a one-word verse the model wrote nothing for is unclear, never skipped (55
   const said = judge(set, empty(0.8));
   assert.deepEqual(said.at("missing"), []);
   assert.deepEqual(said.at("unclear"), ["64:1"]);
-  // A click is not a word: with almost no voice the verse was skipped.
-  assert.deepEqual(judge(set, empty(0.1)).at("missing"), ["64:1"]);
-  assert.deepEqual(judge(set, breaths(set, 99, 64)).at("missing"), ["64:1"]);
+  // A click is not a word: the verse left out, a click in the usual pause
+  // where it would have been, and the verse is skipped.
+  const skipped = breaths(set, 99, 64);
+  const before = skipped[3];
+  const click: PieceInput = { id: 99, t0: before.t1 + 0.2, t1: before.t1 + 0.3, text: "", words: [], voiced: [[before.t1 + 0.2, before.t1 + 0.3]], source: "model" };
+  assert.deepEqual(judge(set, [...skipped.slice(0, 4), click, ...skipped.slice(4)]).at("missing"), ["64:1"]);
+  assert.deepEqual(judge(set, skipped).at("missing"), ["64:1"]);
+  // A silence as long as the verse where it belongs, with nothing heard:
+  // a soft voice the segmenter did not take may have said it.
+  const hushed = empty(0.1).map((p, i) => (i === 4 ? { ...p, voiced: [] as [number, number][] } : p)).filter((_, i) => i !== 4);
+  assert.deepEqual(judge(set, hushed).at("missing"), []);
 });
 
 test("words before the first piece heard are never skipped (backlog trimmed while the model loads)", async () => {
@@ -508,6 +516,15 @@ function versePieces(ayat: Ayah[], drop: [number, number], voiceKept: boolean, h
   });
   return out;
 }
+
+test("a verse lost in a long silence is unclear; a verse left out in the usual pause is skipped", async () => {
+  // Sudais under a classroom's murmur: the segmenter made no piece of verse 5,
+  // and the silence where it belongs is as long as the verse.
+  const s = await loadSurah(1);
+  const lost = breaths(s.ayat, 99).filter((_, i) => i !== 4);
+  assert.deepEqual(judge(s.ayat, lost).at("missing"), []);
+  assert.deepEqual(judge(s.ayat, breaths(s.ayat, 99, 5)).at("missing"), ["5:1", "5:2", "5:3", "5:4"]);
+});
 
 test("a word the model lost from a piece is unclear when the piece holds its voice; skipped when it does not", async () => {
   const s = await loadSurah(1);
