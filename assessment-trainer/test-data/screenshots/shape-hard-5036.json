@@ -1,0 +1,197 @@
+{
+ "id": "shape-hard-5036",
+ "category": "shape",
+ "difficulty": "hard",
+ "correctAnswer": 1,
+ "rules": [
+  {
+   "attribute": "sides",
+   "kind": "prog",
+   "axis": "row",
+   "description": "In each row the number of corners increases by one (triangle → square → pentagon…)."
+  },
+  {
+   "attribute": "fill",
+   "kind": "prog",
+   "axis": "row",
+   "description": "In each row the fill goes empty → half-filled → solid."
+  }
+ ],
+ "problem": {
+  "rows": 3,
+  "cols": 3,
+  "cells": [
+   {
+    "objects": [
+     {
+      "shape": "triangle",
+      "fill": 0,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 0.5,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "pentagon",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 0,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "pentagon",
+      "fill": 0.5,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "hexagon",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "triangle",
+      "fill": 0,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 0.5,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   null
+  ],
+  "options": [
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "pentagon",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "square",
+      "fill": 0.5,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "hexagon",
+      "fill": 1,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "pentagon",
+      "fill": 0.5,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   },
+   {
+    "objects": [
+     {
+      "shape": "pentagon",
+      "fill": 0,
+      "size": 0.7,
+      "rotation": 0,
+      "x": 0.5,
+      "y": 0.5
+     }
+    ]
+   }
+  ]
+ }
+}
