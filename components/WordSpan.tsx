@@ -2,6 +2,10 @@
 
 import type { WordStatus } from "@/lib/align";
 
+/** A word's mark on the page: a judgement, or "reading" (passed while
+ *  reciting, not judged yet) with the step at which it lit up. */
+export type ViewStatus = WordStatus | `reading${0 | 1 | 2 | 3 | 4 | 5 | 6 | 7}`;
+
 const statusClass: Record<WordStatus, string> = {
   correct: "word-correct",
   close: "word-close",
@@ -9,6 +13,7 @@ const statusClass: Record<WordStatus, string> = {
   missing: "word-missing",
   unclear: "word-unclear",
 };
+const classOf = (s: ViewStatus) => (s.startsWith("reading") ? `word-reading rd${s.slice(7)}` : statusClass[s as WordStatus]);
 
 export interface WordSpanProps {
   text: string;
@@ -18,7 +23,7 @@ export interface WordSpanProps {
   onReveal?: () => void;
   /** Tajweed colour class (when no recitation feedback is shown). */
   colorClass?: string | null;
-  status?: WordStatus;
+  status?: ViewStatus;
   active?: boolean;
   madd?: "good" | "rushed" | "unknown";
   /** Follow the word with a space (flowing text); off inside a mushaf line. */
@@ -39,7 +44,7 @@ export function WordSpan({ text, translit, masked, onReveal, colorClass, status,
     );
   }
   return (
-    <span className={`word ${colorClass ?? ""} ${status ? statusClass[status] : ""} ${active ? "word-active" : ""}`} title={translit} data-sv={sv}>
+    <span className={`word ${colorClass ?? ""} ${status ? classOf(status) : ""} ${active ? "word-active" : ""}`} title={translit} data-sv={sv}>
       {text}
       {madd === "rushed" && (
         <sup className="ml-0.5 text-xs" style={{ color: "var(--bad)" }} title="Elongation may be rushed">

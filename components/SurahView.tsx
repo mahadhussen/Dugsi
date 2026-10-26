@@ -10,7 +10,7 @@ import type { WordStatus } from "@/lib/align";
 import { setReaderPosition } from "@/lib/reader-store";
 import { isMaskedSlot } from "@/lib/hifz";
 import { AyahMarker, SurahBanner, Basmala } from "./MushafOrnaments";
-import { WordSpan } from "./WordSpan";
+import { WordSpan, type ViewStatus } from "./WordSpan";
 import MushafPage from "./MushafPage";
 
 export { isMaskedSlot } from "@/lib/hifz";
@@ -19,7 +19,7 @@ interface Props {
   ayat: Ayah[];
   /** Surah number, for the per-verse reciter audio. */
   surahNumber: number;
-  statuses?: Record<number, WordStatus>;
+  statuses?: Record<number, ViewStatus>;
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
   showTajweed?: boolean;
   /** The next expected word while reciting live — gets a cursor + auto-follow. */
@@ -54,7 +54,7 @@ interface WordsProps {
   ayah: Ayah;
   surahNumber: number;
   baseRefIndex: number;
-  statuses?: Record<number, WordStatus>;
+  statuses?: Record<number, ViewStatus>;
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
   showTajweed: boolean;
   tajweedEveryWord: boolean;
@@ -137,7 +137,7 @@ interface FlowProps {
   from: number;
   to: number; // exclusive
   surahNumber: number;
-  statuses?: Record<number, WordStatus>;
+  statuses?: Record<number, ViewStatus>;
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
   showTajweed: boolean;
   tajweedEveryWord: boolean;

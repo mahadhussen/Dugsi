@@ -23,6 +23,16 @@ const LAST_KEY = "dugsi:asr2:lastIncident";
 const DISABLE_AFTER = 2;
 const DECAY_MS = 7 * 24 * 60 * 60 * 1000; // a week without incident forgives
 
+/** A phone or tablet: where a tab is killed for memory, without warning. On a
+ *  computer that does not happen, and a false alarm (a reload while the model
+ *  loaded) would turn off the best listener for a week — so there the guard
+ *  never switches the model off. */
+function isHandheld(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /iP(hone|ad|od)|Android/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
+}
+
 function storage(): Storage | null {
   try {
     return typeof localStorage !== "undefined" ? localStorage : null;
@@ -40,6 +50,10 @@ export function checkForPriorCrash(now: number = Date.now()): void {
     const last = Number(ls.getItem(LAST_KEY)) || 0;
     const stale = last > 0 && now - last > DECAY_MS;
 
+    if (!isHandheld()) {
+      ls.removeItem(STAGE_KEY);
+      return;
+    }
     if (ls.getItem(STAGE_KEY)) {
       // The previous analysis never signalled completion → it killed the page.
       ls.removeItem(STAGE_KEY);
@@ -60,7 +74,7 @@ export function checkForPriorCrash(now: number = Date.now()): void {
 
 export function whisperDisabledByCrashes(): boolean {
   try {
-    return storage()?.getItem(DISABLED_KEY) === "1";
+    return isHandheld() && storage()?.getItem(DISABLED_KEY) === "1";
   } catch {
     return false;
   }

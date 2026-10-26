@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SurahView, { isMaskedSlot } from "./SurahView";
 import { isSpeechSupported } from "@/lib/speech/recognizer";
 import type { WordStatus } from "@/lib/align";
+import type { ViewStatus } from "./WordSpan";
 import { type Ayah, flattenAyat } from "@/lib/quran/types";
 import { useSettings } from "@/lib/settings";
 import { useAuth } from "@/lib/supabase/AuthProvider";
@@ -140,17 +141,28 @@ export default function Reciter({
   // verse is judged by it rather than waiting for a 67 MB download.
   // iPhone without WebGPU runs the model on the CPU in a tab with a tight memory
   // limit — the old model memory-killed it there — so it stays with the browser.
+  // iPhone with WebGPU runs it, but every browser there shares one tight
+  // memory limit per tab and reloads the page when it is passed: the model is
+  // loaded only when the mic is tapped and let go when reciting closes
+  // (another surah, Listen, another page), never left resident.
   const [iosNoGpu, setIosNoGpu] = useState(false);
+  const [iosLean, setIosLean] = useState(false);
   useEffect(() => {
     const ua = navigator.userAgent || "";
     const ios = /iP(hone|ad|od)/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
     setIosNoGpu(ios && !("gpu" in navigator));
+    setIosLean(ios && "gpu" in navigator);
+    if (!ios) return;
+    return () => {
+      asr.unload();
+      markWhisperFinished();
+    };
   }, []);
   const modelAllowed = settings.quranModel && !whisperDisabledByCrashes() && !iosNoGpu;
   useEffect(() => {
     // On a "save data" connection, wait until the mic is actually tapped.
     const saveData = (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData;
-    if (modelAllowed && !saveData && asr.status === "idle") {
+    if (modelAllowed && !iosLean && !saveData && asr.status === "idle") {
       // Loading the model is where a phone runs out of memory, if anywhere:
       // leave a breadcrumb so a killed tab is counted (see crashGuard).
       markWhisperRunning();
@@ -158,7 +170,7 @@ export default function Reciter({
         if (!engineRef.current) markWhisperFinished();
       });
     }
-  }, [modelAllowed, engineTick]);
+  }, [modelAllowed, iosLean, engineTick]);
   const [model, setModel] = useState({ status: asr.status, percent: asr.percent, device: asr.device });
   useEffect(() => asr.subscribe(() => setModel({ status: asr.status, percent: asr.percent, device: asr.device })), []);
 
@@ -228,6 +240,7 @@ export default function Reciter({
     peeksRef.current = 0;
     loggedRef.current = false;
     takeRef.current = null;
+    litSteps.current.clear();
     clearRecording();
     const range = { start: 0, end: ref.norm.length };
     // Start following where the reader is: a bookmark, a mistake to practise,
@@ -292,15 +305,27 @@ export default function Reciter({
   const recording = phase === "recording";
   const follow = snap?.follow ?? null;
   const livePointer = follow ? liveCursor(follow) : 0;
-  const liveStatuses = useMemo<Record<number, WordStatus>>(() => {
+  // Words the reader has passed but no piece has judged yet glow green while
+  // they read — each one a step after the one before, so the green flows
+  // with the voice instead of jumping. Once judged they settle: green, or
+  // yellow / grey. A word keeps the step it was first lit with.
+  const litSteps = useRef(new Map<number, number>());
+  const liveStatuses = useMemo<Record<number, ViewStatus>>(() => {
     if (!follow) return {};
     const marks = liveMarks(follow);
-    if (settings.liveMistakes) return marks;
-    // Positive-only marking: keep what was said right, hide the rest.
-    const out: Record<number, WordStatus> = {};
-    for (const k in marks) if (marks[k] === "correct" || marks[k] === "close") out[k] = marks[k];
+    const out: Record<number, ViewStatus> = {};
+    for (const k in marks) {
+      if (settings.liveMistakes || marks[k] === "correct" || marks[k] === "close") out[k] = marks[k];
+    }
+    const lit = litSteps.current;
+    let fresh = 0;
+    for (let k = follow.cursor; k < livePointer; k++) {
+      if (out[k] || marks[k]) continue;
+      if (!lit.has(k)) lit.set(k, Math.min(7, fresh++));
+      out[k] = `reading${lit.get(k)!}` as ViewStatus;
+    }
     return out;
-  }, [follow, settings.liveMistakes]);
+  }, [follow, livePointer, settings.liveMistakes]);
 
   // Reading position follows the reciter on long surahs.
   useEffect(() => {
@@ -565,7 +590,7 @@ export default function Reciter({
 
             {recording ? (
               <button onClick={() => void stop()} className="relative grid h-20 w-20 shrink-0 place-items-center" aria-label="Stop reciting">
-                <span className="absolute inset-0 animate-ring rounded-full bg-red-500/40" />
+                <VoiceRing engineRef={engineRef} />
                 <span className="absolute inset-0 rounded-full bg-red-500/15" />
                 <span className="relative grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-red-600 text-white shadow-soft transition active:scale-95">
                   <span className="h-7 w-7 rounded-md bg-white" />
@@ -664,6 +689,27 @@ function EngineStatus({
   return <p className="mt-2 text-center text-xs font-semibold text-ink/45">{text}</p>;
 }
 
+/** A ring round the mic that swells with the reciter's voice: seen at once
+ *  that the voice is heard (and that the microphone is not picking up
+ *  anything, when it stays still). Read every frame, outside React state. */
+function VoiceRing({ engineRef }: { engineRef: React.MutableRefObject<ReciteEngine | null> }) {
+  const el = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    let raf = 0;
+    const frame = () => {
+      const level = engineRef.current?.level ?? 0;
+      if (el.current) {
+        el.current.style.transform = `scale(${1 + level * 0.45})`;
+        el.current.style.opacity = String(0.25 + level * 0.6);
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [engineRef]);
+  return <span ref={el} className="absolute inset-0 rounded-full bg-red-500/50 transition-transform duration-75" aria-hidden />;
+}
+
 /** The running tally shown under the live transcript while reciting. */
 function LiveTally({
   correct,
@@ -683,8 +729,8 @@ function LiveTally({
       <span className="text-emerald-bright">✓ {correct}</span>
       {detecting ? (
         <>
-          <span className={wrong > 0 ? "font-semibold text-red-500" : "text-ink/40"}>✗ {wrong} wrong</span>
-          <span className={missing > 0 ? "font-semibold text-amber-600" : "text-ink/40"}>↷ {missing} skipped</span>
+          <span className={wrong > 0 ? "font-semibold text-amber-600" : "text-ink/40"}>✗ {wrong} wrong</span>
+          <span className={missing > 0 ? "font-semibold text-ink/60" : "text-ink/40"}>↷ {missing} skipped</span>
           <span className={extra > 0 ? "font-semibold text-amber-600" : "text-ink/40"}>+ {extra} added</span>
         </>
       ) : (
@@ -798,8 +844,8 @@ function ResultsPanel({
           tone="good"
           note={count("close") > 0 ? `+ ${count("close")} nearly right` : undefined}
         />
-        <Stat label="Needs work" value={count("wrong")} tone="bad" />
-        <Stat label="Skipped" value={count("missing")} tone="warn" />
+        <Stat label="Needs work" value={count("wrong")} tone="warn" />
+        <Stat label="Skipped" value={count("missing")} tone="muted" />
         <Stat label="Not heard" value={feedback.unclear} tone="muted" />
       </div>
 

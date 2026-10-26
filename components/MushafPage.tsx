@@ -7,7 +7,7 @@ import type { WordStatus } from "@/lib/align";
 import { primaryRuleColor } from "@/lib/tajweed/rules";
 import { isMaskedSlot } from "@/lib/hifz";
 import { AyahMarker, SurahBanner, Basmala } from "./MushafOrnaments";
-import { WordSpan } from "./WordSpan";
+import { WordSpan, type ViewStatus } from "./WordSpan";
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
@@ -21,7 +21,7 @@ export interface MushafPageProps {
   /** Global word index for a word of the current surah, or undefined when the
    *  word is outside the verses being practised. */
   refIndex: (ayah: number, word: number) => number | undefined;
-  statuses?: Record<number, WordStatus>;
+  statuses?: Record<number, ViewStatus>;
   maddVerdicts?: Record<number, "good" | "rushed" | "unknown">;
   showTajweed: boolean;
   activeIndex?: number;

@@ -60,8 +60,9 @@ app says so on screen.
    bright summer nights, offline and server-free. A built-in adhan player lets
    you choose a call-to-prayer recording and listen whenever you like.
 
-7. **Live mistake detection.** While you recite, skipped words turn grey and
-   substituted words red the moment the recogniser is sure you moved on; added
+7. **Live following.** While you recite, the green flows along the words you
+   are saying; once a piece is judged, words said right stay green, words
+   said as another turn yellow and skipped words grey; added
    words are counted in a running tally. It is deliberately conservative (a
    word is only flagged once a later word clearly matched), a re-read word turns
    green again, and the full alignment at the end has the final say. Can be

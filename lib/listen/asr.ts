@@ -27,6 +27,8 @@ class AsrClient {
   private pending = new Map<number, (r: AsrResult | null) => void>();
   private listeners = new Set<Listener>();
   private fileProgress = new Map<string, number>();
+  /** Settles the load in flight (with false when the model is let go). */
+  private endLoading: ((ok: boolean) => void) | null = null;
 
   subscribe(l: Listener): () => void {
     this.listeners.add(l);
@@ -54,6 +56,7 @@ class AsrClient {
     this.percent = 0;
     this.emit();
     this.loading = new Promise<boolean>((resolve) => {
+      this.endLoading = resolve;
       let w: Worker;
       try {
         w = new Worker(`${BASE}/asr-worker.js`, { type: "module" });
@@ -113,6 +116,27 @@ class AsrClient {
       });
     });
     return this.loading;
+  }
+
+  /**
+   * Let go of the model and its worker, returning the memory (hundreds of MB
+   * with the graphics chip). An iPhone kills a tab that holds too much, so
+   * there the model is only kept while reciting. Loading again reads the
+   * downloaded files from the cache.
+   */
+  unload(): void {
+    if (!this.worker && this.status !== "loading") return;
+    this.worker?.terminate();
+    this.worker = null;
+    this.loading = null;
+    this.endLoading?.(false);
+    this.endLoading = null;
+    this.status = "idle";
+    this.percent = 0;
+    this.fileProgress.clear();
+    for (const done of this.pending.values()) done(null);
+    this.pending.clear();
+    this.emit();
   }
 
   /** Decode 16 kHz audio. Null when the model is not available or failed. */
