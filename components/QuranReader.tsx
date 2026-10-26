@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Reciter from "./Reciter";
+import dynamic from "next/dynamic";
 import SurahPicker from "./SurahPicker";
 import ReciterPicker from "./ReciterPicker";
 import ReciterAvatar from "./ReciterAvatar";
 import SurahView from "./SurahView";
 import ListenPlayer from "./ListenPlayer";
+import SelectionPlay from "./SelectionPlay";
 import PageHeader from "./PageHeader";
 import OptionsSheet from "./OptionsSheet";
 import Legend from "./Legend";
@@ -17,6 +18,17 @@ import { useReciter } from "@/lib/reciter-store";
 import { useReaderPosition } from "@/lib/reader-store";
 import { useSettings } from "@/lib/settings";
 import { useAuth } from "@/lib/supabase/AuthProvider";
+
+// Reciting (the follower, the listening engine, the list of Quran words) is
+// fetched only when reciting is opened, so reading and listening load lighter.
+const Reciter = dynamic(() => import("./Reciter"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex justify-center py-16 text-ink/60">
+      <span className="h-8 w-8 animate-spin rounded-full border-4 border-gold border-t-transparent" />
+    </div>
+  ),
+});
 import { loadFurthest, resetFurthest } from "@/lib/supabase/progress";
 import { PAGE_COUNT, pageStart, surahStartingOn } from "@/lib/quran/layout";
 
@@ -120,6 +132,16 @@ export default function QuranReader() {
     };
   }, [trackProgress, surah, reading.surah, userId]);
 
+  // Where the practised range starts in the whole surah's word list.
+  const wordOffset = useMemo(() => {
+    if (!surah || !range || surah.number !== reading.surah) return 0;
+    let n = 0;
+    for (const a of surah.ayat) {
+      if (a.number >= range.from) break;
+      n += a.words.length;
+    }
+    return n;
+  }, [surah, range, reading.surah]);
   const ayat = useMemo(() => {
     if (!surah) return null;
     // A range belongs to the surah it was chosen for — never to the one still
@@ -208,10 +230,12 @@ export default function QuranReader() {
             <span className="h-8 w-8 animate-spin rounded-full border-4 border-gold border-t-transparent" />
           </div>
         ) : reading.mode === "recite" ? (
-          <Reciter ayat={ayat} surahNumber={reading.surah} trackProgress={trackProgress} startVerse={range ? undefined : reading.verse} />
+          <Reciter ayat={ayat} surahNumber={reading.surah} trackProgress={trackProgress} startVerse={range ? undefined : reading.verse} wordOffset={wordOffset} />
         ) : (
           <ListenSection surah={surah} surahId={surah.number} startVerse={reading.verse} onSurahChange={followSurah} />
         )}
+
+        <SelectionPlay />
 
         {settings.showTajweed && showing && (
           <div className="mt-8">
@@ -262,11 +286,20 @@ function ListenSection({
     }
     return o;
   }, [surah]);
-  const activeIndex = pos && offsets.has(pos.verse) ? offsets.get(pos.verse)! + pos.word : undefined;
+  // word -1: a whole-surah recording, where we know the verse but not the
+  // word — the whole verse lights up (and the page follows its first word).
+  const activeIndex = pos && offsets.has(pos.verse) ? offsets.get(pos.verse)! + Math.max(0, pos.word) : undefined;
+  // The lit verse is coloured through the words' surah:verse tag, so the
+  // tajweed colours stay on everywhere else on the page.
+  const litCss =
+    pos && pos.word === -1
+      ? `.karaoke [data-sv="${surahId}:${pos.verse}"], .karaoke [data-sv="${surahId}:${pos.verse}"] .word { color: var(--good) !important; }`
+      : "";
   const onWordChange = useCallback((p: { verse: number; word: number } | null) => setPos(p), []);
 
   return (
     <div className="space-y-4">
+      {litCss && <style>{litCss}</style>}
       <div className="karaoke">
         <SurahView
           ayat={surah.ayat}

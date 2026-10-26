@@ -15,6 +15,7 @@ import {
 import { useReciter } from "@/lib/reciter-store";
 import { noteRecentReciter, toggleFavouriteReciter, useReciterPrefs } from "@/lib/reciter-prefs";
 import { hasWordTimings } from "@/lib/quran/timings";
+import { hasSurahTiming } from "@/lib/listen/surah-timing";
 import ReciterAvatar from "./ReciterAvatar";
 import Sheet from "./Sheet";
 
@@ -198,14 +199,18 @@ function Row({ r, current, fav, onPick }: { r: Reciter; current: boolean; fav: b
         <span className="mt-1 flex flex-wrap items-center gap-1 text-xs font-semibold text-ink/50">
           <Badge>{STYLE_LABEL[r.style]}</Badge>
           <Badge>{r.country}</Badge>
-          {perAyah ? (
+          {hasSurahTiming(r.id) ? (
+            // Listening plays this Sheikh's whole-surah recording (no pauses
+            // between verses); its bitrate is mp3quran's, not the verse files'.
+            <Badge tone="good">No pauses · verse lights up</Badge>
+          ) : perAyah ? (
             <Badge tone={q === "high" ? "good" : q === "standard" ? "neutral" : "muted"}>
               {q === "high" ? `High quality · ${reciterBitrate(r)}k` : q === "standard" ? `${reciterBitrate(r)}k` : `Archive · ${reciterBitrate(r)}k`}
             </Badge>
           ) : (
             <Badge>One file per surah</Badge>
           )}
-          {hasWordTimings(r.id) && <Badge tone="good">Word highlighting</Badge>}
+          {hasWordTimings(r.id) && !hasSurahTiming(r.id) && <Badge tone="good">Word highlighting</Badge>}
         </span>
       </button>
       <span className="ayah hidden shrink-0 text-xl text-emerald-bright sm:block" dir="rtl">

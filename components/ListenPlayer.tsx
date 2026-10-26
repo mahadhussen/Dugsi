@@ -13,11 +13,13 @@ import {
   type SaveProgress,
 } from "@/lib/audio-cache";
 import {
+  clearLoop,
   liveAudio,
   next as engineNext,
   pause as enginePause,
   play as enginePlay,
   previous as enginePrev,
+  repeatRange,
   seek,
   setRate,
   setReciter,
@@ -31,7 +33,7 @@ interface Props {
   /** Keep the reader in sync as the recitation flows into the next surah. */
   onSurahChange: (id: number) => void;
   /** Word being recited right now (verse, index in verse), or null. Only for
-   *  Sheikhs with word timings; verse-level otherwise. */
+   *  Sheikhs with word timings; word -1 = the whole verse (surah recordings). */
   onWordChange?: (pos: { verse: number; word: number } | null) => void;
   /** Verse to start from (a bookmark or a deep link). */
   startVerse?: number;
@@ -52,9 +54,12 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
   const meta = surahMeta(surahId)!;
   const ayahCount = meta.ayahCount;
   const verse = listen.at.surah === surahId ? listen.at.verse : 1;
-  // A whole-surah Sheikh is recited from one file: there is no verse to point at
-  // and no word to light up, so the controls step surah by surah instead.
-  const perAyah = hasPerAyahAudio(reciter);
+  // "surah": one file per surah with verse timings — no gaps, the verse lights
+  // up, steps and repeats go verse by verse. "ayah": one file per verse, words
+  // light up where word timings exist. "file": one file per surah without
+  // timings — the controls step surah by surah.
+  const perAyah = listen.mode !== "file" && (listen.mode === "surah" || hasPerAyahAudio(reciter));
+  const surahFile = listen.mode === "surah";
 
   const [timings, setTimings] = useState<SurahTimings | null>(null);
 
@@ -123,6 +128,11 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
       onWordChange(null);
       return;
     }
+    if (surahFile) {
+      // The whole verse the Sheikh is reciting lights up.
+      onWordChange({ verse: listen.at.verse, word: -1 });
+      return;
+    }
     let raf = 0;
     let last = -2;
     const at = listen.at.verse;
@@ -138,7 +148,7 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [perAyah, listen.playing, listen.at.surah, listen.at.verse, surahId, timings, onWordChange]);
+  }, [perAyah, surahFile, listen.playing, listen.at.surah, listen.at.verse, surahId, timings, onWordChange]);
 
   // Lock-screen / headphone controls, plus a "now playing" card on the phone.
   useEffect(() => {
@@ -187,6 +197,30 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
     return () => clearInterval(id);
   }, [perAyah, listen.at.surah]);
 
+  // Repeat: off → this verse (until stopped) → this surah → off.
+  const repeatMode: "off" | "verse" | "surah" = listen.loop ? "verse" : listen.repeat ? "surah" : "off";
+  const cycleRepeat = () => {
+    if (repeatMode === "off") {
+      const at = { surah: surahId, verse };
+      repeatRange(at, at, null);
+    } else if (repeatMode === "verse") {
+      clearLoop();
+      setRepeat(true);
+    } else {
+      setRepeat(false);
+    }
+  };
+  const loop = listen.loop;
+  const loopLabel = loop
+    ? loop.times === 1
+      ? ` · reading ${loop.from.verse === loop.to.verse ? "this verse" : `verses ${loop.from.verse}–${loop.to.verse}`}`
+      : loop.from.verse === loop.to.verse
+      ? ` · repeating this verse${loop.times ? ` (${loop.done + 1}/${loop.times})` : ""}`
+      : ` · repeating verses ${loop.from.verse}–${loop.to.verse}${loop.times ? ` (${loop.done + 1}/${loop.times})` : ""}`
+    : listen.repeat
+      ? " · repeating the surah"
+      : "";
+
   const progress = perAyah ? (ayahCount > 1 ? ((verse - 1) / (ayahCount - 1)) * 100 : 0) : filePct;
   const rates = [0.75, 1, 1.25];
   const nextRate = () => setRate(rates[(rates.indexOf(listen.rate) + 1) % rates.length]);
@@ -196,16 +230,22 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
       <div className="card p-3">
         <div className="flex items-center justify-between gap-2">
           <button
-            onClick={() => setRepeat(!listen.repeat)}
-            aria-pressed={listen.repeat}
-            title={listen.repeat ? "Repeating this surah" : "Repeat this surah"}
-            className={`grid h-12 w-12 shrink-0 place-items-center rounded-full border-2 transition ${
-              listen.repeat ? "border-gold bg-gold/15 text-gold-soft" : "border-ink/15 text-ink/60 hover:border-ink/30"
+            onClick={cycleRepeat}
+            aria-pressed={repeatMode !== "off"}
+            aria-label={repeatMode === "verse" ? "Repeating this verse. Tap to repeat the surah" : repeatMode === "surah" ? "Repeating this surah. Tap to stop repeating" : "Repeat this verse"}
+            title={repeatMode === "verse" ? "Repeating this verse" : repeatMode === "surah" ? "Repeating this surah" : "Repeat"}
+            className={`relative grid h-12 w-12 shrink-0 place-items-center rounded-full border-2 transition ${
+              repeatMode !== "off" ? "border-gold bg-gold/15 text-gold-soft" : "border-ink/15 text-ink/60 hover:border-ink/30"
             }`}
           >
             <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor" aria-hidden>
               <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z" />
             </svg>
+            {repeatMode !== "off" && (
+              <span className="absolute -bottom-1 -right-1 rounded-full bg-gold px-1 text-[10px] font-extrabold leading-4 text-white">
+                {repeatMode === "verse" ? "1" : "S"}
+              </span>
+            )}
           </button>
 
           <div className="flex items-center gap-3">
@@ -217,11 +257,14 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
             <button
               onClick={() => (listen.playing ? enginePause() : enginePlay())}
               aria-label={listen.playing ? "Pause" : "Play"}
-              className="grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-emerald text-white shadow-soft transition hover:brightness-105 active:scale-95"
+              className="relative grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-emerald text-white shadow-soft transition hover:brightness-105 active:scale-95"
             >
-              {listen.status === "loading" && listen.playing ? (
-                <span className="h-8 w-8 animate-spin rounded-full border-4 border-white/40 border-t-white" />
-              ) : listen.playing ? (
+              {/* Loading shows as a ring around the button — the button itself
+                  always stays play/pause, so it never "disappears". */}
+              {listen.status === "loading" && listen.playing && (
+                <span className="pointer-events-none absolute -inset-1 animate-spin rounded-full border-4 border-emerald/20 border-t-emerald" aria-hidden />
+              )}
+              {listen.playing ? (
                 <svg viewBox="0 0 24 24" className="h-10 w-10" fill="currentColor" aria-hidden>
                   <rect x="6" y="5" width="4" height="14" rx="1" />
                   <rect x="14" y="5" width="4" height="14" rx="1" />
@@ -252,17 +295,18 @@ export default function ListenPlayer({ surahId, onSurahChange, onWordChange, sta
 
         <p className="mt-2 text-center text-sm font-bold text-ink/70">
           {listen.status === "error"
-            ? "Couldn't load the audio. Try another Sheikh."
+            ? "Couldn't load the audio. Tap play to try again, or pick another Sheikh."
             : listen.playing
               ? perAyah
-                ? `Verse ${verse} of ${ayahCount}${listen.repeat ? " · repeating" : ""}`
-                : `Reciting ${meta.transliteration}${listen.repeat ? " · repeating" : ""}`
+                ? `Verse ${verse} of ${ayahCount}${loopLabel}${listen.status === "loading" ? " · loading…" : ""}`
+                : `Reciting ${meta.transliteration}${listen.repeat ? " · repeating" : ""}${listen.status === "loading" ? " · loading…" : ""}`
               : `Tap play to hear ${reciter.name} recite ${meta.transliteration}`}
         </p>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-ink/10">
           <div className="h-full rounded-full bg-emerald transition-[width] duration-300" style={{ width: `${progress}%` }} />
         </div>
 
+        {perAyah && <RepeatPassage surahId={surahId} ayahCount={ayahCount} current={verse} />}
         <SaveSurah surahId={surahId} reciterId={reciterId} />
       </div>
     </div>
@@ -354,3 +398,71 @@ function SaveSurah({ surahId, reciterId }: { surahId: number; reciterId: string 
     </div>
   );
 }
+
+/**
+ * "Read this part again": pick the verses and how many times, and the Sheikh
+ * reads just that stretch, then carries on. One verse = from and to the same.
+ */
+function RepeatPassage({ surahId, ayahCount, current }: { surahId: number; ayahCount: number; current: number }) {
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState(current);
+  const [to, setTo] = useState(current);
+  const [times, setTimes] = useState<number | null>(3);
+  useEffect(() => {
+    if (!open) {
+      setFrom(current);
+      setTo(current);
+    }
+  }, [current, open]);
+  const verses = Array.from({ length: ayahCount }, (_, i) => i + 1);
+  if (!open) {
+    return (
+      <div className="mt-2 text-center">
+        <button onClick={() => setOpen(true)} className="text-sm font-bold text-ink/60 underline underline-offset-2 hover:text-ink">
+          Repeat a passage…
+        </button>
+      </div>
+    );
+  }
+  const sel = "rounded-lg border-2 border-ink/15 bg-surface px-2 py-1 text-sm font-bold text-ink";
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-sm font-bold text-ink/70">
+      <span>Verses</span>
+      <select aria-label="From verse" className={sel} value={from} onChange={(e) => setFrom(Number(e.target.value))}>
+        {verses.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+      <span>to</span>
+      <select aria-label="To verse" className={sel} value={to} onChange={(e) => setTo(Number(e.target.value))}>
+        {verses.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+      <select aria-label="How many times" className={sel} value={times ?? 0} onChange={(e) => setTimes(Number(e.target.value) || null)}>
+        {[1, 3, 5, 7, 0].map((n) => (
+          <option key={n} value={n}>
+            {n === 0 ? "until I stop" : `${n}×`}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={() => {
+          repeatRange({ surah: surahId, verse: Math.min(from, to) }, { surah: surahId, verse: Math.max(from, to) }, times);
+          setOpen(false);
+        }}
+        className="rounded-full bg-emerald px-3 py-1 text-white shadow-soft"
+      >
+        Play
+      </button>
+      <button onClick={() => setOpen(false)} className="px-1 text-ink/50 hover:text-ink">
+        Cancel
+      </button>
+    </div>
+  );
+}
+

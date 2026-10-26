@@ -46,7 +46,7 @@ const MADD_FACTOR: Record<"natural" | "lazim", number> = {
  * rushed elongations (a learner skipping the 6-count madd in "aḍ-ḍāllīn") but
  * will not judge subtle differences. Treated as a hint, not a verdict.
  */
-export function evaluateMadd(timed: TimedWord[], expected: ExpectedWord[]): TimingReport {
+export function evaluateMadd(timed: TimedWord[], expected: ExpectedWord[], rushedBelow = 0.7): TimingReport {
   const words = timed
     .map((w) => ({ ...w, norm: normalizeWord(w.word), dur: Math.max(0, w.end - w.start) }))
     .filter((w) => w.norm.length > 0 && w.dur > 0);
@@ -98,7 +98,7 @@ export function evaluateMadd(timed: TimedWord[], expected: ExpectedWord[]): Timi
     }
     const expectedSec = (m.exp.norm.length / speakingRate) * MADD_FACTOR[m.exp.madd];
     const ratio = m.dur / expectedSec;
-    const verdict: MaddCheck["verdict"] = ratio >= 0.7 ? "good" : "rushed";
+    const verdict: MaddCheck["verdict"] = ratio >= rushedBelow ? "good" : "rushed";
     checks.push({
       refIndex: m.exp.refIndex,
       expected: m.exp.norm,

@@ -17,6 +17,7 @@
 
 import { ayahAudioUrl, getReciter, hasPerAyahAudio } from "./audio-quran";
 import { surahAudioUrl } from "./mp3quran";
+import { hasSurahTiming, loadSurahTiming } from "./listen/surah-timing";
 import { surahMeta } from "./quran";
 
 const CACHE_NAME = "dugsi-audio-v1";
@@ -58,8 +59,15 @@ export function surahAyahUrls(surah: number, reciterId: string): string[] {
  * cannot be resolved).
  */
 export async function surahFileUrls(surah: number, reciterId: string): Promise<string[]> {
+  const meta = surahMeta(surah);
+  if (!meta) return [];
+  // A Sheikh with a timed whole-surah recording is played from that one file
+  // (no pauses between verses), so that file is what must be on the device.
+  if (hasSurahTiming(reciterId)) {
+    const t = await loadSurahTiming(reciterId, surah, meta.ayahCount);
+    if (t) return [t.url];
+  }
   if (hasPerAyahAudio(getReciter(reciterId))) return surahAyahUrls(surah, reciterId);
-  if (!surahMeta(surah)) return [];
   const one = await surahAudioUrl(reciterId, surah);
   return one ? [one] : [];
 }
@@ -133,6 +141,9 @@ export interface SaveProgress {
  * as it goes. Resolves to the number of files saved (0 when the recording's
  * server refuses a browser fetch); stops early if aborted.
  */
+/** Largest single recording kept on the device for offline listening. */
+export const MAX_SINGLE_FILE_BYTES = 60 * 1024 * 1024;
+
 export async function saveSurah(
   surah: number,
   reciterId: string,
@@ -143,6 +154,13 @@ export async function saveSurah(
   const urls = await surahFileUrls(surah, reciterId);
   const total = urls.length;
   if (!cache || total === 0) return 0;
+  // A single whole-surah file is played from the device as one blob in memory;
+  // the longest surahs (100–250 MB) would not fit a phone tab. Those stream.
+  if (total === 1) {
+    const head = await fetch(urls[0], { method: "HEAD", signal }).catch(() => null);
+    const size = Number(head?.headers.get("content-length") || 0);
+    if (size > MAX_SINGLE_FILE_BYTES) return 0;
+  }
 
   let done = 0;
   let next = 0;

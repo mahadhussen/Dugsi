@@ -14,10 +14,12 @@
 //     device disabled long ago is re enabled automatically.
 //   • The reciter can always re enable manually.
 
-const STAGE_KEY = "dugsi:whisperStage";
-const COUNT_KEY = "dugsi:whisperCrashCount";
-const DISABLED_KEY = "dugsi:whisperDisabled";
-const LAST_KEY = "dugsi:whisperLastIncident";
+// v2 (2026-10-25): the listening model changed (Tarteel tiny, in a worker);
+// incidents counted against the old whisper-base must not switch it off.
+const STAGE_KEY = "dugsi:asr2:stage";
+const COUNT_KEY = "dugsi:asr2:crashCount";
+const DISABLED_KEY = "dugsi:asr2:disabled";
+const LAST_KEY = "dugsi:asr2:lastIncident";
 const DISABLE_AFTER = 2;
 const DECAY_MS = 7 * 24 * 60 * 60 * 1000; // a week without incident forgives
 

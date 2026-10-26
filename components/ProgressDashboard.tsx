@@ -92,7 +92,7 @@ export default function ProgressDashboard() {
       ) : tab === "overview" ? (
         <Overview stats={stats} />
       ) : tab === "mistakes" ? (
-        <Card title="Words you stumble on" sub="Across every surah, most frequent first.">
+        <Card title="Words you stumble on" sub="Across every surah — what still slips comes first, what you have put right goes last.">
           <MistakesPanel words={stats.wordMistakes} />
         </Card>
       ) : tab === "recordings" ? (
@@ -147,8 +147,8 @@ export default function ProgressDashboard() {
               <span>
                 <span className="block font-bold text-ink">Quran-tuned recognition</span>
                 <span className="block text-sm font-semibold text-ink/55">
-                  Use Tarteel&apos;s open Quran-trained Whisper model for the precise check (about 80 MB, downloaded once).
-                  Falls back to the light general model on phones that can&apos;t run it.
+                  Listen with Tarteel&apos;s open Quran model on your device (about 67 MB, downloaded once). Off, or where it
+                  can&apos;t run, your browser&apos;s speech service listens instead.
                 </span>
               </span>
               <input

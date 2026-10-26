@@ -33,7 +33,7 @@ deliberately *not* added.
 | Source | Used for | Licence | Obligations |
 |---|---|---|---|
 | [EveryAyah.com](https://everyayah.com) | Verse audio for every Sheikh (streamed at play time, never copied or re-hosted; a listener may save a surah into their own browser cache for offline listening, as any web page is cached) | Free public archive | Attribution |
-| [MP3Quran.net](https://mp3quran.net) | Whole-surah recitations for Sheikhs never published ayah by ayah (Al Zain Mohammad Ahmad). Their public catalogue API is read in the listener's browser to find the reciter's own download server; files stream from there and are never copied or re-hosted | Free public archive | Attribution |
+| [MP3Quran.net](https://mp3quran.net) | Whole-surah recordings plus verse timings from their documented `ayat_timing` API (33 Sheikhs, fixed recording ids in `lib/listen/surah-timing.ts`), so a surah plays as one file with no pause between verses; and Sheikhs never published ayah by ayah (Al Zain Mohammad Ahmad). Read and streamed in the listener's browser, never copied or re-hosted | Free public archive | Attribution |
 | [cpfair/quran-align](https://github.com/cpfair/quran-align) | Word-level timestamps for Alafasy, Husary Muallim, Shuraim, Minshawi (`lib/quran/timings/`) | CC BY 4.0 | Attribution on `/about`; only ayat whose segmentation matched our text were kept (≈99%). Sudais data in the release is corrupt and was skipped; reciters whose EveryAyah bitrate differs from ours were skipped too, so timings always match the audio we play |
 
 ## Speech and AI models (all run on the device)
@@ -41,9 +41,9 @@ deliberately *not* added.
 | Source | Stars | Used for | Licence |
 |---|---|---|---|
 | [openai/whisper](https://github.com/openai/whisper) | ~97k | Speech recognition family | MIT |
-| [tarteel-ai/whisper-base-ar-quran](https://huggingface.co/tarteel-ai/whisper-base-ar-quran) | — | Quran-tuned recognition (via the community ONNX export `YunusZJ/whisper-base-ar-quran-ONNX`) | Apache-2.0 |
-| [Xenova/whisper-tiny](https://huggingface.co/Xenova/whisper-tiny) | — | Light general model / fallback | MIT |
-| [snakers4/silero-vad](https://github.com/snakers4/silero-vad) | ~10k | Voice activity detection (hesitations, auto-stop) | MIT |
+| [tarteel-ai/whisper-tiny-ar-quran](https://huggingface.co/tarteel-ai/whisper-tiny-ar-quran) | — | The listening model while reciting (on the device), through the community ONNX export [`Sharjeelbaig/whisper-tiny-ar-quran-onnx`](https://huggingface.co/Sharjeelbaig/whisper-tiny-ar-quran-onnx) pinned to revision `cd93bde`; graphs used: `encoder_model.onnx` (SHA-256 `f0c604c7…c5b5c8`) and `decoder_model_merged_quantized.onnx` (`06a5c440…f652`) | Apache-2.0 |
+
+Replaced 2026-10-25 and why (measured, see `WORKLOG.md`): `YunusZJ/whisper-base-ar-quran-ONNX` could not load (no fp16 decoder, a 315 MB "quantised" one), so the app silently fell back to general `Xenova/whisper-tiny`, which cannot hear Quran ("المستطيع" for "المستقيم"). Silero VAD and `@ricky0123/vad-web` are gone: the pause detector in `lib/listen/segmenter.ts` gives hesitations and auto-stop, and a second ONNX runtime on the page went with them.
 
 ## Libraries loaded at runtime from a CDN
 
@@ -51,7 +51,6 @@ deliberately *not* added.
 |---|---|---|
 | [huggingface/transformers.js](https://github.com/huggingface/transformers.js) | ~16k | Apache-2.0 |
 | [microsoft/onnxruntime](https://github.com/microsoft/onnxruntime) (onnxruntime-web) | ~15k | MIT |
-| [ricky0123/vad](https://github.com/ricky0123/vad) (@ricky0123/vad-web) | ~2k | ISC |
 
 ## npm dependencies
 

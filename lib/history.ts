@@ -18,6 +18,9 @@ import { uid } from "./uid";
 export interface StoredMistake {
   i: number;
   h: string | null;
+  /** Kind (added 2026-10): "w" said wrong, "s" skipped. Older rows lack it;
+   *  for them h === null means skipped, as before. */
+  t?: "w" | "s";
 }
 
 /** One finished recitation. Optional fields were added later — old rows may
@@ -45,6 +48,12 @@ export interface SessionRow {
   /** Long pauses mid-recitation (voice activity detection). */
   hesitations?: number | null;
   client_id?: string | null;
+  /** Verses fully heard and judged in this attempt (on this device only; the
+   *  cloud keeps the from/to span). Weak spots count practice on these. */
+  hv?: number[] | null;
+  /** The recording made in this session (its createdAt in lib/recordings),
+   *  so a mistake is replayed from the take in which it was made. Local only. */
+  take?: number | null;
 }
 
 export interface LocalSession extends SessionRow {
