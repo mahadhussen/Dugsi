@@ -19,6 +19,7 @@ import { tokenize } from "@/lib/arabic";
 import { alignWindow, placePiece, type Alignment } from "./align";
 import { CLOSE, CORRECT, spoken, wordSim } from "./phonetic";
 import { isQuranWord } from "./lexicon";
+import { vowelSlip, type VowelSlip } from "./harakat";
 import type { RefText } from "./text";
 
 /** One decoded piece, as the pipeline delivers it. Times are seconds on the
@@ -364,6 +365,8 @@ const ARTICLES = ["وال", "فال", "بال", "كال", "لل", "ال"];
 export interface Mark {
   status: WordStatus;
   heard: string | null;
+  /** Said with another short vowel than the text has (letters right). */
+  vowel?: VowelSlip;
   /** How alike the heard word was (0 for a skipped word). */
   sim: number;
   piece: number;
@@ -381,17 +384,32 @@ export function bestMarks(state: FollowState): Map<number, Mark> {
       // A word the model split in two ("لو ضروا") or two it ran together is
       // judged as one: wrong only if, put together, it is a word at all.
       const joined = statusOfSim(pair.sim);
-      const st = one
+      let st: WordStatus = one
         ? statusOfPair(heard, state.ref.norm[pair.ref], pair.sim)
         : joined === "wrong" && !isQuranWord(heard.replace(/ /g, ""))
           ? "unclear"
           : joined;
+      // Letters right, a vowel wrong: the model writes the vowels it hears.
+      // Not at a pause, where the ending is not voiced (waqf).
+      let said = heard;
+      let vowel: VowelSlip | undefined;
+      if (one && (st === "correct" || st === "close") && p.input.words?.length) {
+        const raw = p.input.words[p.tokenWord[pair.heard]]?.text ?? "";
+        const k = pair.ref;
+        const paused = pair === p.align.pairs[p.align.pairs.length - 1] || k + 1 >= state.ref.norm.length || state.ref.ayah[k + 1] !== state.ref.ayah[k];
+        const slip = raw ? vowelSlip(raw, state.ref.uthmani[k], paused) : null;
+        if (slip) {
+          st = "wrong";
+          said = raw;
+          vowel = slip;
+        }
+      }
       for (let k = pair.ref; k < pair.refEnd; k++) {
         if (st === "wrong") everWrong.add(k);
         const prev = out.get(k);
         if (!prev || RANK[st] > RANK[prev.status]) {
           // Said wrong once, right later (in any number of steps): corrected.
-          out.set(k, { status: st, heard, sim: pair.sim, piece: pi, corrected: st !== "wrong" && everWrong.has(k) });
+          out.set(k, { status: st, heard: said, vowel, sim: pair.sim, piece: pi, corrected: st !== "wrong" && everWrong.has(k) });
         }
       }
     }

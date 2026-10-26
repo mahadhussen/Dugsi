@@ -60,7 +60,10 @@ app says so on screen.
    bright summer nights, offline and server-free. A built-in adhan player lets
    you choose a call-to-prayer recording and listen whenever you like.
 
-7. **Live following.** While you recite, the green flows along the words you
+7. **Vowels too.** The Quran model writes the short vowels it hears, so a word
+   with the right letters but a wrong fatha, damma or kasra is marked yellow
+   ("wrong vowel: you said مَالِكُ (damma, the text has kasra)").
+8. **Live following.** While you recite, the green flows along the words you
    are saying; once a piece is judged, words said right stay green, words
    said as another turn yellow and skipped words grey; added
    words are counted in a running tally. It is deliberately conservative (a

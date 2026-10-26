@@ -31,6 +31,8 @@ export interface TypedMistake {
   kind: MistakeKind;
   /** What was heard instead (normalised), null when skipped. */
   heard: string | null;
+  /** The letters were right but a vowel was not: what was heard on which letter. */
+  vowel?: { at: number; want: "a" | "u" | "i"; heard: "a" | "u" | "i" };
 }
 
 export interface Verdict {
@@ -192,7 +194,10 @@ export function verdictOf(state: FollowState, opts: VerdictOptions): Verdict {
   const mistakes: TypedMistake[] = [];
   for (const w of words) {
     const m = best.get(w.refIndex);
-    if (w.status === "wrong") mistakes.push({ refIndex: w.refIndex, kind: "wrong", heard: w.heard });
+    if (w.status === "wrong") {
+      const v = m?.status === "wrong" ? m.vowel : undefined;
+      mistakes.push({ refIndex: w.refIndex, kind: "wrong", heard: w.heard, ...(v ? { vowel: { at: v.at, want: v.want, heard: v.heard } } : {}) });
+    }
     else if (w.status === "missing") mistakes.push({ refIndex: w.refIndex, kind: "skipped", heard: null });
     else if (m?.corrected) mistakes.push({ refIndex: w.refIndex, kind: "corrected", heard: null });
   }

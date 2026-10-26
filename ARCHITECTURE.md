@@ -46,6 +46,9 @@ mikrofon ─► AudioWorklet (16 kHz mono) ─► Segmenter (pauser, max 15 s)
   (rätt > nästan > fel > överhoppad). Mellanrum som modellen inte kan förklara
   blir `unclear`, inte `missing`. Inledning (isti'adha, basmala) och avslutning
   ("sadaqa Allahu l-azim") tolereras.
+- `lib/follow/harakat.ts` — vokalerna: modellen skriver de korta vokaler den
+  hör, och ett ord med rätt bokstäver men fel fatha/damma/kasra döms fel ("wrong
+  vowel"). Aldrig shadda, sukun, ordslut före paus eller vokal före lång vokal.
 - `lib/follow/lexicon.ts` — är det hörda ett ord ur Koranen alls? Stavningsnyckeln
   för varje ord i Uthmani och modern stavning (`lexicon-data.json`, byggd av
   `scripts/build-lexicon.ts`, kontrollerad mot texten i test). "Fel ord" kräver

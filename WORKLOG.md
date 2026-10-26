@@ -36,6 +36,41 @@
    (a) som nu, aldrig, (b) döm dem som andra ord (fler falska överhopp när
    modellen tappar ett kort ord). Beslutet togs av mig i runda 4 utan att
    läggas här; det är Mahads.
+7. **Hur strängt ska ordslut (kasusändelser) dömas?** Vokalfel i ordslut
+   (rabbu för rabbi, māliku för māliki) fångas till 67 %, men det är där
+   modellen gör flest egna vokalfel på rätt läsning (Qahtani "الرَّحْمَنُ",
+   "أَنْعَمْتُ" i brus/eko). Uppmätt på domnivå: falska vokalfel 0,05 % av orden
+   hos Majed, 0,2 % hos rena mästare, 0,7–1,3 % i försämrat ljud. Alternativ:
+   (a) som nu, ordslut döms (utom före en paus), (b) bara vokaler inne i ord
+   (fångar 44 %, nästan inga falska), (c) ordslut visas som "kolla slutet"
+   utan att räknas som fel. Mahads beslut.
+
+## 2026-10-26 — Mahads test 3: vokalfel och mikrofonpanelen
+
+Mahad läste med flit fel vokal (damma för kasra) och Dugsi sa rätt; "om den
+inte kan fånga upp såna misstag så är hela appen helt misslyckad". Och
+mikrofonpanelen täckte texten.
+
+- **Mätt först:** modellen skriver vokalerna som sägs. Alla 12 avsiktliga fel i
+  ett första prov kom med i texten (الْحَمْدَ, رَبُ, مَالِكُ, نَعْبَدُ, إِلُوَّكَ …).
+  Dugsi jämförde bara bokstäver, så vokalerna kastades. Felet var vårt.
+- **`lib/follow/harakat.ts`:** kort vokal mot annan kort vokal på samma konsonant,
+  bara där modellen skrivit ett tecken. Aldrig shadda eller sukun (modellen
+  tappar shadda på rätt läsning), aldrig ordslut före en paus (waqf), aldrig
+  vokalen före en lång vokal (där gör modellen egna fel: Sudais "اهْدِنُوا").
+  و och ي räknas som samma plats (ي efter fel vokal låter و).
+- **Domen:** ett ord med rätt bokstäver men fel vokal blir gult ("wrong vowel:
+  you said مَالِكُ (damma, the text has kasra)"), med Correct/You bredvid.
+- **Mätt:** 49 avsiktliga vokalfel (Majed, `corpus/vowel`): 11/25 inne i ord och
+  16/24 i ordslut fångas, 0 falska i samma läsningar. Missarna är ord som
+  modellen stavat med andra bokstäver (då jämförs inte vokalerna). Falska
+  vokalfel på rätt läsning har egna tak per korpus; bokstavstaken är
+  oförändrade. I webbläsaren: Al-Fatiha med tre vokalfel → två fångade.
+- **Två avkodningar** (med och utan 0,25 s tystnad före) prövades för att sila
+  bort modellens egna vokalfel: de är systematiska (kommer i båda), så det
+  hjälper inte.
+- **Panelen:** en liten flytande pill (mikrofon/stopp, tid, "mer"); dölj ord, live-
+  raden och vad som lyssnar öppnas på begäran. Texten är fri under läsning.
 
 ## 2026-10-26 — Mahads test 2: krasch på iPhone, rösten "hörs inte", mjukt grönt
 
@@ -338,7 +373,7 @@ markering, sparande för alla med typade fel.
    ord gäller, rättelsen sparas som "rättat".
 4. Basmala och isti'adha före suran kan få följaren att hoppa till 27:30. →
    Inledningen känns igen och konsumeras.
-5. Modellen skriver harakat men de jämförs inte. → Dugsi dömer ord, inte vokaltecken,
+5. (Ändrat 2026-10-26, se nedan: vokaler döms nu.) Modellen skriver harakat men de jämförs inte. → Dugsi dömer ord, inte vokaltecken,
    och säger det.
 6. Allmän whisper-tiny som reserv dömer fel. → Bort. Utan Quran-modell används
    webbläsarens taltjänst med samma konfidensgrind som förut, och det står vilken.

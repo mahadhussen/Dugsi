@@ -8,6 +8,8 @@ import { skeleton, spoken } from "./phonetic";
 export interface RefText {
   /** Normalised spoken form of every word, in order. */
   norm: string[];
+  /** Every word as printed (Uthmani, with its vowel marks). */
+  uthmani: string[];
   /** Verse number of each word. */
   ayah: number[];
   /** Position of each word inside its verse (0-based). */
@@ -20,6 +22,7 @@ export interface RefText {
 
 export function buildRef(ayat: Ayah[]): RefText {
   const norm: string[] = [];
+  const uthmani: string[] = [];
   const ayah: number[] = [];
   const inAyah: number[] = [];
   const verseFirst = new Map<number, number>();
@@ -27,6 +30,7 @@ export function buildRef(ayat: Ayah[]): RefText {
     verseFirst.set(a.number, norm.length);
     a.words.forEach((w, i) => {
       norm.push(spoken(w.uthmani));
+      uthmani.push(w.uthmani);
       ayah.push(a.number);
       inAyah.push(i);
     });
@@ -41,5 +45,5 @@ export function buildRef(ayat: Ayah[]): RefText {
     add(`${norm[i]} ${norm[i + 1]}`, i);
     add(`~${skeleton(norm[i])} ${skeleton(norm[i + 1])}`, i);
   }
-  return { norm, ayah, inAyah, verseFirst, pairs };
+  return { norm, uthmani, ayah, inAyah, verseFirst, pairs };
 }

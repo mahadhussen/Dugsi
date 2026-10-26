@@ -22,7 +22,7 @@ export interface Fixture {
   segments: { t0: number; t1: number; byPause: boolean; text: string; words: FixtureWord[]; voiced: [number, number][] }[];
   joins: { of: [number, number]; text: string; words: FixtureWord[] }[];
   /** For a deliberate mistake: the verse left out, or the word said as another. */
-  expect?: { skipVerse: number } | { skipWord: string } | { wrongAt: string; said: string };
+  expect?: { skipVerse: number } | { skipWord: string } | { wrongAt: string; said: string } | { vowelAt: string; want: string; said: string; ending: boolean };
 }
 
 /** Fixture word times are relative to the decoded audio; the follower wants the recording clock. */

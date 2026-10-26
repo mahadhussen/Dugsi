@@ -36,16 +36,25 @@ import { runFixture, type Fixture } from "../lib/follow/fixture";
 
 const DIR = "test/fixtures/recite/corpus";
 
+// A word said with the right letters but a wrong short vowel is counted on its
+// own (vowels): the letter ceilings below are unchanged by vowel judging.
 async function judged(kind: string) {
-  const out: { fx: Fixture; at: (s: string) => string[]; loc: (k: number) => string; words: { refIndex: number; status: string }[] }[] = [];
+  const out: {
+    fx: Fixture;
+    at: (s: string) => string[];
+    loc: (k: number) => string;
+    words: { refIndex: number; status: string }[];
+    vowels: string[];
+  }[] = [];
   for (const f of readdirSync(`${DIR}/${kind}`).filter((x) => x.endsWith(".json")).sort()) {
     const fx = JSON.parse(readFileSync(`${DIR}/${kind}/${f}`, "utf8")) as Fixture;
     const surah = await loadSurah(fx.surah);
     const flat = flattenAyat(surah.ayat);
     const { verdict } = runFixture(fx, surah.ayat);
     const loc = (k: number) => `${flat[k].ayah}:${flat[k].indexInAyah + 1}`;
-    const words = verdict.alignment.words;
-    out.push({ fx, loc, words, at: (st) => words.filter((w) => w.status === st).map((w) => loc(w.refIndex)) });
+    const vowelAt = new Set(verdict.mistakes.filter((m) => m.vowel).map((m) => m.refIndex));
+    const words = verdict.alignment.words.map((w) => (vowelAt.has(w.refIndex) ? { ...w, status: "vowel" } : w));
+    out.push({ fx, loc, words, at: (st) => words.filter((w) => w.status === st).map((w) => loc(w.refIndex)), vowels: [...vowelAt].map(loc) });
   }
   return out;
 }
@@ -200,4 +209,59 @@ test("24 skips cut out of master recordings: 9 of 10 verse words and 10 of 20 si
   assert.ok(verseCaught >= 9, `verse words caught ${verseCaught}/10`);
   assert.ok(wordCaught >= 10, `single words caught ${wordCaught}/20`);
   assert.ok(elsewhere.length <= 1, `accused elsewhere ${elsewhere.length}: ${elsewhere.join(", ")}`);
+});
+
+// ── Vowels: right readings accused of a wrong vowel ───────────────────────
+// The model writes the vowels it hears, and now and then a wrong one on a
+// master's right reading (Qahtani's "ٱلرَّحْمَٰنِ" as -nu, Sudais's
+// "ٱلْمَغْضُوبِ" as mu-, both in degraded audio). Ceilings as measured.
+
+const VOWEL_CEILING: Record<string, number> = {
+  masters: 1,
+  "masters-degraded": 6,
+  "masters-classroom": 3,
+  "masters-cut": 1,
+  correct: 1,
+  "correct-more": 1,
+  "word-by-word": 0,
+  skip: 0,
+  "skip-word-by-word": 0,
+  wrong: 2,
+  "wrong-more": 0,
+  vowel: 0,
+};
+
+test("wrong-more: inflection mistakes (a wrong vowel) are now caught as the mistake", async () => {
+  const rows = await judged("wrong-more");
+  const caughtAsVowel = rows.filter((r) => r.vowels.includes((r.fx.expect as { wrongAt: string }).wrongAt));
+  assert.ok(caughtAsVowel.length >= 1, "no inflection mistake caught by its vowel");
+});
+for (const [kind, ceiling] of Object.entries(VOWEL_CEILING)) {
+  test(`${kind}: at most ${ceiling} right word${ceiling === 1 ? "" : "s"} accused of a wrong vowel`, async () => {
+    const rows = await judged(kind);
+    // The deliberate mistake itself is not a false accusation (some are vowels).
+    const target = (r: (typeof rows)[number]) => {
+      const e = r.fx.expect as { wrongAt?: string; vowelAt?: string } | undefined;
+      return e?.wrongAt ?? e?.vowelAt;
+    };
+    const vowels = rows.flatMap((r) => r.vowels.filter((l) => l !== target(r)).map((l) => `${r.fx.name} ${l}`));
+    assert.ok(vowels.length <= ceiling, `vowel accusations ${vowels.length}: ${vowels.join(", ")}`);
+  });
+}
+
+test("49 readings with one vowel said wrong: caught on the word, nothing else accused of a vowel", async () => {
+  const rows = await judged("vowel");
+  assert.equal(rows.length, 49);
+  let inside = 0;
+  let ending = 0;
+  for (const r of rows) {
+    const e = r.fx.expect as { vowelAt: string; ending: boolean };
+    if (!r.vowels.includes(e.vowelAt)) continue;
+    if (e.ending) ending++;
+    else inside++;
+  }
+  // Missed ones are words the model spelled with other letters: then the
+  // vowels are not compared at all (never a false accusation).
+  assert.ok(inside >= 11, `inside a word caught ${inside}/25`);
+  assert.ok(ending >= 16, `endings caught ${ending}/24`);
 });
