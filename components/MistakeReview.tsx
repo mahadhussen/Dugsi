@@ -17,9 +17,13 @@ export interface Mistake {
   /** Position of the word inside its verse (for the qari's word clip). */
   indexInAyah?: number;
   skipped: boolean;
+  /** Letters right, a vowel wrong: the vowel heard and the one the text has. */
+  vowel?: { want: "a" | "u" | "i"; heard: "a" | "u" | "i" };
   /** Where in the recording the reciter said it (High-accuracy mode only). */
   time?: TimeRange;
 }
+
+const VOWEL_NAME = { a: "fatha", u: "damma", i: "kasra" } as const;
 
 // Only one thing plays at a time across the whole review.
 let current: HTMLAudioElement | null = null;
@@ -185,7 +189,13 @@ function MistakeRow({
         </div>
         <div className="text-xs text-ink/50">
           {m.skipped ? (
-            <span className="text-amber-600">skipped</span>
+            <span className="text-ink/60">skipped</span>
+          ) : m.vowel ? (
+            <>
+              <span className="font-semibold text-amber-600">wrong vowel</span>: you said{" "}
+              <span className="font-arabic text-ink/70" dir="rtl">{m.heard}</span> ({VOWEL_NAME[m.vowel.heard]}, the text has{" "}
+              {VOWEL_NAME[m.vowel.want]})
+            </>
           ) : (
             <>
               you said <span className="font-arabic text-ink/70" dir="rtl">{m.heard}</span>

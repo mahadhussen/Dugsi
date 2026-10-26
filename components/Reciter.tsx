@@ -79,6 +79,9 @@ export default function Reciter({
   const [hesitations, setHesitations] = useState<Hesitation[]>([]);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [hifz, setHifz] = useState(0); // 0 = off, 1 some, 2 most, 3 all
+  // The dock's options (hide words, the live line, what is listening) open
+  // on request; the page itself stays free while reciting.
+  const [dockOpen, setDockOpen] = useState(false);
   const [engineTick, setEngineTick] = useState(0);
   const engineRef = useRef<ReciteEngine | null>(null);
   const loggedRef = useRef(false);
@@ -392,6 +395,7 @@ export default function Reciter({
           verse: fw?.ayah ?? 1,
           indexInAyah: fw?.indexInAyah,
           skipped,
+          vowel: m.vowel ? { want: m.vowel.want, heard: m.vowel.heard } : undefined,
           time: clipForMistake(feedback.clips, m.refIndex, skipped),
         };
       });
@@ -574,71 +578,84 @@ export default function Reciter({
       {/* The mushaf page */}
       {surahEl}
 
-      {/* Control dock — pinned above the tab bar while the page scrolls */}
-      <div className="sticky bottom-[5.6rem] z-30">
-        <div className="card p-3">
-          {recording && (
-            <div className="mb-2 px-1 text-center">
-              <p className="ayah truncate text-2xl text-ink/80" dir="rtl">
-                {snap?.heard || "…"}
-              </p>
-              <LiveTally correct={liveCounts.correct} missing={liveCounts.missing} wrong={liveCounts.wrong} extra={snap?.extras ?? 0} detecting={settings.liveMistakes} />
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-3">
-            <HifzToggle level={hifz} onSelect={setHifz} onPeekWord={peekWord} onPeekVerse={peekVerse} />
-
-            {recording ? (
-              <button onClick={() => void stop()} className="relative grid h-20 w-20 shrink-0 place-items-center" aria-label="Stop reciting">
-                <VoiceRing engineRef={engineRef} />
-                <span className="absolute inset-0 rounded-full bg-red-500/15" />
-                <span className="relative grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-red-600 text-white shadow-soft transition active:scale-95">
-                  <span className="h-7 w-7 rounded-md bg-white" />
-                </span>
-              </button>
-            ) : (
-              <button
-                onClick={() => void start()}
-                disabled={phase === "processing"}
-                className="group relative grid h-20 w-20 shrink-0 place-items-center disabled:opacity-60"
-                aria-label="Start reciting"
-              >
-                <span className="absolute inset-0 rounded-full bg-emerald/15 transition group-hover:bg-emerald/25" />
-                <span className="relative grid h-[4.5rem] w-[4.5rem] place-items-center rounded-full bg-emerald text-white shadow-soft transition group-active:scale-95">
-                  {phase === "processing" ? (
-                    <span className="h-8 w-8 animate-spin rounded-full border-4 border-white/40 border-t-white" />
-                  ) : (
-                    <MicIcon className="h-10 w-10" />
-                  )}
-                </span>
-              </button>
+      {/* Control dock — a small pill above the tab bar, so the page stays free
+          while reciting; everything else opens from "more". */}
+      <div className="pointer-events-none sticky bottom-[5.6rem] z-30 flex flex-col items-center gap-2">
+        {dockOpen && (
+          <div className="card animate-in pointer-events-auto w-full max-w-xl p-3">
+            {recording && (
+              <div className="mb-2 px-1 text-center">
+                <p className="ayah truncate text-2xl text-ink/80" dir="rtl">
+                  {snap?.heard || "…"}
+                </p>
+                <LiveTally correct={liveCounts.correct} missing={liveCounts.missing} wrong={liveCounts.wrong} extra={snap?.extras ?? 0} detecting={settings.liveMistakes} />
+              </div>
             )}
-
-            <div className="min-w-0 flex-1 text-right text-sm font-bold text-ink/70">
-              {recording ? (
-                <span className="inline-flex items-center gap-1.5 text-red-600">
-                  <span className="rec-dot h-2.5 w-2.5 rounded-full bg-red-500" />
-                  {formatTime(seconds)}
-                </span>
-              ) : phase === "processing" ? (
-                <span>{progress ?? "Checking…"}</span>
-              ) : phase === "done" || phase === "error" ? (
-                <span>Tap the mic to recite again</span>
-              ) : (
-                <span>Tap the mic, then recite aloud</span>
-              )}
+            <div className="flex items-center justify-between gap-3">
+              <HifzToggle level={hifz} onSelect={setHifz} onPeekWord={peekWord} onPeekVerse={peekVerse} />
             </div>
+            <EngineStatus
+              model={model}
+              allowed={modelAllowed}
+              noGpu={iosNoGpu && settings.quranModel}
+              disabledByCrash={whisperDisabledByCrashes()}
+              onReEnable={() => {
+                reEnableWhisper();
+                setEngineTick((t) => t + 1);
+              }}
+            />
           </div>
-          <EngineStatus
-            model={model}
-            allowed={modelAllowed}
-            noGpu={iosNoGpu && settings.quranModel}
-            disabledByCrash={whisperDisabledByCrashes()}
-            onReEnable={() => {
-              reEnableWhisper();
-              setEngineTick((t) => t + 1);
-            }}
-          />
+        )}
+        <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-surface/90 py-1.5 pl-1.5 pr-2 shadow-soft ring-1 ring-ink/10 backdrop-blur">
+          {recording ? (
+            <button onClick={() => void stop()} className="relative grid h-14 w-14 shrink-0 place-items-center" aria-label="Stop reciting">
+              <VoiceRing engineRef={engineRef} />
+              <span className="relative grid h-12 w-12 place-items-center rounded-full bg-red-600 text-white shadow-soft transition active:scale-95">
+                <span className="h-5 w-5 rounded-md bg-white" />
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={() => void start()}
+              disabled={phase === "processing"}
+              className="group relative grid h-14 w-14 shrink-0 place-items-center disabled:opacity-60"
+              aria-label="Start reciting"
+            >
+              <span className="relative grid h-12 w-12 place-items-center rounded-full bg-emerald text-white shadow-soft transition group-active:scale-95">
+                {phase === "processing" ? (
+                  <span className="h-6 w-6 animate-spin rounded-full border-[3px] border-white/40 border-t-white" />
+                ) : (
+                  <MicIcon className="h-7 w-7" />
+                )}
+              </span>
+            </button>
+          )}
+          <span className="min-w-[4.5rem] text-sm font-bold text-ink/70">
+            {recording ? (
+              <span className="inline-flex items-center gap-1.5 text-red-600">
+                <span className="rec-dot h-2 w-2 rounded-full bg-red-500" />
+                {formatTime(seconds)}
+              </span>
+            ) : phase === "processing" ? (
+              (progress ?? "Checking…")
+            ) : model.status === "loading" && modelAllowed ? (
+              `Model ${model.percent}%`
+            ) : phase === "done" || phase === "error" ? (
+              "Recite again"
+            ) : (
+              "Recite"
+            )}
+          </span>
+          <button
+            onClick={() => setDockOpen((o) => !o)}
+            className="grid h-9 w-9 place-items-center rounded-full text-ink/60 transition hover:bg-ink/5"
+            aria-label={dockOpen ? "Hide options" : "More options"}
+            aria-expanded={dockOpen}
+          >
+            <svg viewBox="0 0 24 24" className={`h-5 w-5 transition-transform ${dockOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+              <path d="M6 15l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
