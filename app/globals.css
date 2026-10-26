@@ -136,20 +136,40 @@ body {
 }
 
 .word {
-  transition: color 0.2s ease;
+  transition:
+    color 0.45s ease,
+    opacity 0.45s ease,
+    text-shadow 0.6s ease;
   border-radius: 0.3rem;
 }
 
 /* Recitation marks colour the letters themselves, like a teacher's pen:
-   green said right, yellow nearly, red wrong, grey skipped, faded unclear. */
+   green said right, yellow said wrong, grey skipped, faded not heard.
+   While reciting, the green flows along under the voice ("reading": passed,
+   not judged yet), each word a step after the one before; once a piece is
+   judged the word settles into its colour. */
+.word-reading {
+  color: var(--good);
+  opacity: 0.72;
+  text-shadow: 0 0 0.55em color-mix(in srgb, var(--good) 45%, transparent);
+}
+.rd1 { transition-delay: 70ms; }
+.rd2 { transition-delay: 140ms; }
+.rd3 { transition-delay: 210ms; }
+.rd4 { transition-delay: 280ms; }
+.rd5 { transition-delay: 350ms; }
+.rd6 { transition-delay: 420ms; }
+.rd7 { transition-delay: 490ms; }
 .word-correct {
   color: var(--good);
 }
+/* nearly right: the recogniser's spelling or a small slip, not a mistake */
 .word-close {
-  color: var(--warn);
+  color: color-mix(in srgb, var(--good) 70%, var(--warn));
 }
 .word-wrong {
-  color: var(--bad);
+  color: var(--warn);
+  text-shadow: 0 0 0.5em color-mix(in srgb, var(--warn) 30%, transparent);
 }
 .word-missing {
   color: var(--muted);
@@ -159,14 +179,20 @@ body {
 /* voice we could not make out: not a verdict, so no colour of judgement */
 .word-unclear {
   color: var(--muted);
-  opacity: 0.6;
+  opacity: 0.55;
 }
-/* the next word to recite while following live: a green line under it, no box */
+/* the next word to recite while following live: a soft green line under it */
 .word-active {
   text-decoration: underline;
   text-decoration-color: var(--good);
   text-decoration-thickness: 0.12em;
   text-underline-offset: 0.28em;
+  text-shadow: 0 0 0.6em color-mix(in srgb, var(--good) 30%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .word {
+    transition: none;
+  }
 }
 /* while listening, the word the Sheikh is reciting turns green */
 .karaoke .word-active {

@@ -37,6 +37,31 @@
    modellen tappar ett kort ord). Beslutet togs av mig i runda 4 utan att
    läggas här; det är Mahads.
 
+## 2026-10-26 — Mahads test 2: krasch på iPhone, rösten "hörs inte", mjukt grönt
+
+Mahad: sidan laddas om på iPhone (Chrome) när han väljer sura; på datorn
+verkar rösten inte läsas av; han vill att det gröna följer honom mjukt, gult
+vid fel, grått vid överhoppat.
+
+- **iPhone:** att sidan laddas om är iOS som dödar fliken för minne (alla
+  webbläsare där delar Safaris motor och tak). Modellen låg kvar i minnet
+  resten av besöket så fort Recitera visats. Nu på iPhone/iPad: laddas först
+  vid tryck på mikrofonen, släpps (`asr.unload`, workern avslutas) när
+  reciteringen stängs (annan sura, Lyssna, annan sida). Inte provat på en
+  riktig iPhone.
+- **Datorn:** produktionen fungerar med falsk mikrofon (Husary 112: 15/15).
+  Två saker gjorde att det kändes dött: (1) ingenting syntes förrän en paus,
+  för förhandsavkodningen startade först efter första biten; nu från början
+  på grafikkort, var 0,9 s från 1,4 s öppen bit. (2) Kraschskyddet kunde
+  stänga av modellen en vecka på en dator efter en omladdning under laddning
+  (falsk krasch, hände i webbläsarpanelen). Nu gäller skyddet bara
+  telefoner/surfplattor (test).
+- **Mjukt flöde:** ord du passerat men som inte bedömts än lyser mjukt grönt
+  ("reading"), ett ord i taget (70 ms steg), och sätter sig sedan: grönt rätt,
+  gult fel, grått överhoppat, blekt ohört. Ringen runt mikrofonen följer
+  rösten, så man ser att man hörs. Resultatrutor, räknare, inställningstext
+  och README säger gult för fel.
+
 ## 2026-10-25 — Mahads test: hör ditt eget fel bredvid facit
 
 Mahad provade och ville kunna välja exakt var det blev fel och höra just det:

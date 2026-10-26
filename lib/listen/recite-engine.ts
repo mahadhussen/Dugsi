@@ -108,6 +108,7 @@ export class ReciteEngine {
   private busy = false;
   private lastPartialAt = 0;
   private lastSpeed = 1; // decode ms per audio ms, last piece
+  private timed = false; // a piece has been decoded and timed
   private hesitations: Hesitation[] = [];
   private started = 0;
   private session = 0;
@@ -240,8 +241,17 @@ export class ReciteEngine {
     return true;
   }
 
+  /** How loud the microphone is right now, 0..1 (for the ring round the mic:
+   *  the reciter sees that their voice is heard). Smoothed; read it per frame. */
+  level = 0;
+
   private onSamples(pcm: Float32Array, my: number) {
     if (this.session !== my || this.phase !== "listening") return;
+    let sum = 0;
+    for (let i = 0; i < pcm.length; i++) sum += pcm[i] * pcm[i];
+    const db = 10 * Math.log10(sum / Math.max(1, pcm.length) + 1e-10);
+    const target = Math.min(1, Math.max(0, (db + 58) / 40)); // −58 dB silent … −18 dB loud
+    this.level += (target - this.level) * (target > this.level ? 0.6 : 0.15);
     // Keep the last RING_SECONDS of audio for joined re-decodes.
     for (let i = 0; i < pcm.length; i++) this.ring[(this.ringEnd + i) % this.ring.length] = pcm[i];
     this.ringEnd += pcm.length;
@@ -309,7 +319,10 @@ export class ReciteEngine {
     this.busy = false;
     if (this.session !== my) return;
     if (res) {
-      if (job.kind !== "partial") this.lastSpeed = res.ms / Math.max(1, (job.audio.length / SR) * 1000);
+      if (job.kind !== "partial") {
+        this.lastSpeed = res.ms / Math.max(1, (job.audio.length / SR) * 1000);
+        this.timed = true;
+      }
       this.handle(job, res);
     } else if (job.kind === "piece" && job.seg) {
       // The model could not decode it: there was voice we could not read,
@@ -321,10 +334,14 @@ export class ReciteEngine {
     void this.pump();
   }
 
-  /** A provisional decode of the piece still being spoken, on fast devices only. */
+  /** A provisional decode of the piece still being spoken, on fast devices
+   *  only — it moves the green along while the reciter is still speaking.
+   *  Until a piece has been timed, the graphics chip is taken to be fast. */
   private partialJob(): Job | null {
-    if (this.phase !== "listening" || this.lastSpeed > 0.5) return null;
-    if (this.segmenter.openMs() < 2500 || Date.now() - this.lastPartialAt < 1500) return null;
+    const speed = this.timed ? this.lastSpeed : asr.device === "webgpu" ? 0.3 : 1;
+    if (this.phase !== "listening" || speed > 0.5) return null;
+    const quick = speed <= 0.35;
+    if (this.segmenter.openMs() < (quick ? 1400 : 2500) || Date.now() - this.lastPartialAt < (quick ? 900 : 1500)) return null;
     const open = this.segmenter.openAudio();
     if (!open) return null;
     this.lastPartialAt = Date.now();

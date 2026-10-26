@@ -85,7 +85,7 @@ export default function OptionsSheet({
         )}
 
         <Group title="While reciting">
-          <Switch label="Mark mistakes as I go" hint="Skipped words turn grey and wrong words red while you recite" on={settings.liveMistakes} onChange={(v) => set({ liveMistakes: v })} />
+          <Switch label="Mark mistakes as I go" hint="Skipped words turn grey and wrong words yellow while you recite" on={settings.liveMistakes} onChange={(v) => set({ liveMistakes: v })} />
           <Switch label="Stop by itself" hint="After 6 seconds of silence" on={settings.autoStop} onChange={(v) => set({ autoStop: v })} />
           <Switch label="Quran listening model" hint="Tarteel's Quran model listens on this device (about 67 MB, downloaded once). Off: your browser's speech service listens instead" on={settings.quranModel} onChange={(v) => set({ quranModel: v })} />
         </Group>

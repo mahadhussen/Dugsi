@@ -19,6 +19,13 @@ class Mem {
 }
 const mem = new Mem();
 (globalThis as unknown as { localStorage: Mem }).localStorage = mem;
+// The guard protects phones (a tab killed for memory): test as an iPhone,
+// and as a computer where it must never switch the model off.
+const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1";
+const MAC = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36";
+const asDevice = (userAgent: string, maxTouchPoints = 0) =>
+  Object.defineProperty(globalThis, "navigator", { value: { userAgent, maxTouchPoints }, configurable: true });
+asDevice(IPHONE, 5);
 
 import {
   checkForPriorCrash,
@@ -83,4 +90,21 @@ test("manual re enable clears everything", () => {
   assert.equal(whisperDisabledByCrashes(), true);
   reEnableWhisper();
   assert.equal(whisperDisabledByCrashes(), false);
+});
+
+test("on a computer a leftover breadcrumb never switches the model off", () => {
+  mem.clear();
+  asDevice(MAC);
+  try {
+    for (let i = 0; i < 4; i++) {
+      markWhisperRunning();
+      checkForPriorCrash(T + i * 1000);
+    }
+    assert.equal(whisperDisabledByCrashes(), false);
+    // An old "disabled" left from before is not honoured on a computer either.
+    mem.setItem("dugsi:asr2:disabled", "1");
+    assert.equal(whisperDisabledByCrashes(), false);
+  } finally {
+    asDevice(IPHONE, 5);
+  }
 });
