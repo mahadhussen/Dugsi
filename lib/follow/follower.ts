@@ -68,8 +68,26 @@ export interface PieceRecord {
   confirmsHeld?: boolean;
 }
 
+/** A wrong vowel the vowel model heard on one text word. */
+export interface CtcVowel {
+  slip: VowelSlip;
+  /** The word as said: the text word with the vowel heard. */
+  said: string;
+}
+
+/**
+ * What the vowel model judged, per piece (its input id): the text words it
+ * heard with a wrong vowel. A word it judged right has no entry.
+ */
+export interface VowelBook {
+  pieces: ReadonlyMap<number, ReadonlyMap<number, CtcVowel>>;
+}
+
 export interface FollowState {
   ref: RefText;
+  /** Present when the vowel model judges this attempt: then only it decides
+   *  vowels, and the listening model's vowel marks are not used. */
+  vowels?: VowelBook;
   /** The practised part of the text, [start, end) word indices. */
   start: number;
   end: number;
@@ -389,11 +407,20 @@ export function bestMarks(state: FollowState): Map<number, Mark> {
         : joined === "wrong" && !isQuranWord(heard.replace(/ /g, ""))
           ? "unclear"
           : joined;
-      // Letters right, a vowel wrong: the model writes the vowels it hears.
-      // Not at a pause, where the ending is not voiced (waqf).
+      // Letters right, a vowel wrong. The vowel model, when it judges this
+      // attempt; else the vowels the listening model wrote. Never at a pause,
+      // where the ending is not voiced (waqf).
       let said = heard;
       let vowel: VowelSlip | undefined;
-      if (one && (st === "correct" || st === "close") && p.input.words?.length) {
+      const lettersRight = st === "correct" || st === "close";
+      if (state.vowels) {
+        const v = lettersRight && pair.refEnd - pair.ref === 1 ? state.vowels.pieces.get(p.input.id)?.get(pair.ref) : undefined;
+        if (v) {
+          st = "wrong";
+          said = v.said;
+          vowel = v.slip;
+        }
+      } else if (one && lettersRight && p.input.words?.length) {
         const raw = p.input.words[p.tokenWord[pair.heard]]?.text ?? "";
         const k = pair.ref;
         const paused = pair === p.align.pairs[p.align.pairs.length - 1] || k + 1 >= state.ref.norm.length || state.ref.ayah[k + 1] !== state.ref.ayah[k];

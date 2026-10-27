@@ -7,3 +7,12 @@
 export function spellingKey(norm: string): string {
   return norm.replace(/[اء]/g, "");
 }
+
+/**
+ * The word as modern script writes it: the dagger alif written out
+ * (ٱلصِّرَٰطَ → الصراط), the waw that carries it read as alif
+ * (ٱلصَّلَوٰةَ → الصلاة), the small yeh written (إِبْرَٰهِـۧمَ → إبراهيم).
+ */
+export function modernSpelling(uthmani: string): string {
+  return uthmani.replace(/وٰ/g, "ا").replace(/ىٰ/g, "ى").replace(/ٰ/g, "ا").replace(/ۧ/g, "ي");
+}

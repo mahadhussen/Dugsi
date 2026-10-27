@@ -26,6 +26,7 @@ import {
   markWhisperFinished,
   clearCrashBreadcrumb,
   reEnableWhisper,
+  isHandheld,
 } from "@/lib/crashGuard";
 import { buildRef } from "@/lib/follow/text";
 import { normalizeWord } from "@/lib/arabic";
@@ -34,6 +35,9 @@ import { liveMarks, verdictOf, type Verdict } from "@/lib/follow/verdict";
 import { ReciteEngine, type EngineSnapshot, type Hesitation } from "@/lib/listen/recite-engine";
 import { asr } from "@/lib/listen/asr";
 import { ASR_MODEL } from "@/lib/listen/model";
+import { vowels } from "@/lib/listen/vowels";
+import { VOWEL_MODEL } from "@/lib/listen/vowel-model";
+import { loadCtcText } from "@/lib/quran/ctc-text";
 import { pause as pauseListening } from "@/lib/listen-engine";
 import { stopVerse } from "@/lib/verse-player";
 import MistakeReview, { HearYourselfButton, type Mistake } from "./MistakeReview";
@@ -162,6 +166,32 @@ export default function Reciter({
     };
   }, []);
   const modelAllowed = settings.quranModel && !whisperDisabledByCrashes() && !iosNoGpu;
+  // The vowel model (240 MB) judges vowels on a computer. A phone keeps the
+  // listening model's vowels until the bigger model is proven there: a phone
+  // tab is killed, page reloaded, when it holds too much (WORKLOG round 6).
+  const [vowelWordsBySurah, setVowelWordsBySurah] = useState<{ surah: number; verses: string[][] } | null>(null);
+  const [vowelsAllowed, setVowelsAllowed] = useState(false);
+  useEffect(() => {
+    const saveData = (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData;
+    setVowelsAllowed(modelAllowed && !isHandheld() && !saveData && vowels.supported());
+  }, [modelAllowed]);
+  useEffect(() => {
+    if (!vowelsAllowed) return;
+    let cancelled = false;
+    void loadCtcText(surahNumber).then((verses) => !cancelled && setVowelWordsBySurah({ surah: surahNumber, verses }));
+    // Fetch the model while reciting is on screen, as with the listening model.
+    if (vowels.status === "idle") void vowels.load();
+    return () => {
+      cancelled = true;
+    };
+  }, [vowelsAllowed, surahNumber]);
+  const vowelWords = useMemo(
+    () =>
+      vowelsAllowed && vowelWordsBySurah?.surah === surahNumber
+        ? ayat.flatMap((a) => vowelWordsBySurah.verses[a.number - 1] ?? a.words.map(() => ""))
+        : undefined,
+    [vowelsAllowed, vowelWordsBySurah, surahNumber, ayat],
+  );
   useEffect(() => {
     // On a "save data" connection, wait until the mic is actually tapped.
     const saveData = (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData;
@@ -176,6 +206,8 @@ export default function Reciter({
   }, [modelAllowed, iosLean, engineTick]);
   const [model, setModel] = useState({ status: asr.status, percent: asr.percent, device: asr.device });
   useEffect(() => asr.subscribe(() => setModel({ status: asr.status, percent: asr.percent, device: asr.device })), []);
+  const [vowelModel, setVowelModel] = useState({ status: vowels.status, percent: vowels.percent });
+  useEffect(() => vowels.subscribe(() => setVowelModel({ status: vowels.status, percent: vowels.percent })), []);
 
   // A new surah or range: drop any attempt in flight and its result.
   useEffect(() => {
@@ -255,6 +287,7 @@ export default function Reciter({
       from: fromVerse ? ref.verseFirst.get(fromVerse) : undefined,
       words: textWords,
       useModel: modelAllowed,
+      vowelWords,
       autoStopMs: settings.autoStop ? AUTO_STOP_MS : null,
       onUpdate: (s) => {
         if (engineRef.current === engine) setSnap(s);
@@ -596,6 +629,7 @@ export default function Reciter({
             </div>
             <EngineStatus
               model={model}
+              vowelModel={vowelsAllowed ? vowelModel : null}
               allowed={modelAllowed}
               noGpu={iosNoGpu && settings.quranModel}
               disabledByCrash={whisperDisabledByCrashes()}
@@ -665,12 +699,15 @@ export default function Reciter({
 /** What is listening, in one honest line. */
 function EngineStatus({
   model,
+  vowelModel,
   allowed,
   noGpu,
   disabledByCrash,
   onReEnable,
 }: {
   model: { status: string; percent: number; device: string | null };
+  /** The vowel model, where it is used (a computer). */
+  vowelModel: { status: string; percent: number } | null;
   allowed: boolean;
   /** An iPhone whose Safari has no WebGPU: the model is not run there. */
   noGpu: boolean;
@@ -703,7 +740,19 @@ function EngineStatus({
   } else {
     text = "Tap the mic to start.";
   }
-  return <p className="mt-2 text-center text-xs font-semibold text-ink/45">{text}</p>;
+  let vowelText: string | null = null;
+  if (vowelModel && allowed && !disabledByCrash) {
+    if (vowelModel.status === "ready") vowelText = "Vowels are checked by a second Quran model, on your device.";
+    else if (vowelModel.status === "loading")
+      vowelText = `Getting the vowel checker ready… ${vowelModel.percent}% (about ${VOWEL_MODEL.approxMb} MB, only once). Until then vowels are judged from what the listening model wrote.`;
+    else if (vowelModel.status === "failed") vowelText = "The vowel checker could not load here, so vowels are judged from what the listening model wrote.";
+  }
+  return (
+    <>
+      <p className="mt-2 text-center text-xs font-semibold text-ink/45">{text}</p>
+      {vowelText && <p className="mt-1 text-center text-xs font-semibold text-ink/45">{vowelText}</p>}
+    </>
+  );
 }
 
 /** A ring round the mic that swells with the reciter's voice: seen at once
@@ -919,8 +968,9 @@ function ResultsPanel({
           {feedback.transcript}
         </p>
         <p className="mt-1 text-xs text-ink/40">
-          Heard by {feedback.engine}. Dugsi checks the words, not the vowel marks. Recognition can still slip — if a word
-          is marked wrong but you said it right, it may be the recogniser, not you. Tap “You” to hear yourself.
+          Heard by {feedback.engine}. Dugsi checks the words and their short vowels (fatha, kasra, damma); the ending of a word
+          you paused on is not judged. Recognition can still slip — if a word is marked wrong but you said it right, it may
+          be the recogniser, not you. Tap “You” to hear yourself.
         </p>
       </details>
     </div>

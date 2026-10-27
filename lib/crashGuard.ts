@@ -27,7 +27,7 @@ const DECAY_MS = 7 * 24 * 60 * 60 * 1000; // a week without incident forgives
  *  computer that does not happen, and a false alarm (a reload while the model
  *  loaded) would turn off the best listener for a week — so there the guard
  *  never switches the model off. */
-function isHandheld(): boolean {
+export function isHandheld(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
   return /iP(hone|ad|od)|Android/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
