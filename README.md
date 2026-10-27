@@ -178,11 +178,13 @@ updated.
   slip — a word marked wrong may be the recogniser, not the reciter (tap
   "You" to hear yourself).
 - Short vowels (fatha, kasra, damma) are judged too. On a computer a second
-  model checks them against the sound (it caught 45 of 49 deliberate vowel
-  mistakes, with no false alarm on 2 790 right vowels from four masters, echo,
-  noise and a classroom). On a phone, for now, the vowels come from what the
-  listening model wrote, which catches about half. The ending of a word you
-  pause on is never judged (waqf), nor a vowel before a long vowel.
+  model checks them against the sound. Measured as shipped: it caught 48 of
+  56 deliberate vowel mistakes read by a synthetic voice, and gave no false
+  alarm on 14 masters' Al-Fatiha and Al-Ikhlas (547 words judged) nor on
+  echo, noise and phone versions (555 words). On a phone, for now, the vowels
+  come from what the listening model wrote, which catches about half. The
+  ending of a word you pause on, or of a verse, is never judged (waqf), nor a
+  vowel before a long vowel.
 - Madd-timing is a timestamp **heuristic**, not a phonetic measurement. It flags
   obviously rushed elongations; it does not judge makharij or ghunnah quality.
 - The model downloads once (about 67 MB; the vowel model on a computer about

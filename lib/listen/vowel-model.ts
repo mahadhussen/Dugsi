@@ -7,8 +7,9 @@
 // toward the text the way the listening model (Whisper) does.
 //
 // Measured before choosing it (2026-10-27, WORKLOG round 6): it caught 45 of
-// 49 deliberate vowel mistakes, the listening model 27; no false alarm on
-// 2 790 right vowels from four masters, echo, noise and a classroom.
+// 49 deliberate vowel mistakes where the listening model caught 27; as
+// shipped (this 4-bit export), 48 of 56, and no false alarm on 14 masters'
+// Al-Fatiha and Al-Ikhlas or their echo, noise and phone versions.
 
 export const VOWEL_MODEL = {
   id: "mostafanewir70/quran-recitation-ctc-onnx",

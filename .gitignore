@@ -23,3 +23,6 @@ DUGSI_REVIEW_BRIEF.md
 
 # Before/after evidence (skill: bevis) — never committed
 .artifacts/
+
+# Evaluation data and tools (models, audio, transformers.js) — local only
+/.eval/

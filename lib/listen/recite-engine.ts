@@ -480,7 +480,7 @@ export class ReciteEngine {
     const job = this.vowelJobs.shift();
     if (!job) return this.wakeVowelWaiters();
     const piece = this.follow.pieces.find((p) => p.input.id === job.inputId);
-    const words = piece && this.opts.vowelWords ? pieceVowelWords(piece, this.opts.vowelWords) : null;
+    const words = piece && this.opts.vowelWords ? pieceVowelWords(piece, this.opts.vowelWords, this.follow.ref.ayah) : null;
     if (!words) return this.pumpVowels(); // replaced by a join, or not placed
     const my = this.session;
     this.vowelBusy = true;

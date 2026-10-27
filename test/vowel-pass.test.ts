@@ -35,9 +35,10 @@ test("a piece is judged on the text words it was placed on, in the model's spell
   let s = createFollower(buildRef(ayat));
   s = applyPiece(s, modelPiece(1, ["الْحَمْدُ", "لِلَّهِ", "رَبِّ", "الْعَالَمِينَ"]));
   const p = s.pieces.at(-1)!;
-  const w = pieceVowelWords(p, vowelWords)!;
+  const w = pieceVowelWords(p, vowelWords, s.ref.ayah)!;
   assert.deepEqual(nfc(w.words), nfc(["الْحَمْدُ", "لِلَّهِ", "رَبِّ", "الْعَالَمِينَ"]));
   assert.deepEqual(w.owner, [4, 5, 6, 7]); // after the basmala's four words
+  assert.deepEqual([...w.verseEnds], [3], "the verse's last word: its ending is never judged");
 });
 
 test("an Uthmani word the model writes as two is one text word", async () => {
@@ -45,9 +46,10 @@ test("an Uthmani word the model writes as two is one text word", async () => {
   const v11 = ayat.find((a) => a.number === 11)!; // فَلَمَّآ أَتَىٰهَا نُودِيَ يَٰمُوسَىٰٓ
   let s = createFollower(buildRef([v11]));
   s = applyPiece(s, modelPiece(1, ["فَلَمَّا", "أَتَاهَا", "نُودِيَ", "يَا", "مُوسَى"]));
-  const w = pieceVowelWords(s.pieces.at(-1)!, vowelWords.slice(buildRef(ayat).verseFirst.get(11)!))!;
+  const w = pieceVowelWords(s.pieces.at(-1)!, vowelWords.slice(buildRef(ayat).verseFirst.get(11)!), s.ref.ayah)!;
   assert.deepEqual(nfc(w.words.slice(-2)), nfc(["يَا", "مُوسَى\u0670"]));
   assert.deepEqual(w.owner.slice(-2), [3, 3]);
+  assert.deepEqual([...w.verseEnds], [w.words.length - 1], "only the last model word ends the verse");
 });
 
 test("once the vowel model judges, only it decides vowels", async () => {

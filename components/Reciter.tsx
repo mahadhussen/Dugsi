@@ -27,6 +27,8 @@ import {
   clearCrashBreadcrumb,
   reEnableWhisper,
   isHandheld,
+  VOWELS_ON_PHONE_KEY,
+  VOWELS_CRASHED_KEY,
 } from "@/lib/crashGuard";
 import { buildRef } from "@/lib/follow/text";
 import { normalizeWord } from "@/lib/arabic";
@@ -162,29 +164,42 @@ export default function Reciter({
     if (!ios) return;
     return () => {
       asr.unload();
+      vowels.unload();
       markWhisperFinished();
     };
   }, []);
   const modelAllowed = settings.quranModel && !whisperDisabledByCrashes() && !iosNoGpu;
-  // The vowel model (240 MB) judges vowels on a computer. A phone keeps the
+  // The vowel model (241 MB) judges vowels on a computer. A phone keeps the
   // listening model's vowels until the bigger model is proven there: a phone
   // tab is killed, page reloaded, when it holds too much (WORKLOG round 6).
+  // To try it on a phone: open the page once with ?vowels=on (?vowels=off
+  // undoes it); there, as with the listening model, it is loaded at the tap.
   const [vowelWordsBySurah, setVowelWordsBySurah] = useState<{ surah: number; verses: string[][] } | null>(null);
   const [vowelsAllowed, setVowelsAllowed] = useState(false);
+  const [vowelsEager, setVowelsEager] = useState(false);
+  const [vowelsCrashed, setVowelsCrashed] = useState(false);
   useEffect(() => {
     const saveData = (navigator as unknown as { connection?: { saveData?: boolean } }).connection?.saveData;
-    setVowelsAllowed(modelAllowed && !isHandheld() && !saveData && vowels.supported());
+    const phone = isHandheld();
+    setVowelsAllowed(modelAllowed && (!phone || vowelsOnPhone()) && !saveData && vowels.supported());
+    setVowelsEager(!phone);
+    try {
+      setVowelsCrashed(phone && !!localStorage.getItem(VOWELS_CRASHED_KEY));
+    } catch {
+      /* no storage */
+    }
   }, [modelAllowed]);
   useEffect(() => {
     if (!vowelsAllowed) return;
     let cancelled = false;
     void loadCtcText(surahNumber).then((verses) => !cancelled && setVowelWordsBySurah({ surah: surahNumber, verses }));
-    // Fetch the model while reciting is on screen, as with the listening model.
-    if (vowels.status === "idle") void vowels.load();
+    // Fetch the model while reciting is on screen, as with the listening
+    // model; on a phone only at the tap (the engine loads it then).
+    if (vowelsEager && vowels.status === "idle") void vowels.load();
     return () => {
       cancelled = true;
     };
-  }, [vowelsAllowed, surahNumber]);
+  }, [vowelsAllowed, vowelsEager, surahNumber]);
   const vowelWords = useMemo(
     () =>
       vowelsAllowed && vowelWordsBySurah?.surah === surahNumber
@@ -630,6 +645,7 @@ export default function Reciter({
             <EngineStatus
               model={model}
               vowelModel={vowelsAllowed ? vowelModel : null}
+              vowelsCrashed={vowelsCrashed && !vowelsAllowed}
               allowed={modelAllowed}
               noGpu={iosNoGpu && settings.quranModel}
               disabledByCrash={whisperDisabledByCrashes()}
@@ -697,9 +713,26 @@ export default function Reciter({
 }
 
 /** What is listening, in one honest line. */
+/** Whether the vowel model was switched on for this phone (?vowels=on; a
+ *  page reload while it ran switches it off again, see crashGuard). */
+function vowelsOnPhone(): boolean {
+  try {
+    const q = new URLSearchParams(window.location.search).get("vowels");
+    if (q === "on") {
+      localStorage.setItem(VOWELS_ON_PHONE_KEY, "1");
+      localStorage.removeItem(VOWELS_CRASHED_KEY);
+    }
+    if (q === "off") localStorage.removeItem(VOWELS_ON_PHONE_KEY);
+    return localStorage.getItem(VOWELS_ON_PHONE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function EngineStatus({
   model,
   vowelModel,
+  vowelsCrashed,
   allowed,
   noGpu,
   disabledByCrash,
@@ -708,6 +741,8 @@ function EngineStatus({
   model: { status: string; percent: number; device: string | null };
   /** The vowel model, where it is used (a computer). */
   vowelModel: { status: string; percent: number } | null;
+  /** It was tried on this phone and the page reloaded: switched off again. */
+  vowelsCrashed: boolean;
   allowed: boolean;
   /** An iPhone whose Safari has no WebGPU: the model is not run there. */
   noGpu: boolean;
@@ -740,7 +775,9 @@ function EngineStatus({
   } else {
     text = "Tap the mic to start.";
   }
-  let vowelText: string | null = null;
+  let vowelText: string | null = vowelsCrashed
+    ? "The vowel checker was switched off on this phone: the page reloaded while it ran (too little memory)."
+    : null;
   if (vowelModel && allowed && !disabledByCrash) {
     if (vowelModel.status === "ready") vowelText = "Vowels are checked by a second Quran model, on your device.";
     else if (vowelModel.status === "loading")

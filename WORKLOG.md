@@ -36,6 +36,14 @@
    (a) som nu, aldrig, (b) döm dem som andra ord (fler falska överhopp när
    modellen tappar ett kort ord). Beslutet togs av mig i runda 4 utan att
    läggas här; det är Mahads.
+8. **Vokalmodellen på telefon.** Den nya vokalmodellen (241 MB) körs bara på
+   dator. På telefon dömer lyssningsmodellen vokalerna som förut (fångar ungefär
+   hälften). Skälet: en iPhone-flik som håller för mycket laddas om, och det är
+   inte prövat på en riktig telefon. Prov utan risk för andra: öppna sidan en
+   gång med `?vowels=on` (`?vowels=off` stänger). Laddas sidan om medan den kör
+   stängs den av igen på den telefonen, utan att räknas mot lyssningsmodellen.
+   Alternativ: (a) som nu, dator först, (b) på för alla telefoner, (c) på för
+   telefoner med WebGPU efter Mahads prov. Mahads beslut, gärna efter provet.
 7. **Hur strängt ska ordslut (kasusändelser) dömas?** Vokalfel i ordslut
    (rabbu för rabbi, māliku för māliki) fångas till 67 %, men det är där
    modellen gör flest egna vokalfel på rätt läsning (Qahtani "الرَّحْمَنُ",
@@ -44,6 +52,77 @@
    (a) som nu, ordslut döms (utom före en paus), (b) bara vokaler inne i ord
    (fångar 44 %, nästan inga falska), (c) ordslut visas som "kolla slutet"
    utan att räknas som fel. Mahads beslut.
+   *Uppdatering runda 6:* med vokalmodellen (dator) fångas ordslut 26 av 29
+   och inne i ord 22 av 27, utan falsklarm hos 14 mästare. Frågan gäller nu
+   främst telefonen (NEEDS-DECISION 8).
+
+## 2026-10-27 — Runda 6: en andra modell dömer vokalerna efter ljudet (dator)
+
+Mahad: "inte helt godkänt … allt en person läser ska systemet känna av". Den
+gamla vokaldomen jämför vokaler som Whisper skrev, och Whisper drar det den
+hör mot texten (tränad bara på rätt läsning): 27 av 49 avsiktliga fel.
+
+- **Prövat först:** tvingad vokalpoäng med Whisper själv (sannolikheten för
+  textens vokaler mot en ändrad vokal, givet ljudet): 29 av 49, samma
+  systematiska falsklarm (Qahtani الرَّحْمَنُ). Ingen verklig vinst.
+- **Valt:** en CTC-modell utan språkmodell,
+  `rabah2026/wav2vec2-large-xlsr-53-arabic-quran-v_final` (Apache-2.0), som
+  skriver alla vokaltecken. Den skeppas som 4-bitarsexporten
+  `mostafanewir70/quran-recitation-ctc-onnx` (241 MB, fast revision,
+  SHA-256 kontrollerad). Domen är aritmetik i `lib/follow/vowel-judge.ts`:
+  marginal = hur mycket bättre ljudet passar ordet med en annan vokal; > 5 är
+  fel vokal. Python-mätningen och TypeScript ger samma tal (facittest).
+- **Fem fällor som mättes fram och stängdes:**
+  1. Fel facittext (basmala med fast shejken inte läste den) gav marginaler
+     8–12 på ord som aldrig sades. → Domen sker i det hördas sammanhang: målet
+     är de hörda orden, där hörda ord som är textord skrivs som texten har dem.
+     Med medvetet fel facittext (isti'adha + basmala alltid): 0 larm.
+  2. Modellen skriver shadda före vokalen; omvänd ordning sänkte träffarna
+     (الشَّمْسُ 1,7 → 11,9 med rätt ordning).
+  3. Krav på exakt lika bokstäver tappade 13 riktiga fel (ett vokalfel ändrar
+     stavningen: فِيهَ hörs فِيهَا). → Likhet ≥ 0,7 (0,75 tappade tre, 0,6 parade
+     ett ekande "أو" med أعوذ, marginal 4,5).
+  4. Två ord som modellen skrev ihop ("نَسْتَعِياهْدِنَا") parades med det första;
+     det andra ordets ljud fick ordslutet att se fel ut (10,9 på Alafasy). → Ett
+     hört ord som är två textord ihop paras inte.
+  5. Kort stopp vid versslut: "i" i nästa verss "ihdinā" togs för ordslutet i
+     نَسْتَعِينُ (7,3 på Fares Abbad). → Ett verss sista ordslut döms aldrig, som
+     i `harakat.ts`.
+- **Mätt med den skeppade kedjan** (`scripts/eval/vowels.ts`, 4-bitarsmodellen
+  genom transformers.js + appens domare):
+  - 56 avsiktliga fel (Majed, inne i ord och i ordslut, Al-Fatiha, Al-Ikhlas,
+    Al-Falaq, An-Nas, Al-Asr, Al-Kawthar, Al-Baqarah 2–5): **48 fångade**
+    (86 %). Missarna: två ord som modellen skrev ihop med nästa (då döms de
+    inte), ett ord med för olik stavning, resten där modellen hörde textens
+    vokal (talsyntesen kan ha sagt rätt). Den gamla domen på första 49-satsen:
+    27. Två larm, båda "الصَّلَاةَ" i 2:3: talsyntesen säger "-tu" (åtta mästare
+    som läser 2:3 ger 0 larm, 64 ord).
+  - 14 mästare, Al-Fatiha och Al-Ikhlas: **0 larm på 547 bedömda ord.**
+  - Eko, brus och telefon (fem mästare): **0 larm på 555 ord.**
+  - Minshawy "Teacher" (barn upprepar efter läraren): 1 larm på 36 ord, på
+    upprepningen av يَلِدْ. Redovisas för sig, ingen ren läsning.
+  - I appen (webbläsaren, låtsasmikrofon): Al-Fatiha med tre vokalfel → alla
+    tre fångade ("wrong vowel: you said الْحَمْدَ"); mästarens rätta Al-Fatiha
+    → 100, 29 av 29. Varje bit döms 1–4 s efter att lyssningsmodellen placerat
+    den.
+- **Hamza:** Mahads eget fel i إِلَيْكَ fångas i alla tolkningar: إِلُيْكَ (6,9),
+  أُلَيْكَ (9,4), أَلَيْكَ (10,9); "wa-'adhā" för وَإِذَا (13). Rätt läsning av
+  samma vers: marginaler kring −12.
+- **Fart:** 0,1–0,16 s arbete per sekund ljud på processorn (Node). Motorn
+  dömer varje placerad bit när lyssningsmodellen är ledig; vid stopp väntar
+  den in resten (högst 60 s).
+- **I appen:** finns vokalmodellens bok i följarens tillstånd dömer bara den
+  vokaler; Whispers vokalgissningar används inte. Den laddas på dator när läs-
+  vyn visas; statusraden i den hopfällda panelen säger hur långt den kommit.
+  Telefon: se NEEDS-DECISION 8.
+- **Texten:** varje Uthmani-ord i modellens stavning (`lib/quran/ctc/*.json`,
+  byggd av `scripts/build-ctc-text.ts` ur modellens egen quran_text.txt). 77 429
+  ord parade; 371 Uthmani-ord är två eller tre modellord (يَٰقَوۡمِ = يَا قَوْمِ).
+  En billig sammanslagning parade en gång إِلَّا med اللَّائِي (58:2); nu kostar
+  sammanslagning mer än ett ords skillnad. Testet går igenom alla ord.
+- **Lärdom:** datorn startades om mitt i och /tmp tömdes (modeller, ljud,
+  skript). Mätverktygen ligger nu i repot (`scripts/eval/vowels.ts`,
+  `scripts/eval/make-vowel-corpus.ts`) och data i `.eval/` (ignoreras av git).
 
 ## 2026-10-26 — Mahads test 3: vokalfel och mikrofonpanelen
 

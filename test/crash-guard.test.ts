@@ -33,6 +33,8 @@ import {
   markWhisperRunning,
   clearCrashBreadcrumb,
   reEnableWhisper,
+  VOWELS_ON_PHONE_KEY,
+  VOWELS_CRASHED_KEY,
 } from "../lib/crashGuard";
 
 const T = 1_000_000_000_000; // fixed "now"
@@ -108,3 +110,24 @@ test("on a computer a leftover breadcrumb never switches the model off", () => {
     asDevice(IPHONE, 5);
   }
 });
+
+test("a page killed while the vowel model was being tried on the phone switches the vowel model off, not the listening model", () => {
+  mem.clear();
+  asDevice(IPHONE, 5);
+  for (let i = 0; i < 3; i++) {
+    mem.setItem(VOWELS_ON_PHONE_KEY, "1");
+    markWhisperRunning();
+    checkForPriorCrash(T + i);
+    assert.equal(mem.getItem(VOWELS_ON_PHONE_KEY), null, "the vowel model is off again");
+    assert.ok(mem.getItem(VOWELS_CRASHED_KEY));
+  }
+  assert.equal(whisperDisabledByCrashes(), false, "never held against the listening model");
+  // Without the vowel model, a kill counts as before.
+  markWhisperRunning();
+  checkForPriorCrash(T + 10);
+  markWhisperRunning();
+  checkForPriorCrash(T + 11);
+  assert.equal(whisperDisabledByCrashes(), true);
+  reEnableWhisper();
+});
+

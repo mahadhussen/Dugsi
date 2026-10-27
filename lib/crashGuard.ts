@@ -21,6 +21,10 @@ const COUNT_KEY = "dugsi:asr2:crashCount";
 const DISABLED_KEY = "dugsi:asr2:disabled";
 const LAST_KEY = "dugsi:asr2:lastIncident";
 const DISABLE_AFTER = 2;
+/** The vowel model, switched on for this phone to try it (?vowels=on). */
+export const VOWELS_ON_PHONE_KEY = "dugsi:vowels:onPhone";
+/** Set when the page was killed while it was on: it was switched off again. */
+export const VOWELS_CRASHED_KEY = "dugsi:vowels:crashed";
 const DECAY_MS = 7 * 24 * 60 * 60 * 1000; // a week without incident forgives
 
 /** A phone or tablet: where a tab is killed for memory, without warning. On a
@@ -57,6 +61,13 @@ export function checkForPriorCrash(now: number = Date.now()): void {
     if (ls.getItem(STAGE_KEY)) {
       // The previous analysis never signalled completion → it killed the page.
       ls.removeItem(STAGE_KEY);
+      // The 241 MB vowel model, being tried on this phone, is the likelier
+      // cause: switch it off, and do not hold it against the listening model.
+      if (ls.getItem(VOWELS_ON_PHONE_KEY) === "1") {
+        ls.removeItem(VOWELS_ON_PHONE_KEY);
+        ls.setItem(VOWELS_CRASHED_KEY, String(now));
+        return;
+      }
       const base = stale ? 0 : Number(ls.getItem(COUNT_KEY)) || 0;
       const count = base + 1;
       ls.setItem(COUNT_KEY, String(count));

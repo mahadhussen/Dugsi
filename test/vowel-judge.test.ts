@@ -131,3 +131,11 @@ test("in the heard context, the findings and margins are the Python measurement'
     got.forEach((f, k) => near(f.margin, want[k].margin, 0.05, `${c.name} word ${f.word}`));
   }
 });
+
+test("the ending of a verse's last word is never judged (waqf)", () => {
+  const c = facit.clips.find((x: { name: string }) => x.name === "v56_1_end");
+  const lp = lpOf(c.name, c.frames, Object.keys(facit.vocab).length);
+  const said = judgeVowels(lp, c.words, vocab);
+  assert.deepEqual(said.map((f) => [f.word, f.ending]), [[c.word, true]], "a wrong ending mid-verse is found");
+  assert.deepEqual(judgeVowels(lp, c.words, vocab, { verseEnds: new Set([c.word]) }), [], "at a verse end it is not judged");
+});

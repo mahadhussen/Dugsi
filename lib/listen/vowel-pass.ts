@@ -14,6 +14,8 @@ export interface PieceWords {
   words: string[];
   /** The text word (reference index) each one belongs to. */
   owner: number[];
+  /** Model words that end a verse (their ending is not judged). */
+  verseEnds: Set<number>;
 }
 
 /**
@@ -24,24 +26,27 @@ export interface PieceWords {
  * model writes it together with the word before; space-separated when Uthmani
  * joins what the model writes apart).
  */
-export function pieceVowelWords(piece: PieceRecord, vowelWords: readonly string[]): PieceWords | null {
+export function pieceVowelWords(piece: PieceRecord, vowelWords: readonly string[], ayahOf: readonly number[]): PieceWords | null {
   if (piece.kind !== "aligned" || !piece.align || !piece.align.pairs.length) return null;
   const from = Math.min(...piece.align.pairs.map((p) => p.ref));
   const to = Math.max(...piece.align.pairs.map((p) => p.refEnd));
   const words: string[] = [];
   const owner: number[] = [];
-  for (let k = from; k < to; k++)
+  const verseEnds = new Set<number>();
+  for (let k = from; k < to; k++) {
     for (const w of (vowelWords[k] ?? "").split(" ").filter(Boolean)) {
       words.push(w);
       owner.push(k);
     }
-  return words.length ? { words, owner } : null;
+    if (words.length && owner[words.length - 1] === k && ayahOf[k + 1] !== ayahOf[k]) verseEnds.add(words.length - 1);
+  }
+  return words.length ? { words, owner, verseEnds } : null;
 }
 
 /** The wrong vowels the model heard in a piece's audio, by reference word. */
 export function vowelsOfPiece(lp: LogProbs, piece: PieceWords, vocab: CtcVocab = VOWEL_VOCAB): Map<number, CtcVowel> {
   const out = new Map<number, CtcVowel>();
-  for (const f of judgeVowels(lp, piece.words, vocab)) {
+  for (const f of judgeVowels(lp, piece.words, vocab, { verseEnds: piece.verseEnds })) {
     const k = piece.owner[f.word];
     if (out.has(k)) continue; // one finding per text word (يَٰقَوۡمِ is two model words)
     // What was said: the text word's model words, the one heard wrong replaced.

@@ -6,12 +6,13 @@
 // has no language model behind it. For each word the reciter said, we ask it:
 // does the audio fit the text better with this vowel, or with another one?
 //   margin = nll(text) − nll(text with one vowel changed)
-// A clear positive margin means the reciter said the other vowel. Measured on
-// 49 deliberate mistakes and 892 vowels from four masters' Al-Fatiha
-// (WORKLOG, round 6): mistakes score 6.6–13.6, right vowels stay below 3.1.
+// A clear positive margin means the reciter said the other vowel. Measured
+// (WORKLOG, round 6; scripts/eval/vowels.ts): deliberate mistakes score about
+// 6.6 to 13.6; on masters' right readings nothing rose above 5.
 //
 // What is never judged, the same as lib/follow/harakat.ts:
-//   • the ending of a word the reciter paused after (waqf: not voiced);
+//   • the ending of a word the reciter paused after, or of a verse's last
+//     word (waqf: not voiced);
 //   • a consonant before a long vowel (its vowel is the long vowel's);
 //   • a letter with a dagger alif (ٰ), which is a long vowel too.
 
@@ -32,9 +33,10 @@ export const FRAME_SECONDS = 0.02;
 /** A silence this long after a word is a pause: its ending is not judged. */
 export const PAUSE_SECONDS = 0.25;
 /**
- * A margin above this is a wrong vowel. Measured (WORKLOG, round 6): every
- * deliberate mistake the audio held scored 6.6 or more; no right vowel of
- * 2 790 (four masters, echo, noise, a classroom) scored above 3.1.
+ * A margin above this is a wrong vowel. Measured (WORKLOG, round 6): the
+ * deliberate mistakes caught scored 6.6 or more; in the full-precision model
+ * no right vowel of 2 790 (four masters, echo, noise, a classroom) scored
+ * above 3.1, and as shipped none of 14 masters' (547 words) above 5.
  */
 export const VOWEL_MARGIN = 5;
 
@@ -141,6 +143,8 @@ export function vowelMargins(
   words: readonly string[],
   vocab: CtcVocab,
   only?: ReadonlySet<number>,
+  /** Words always taken as paused after: a verse's last word (waqf). */
+  stops?: ReadonlySet<number>,
 ): VowelMargin[] {
   const { ids, owner } = encodeWords(words, vocab);
   const base = ctcNll(lp, ids, vocab.blank);
@@ -160,7 +164,10 @@ export function vowelMargins(
     return { f, l };
   });
   const paused = (wi: number) =>
-    wi === words.length - 1 || (span[wi + 1].f - span[wi].l) * FRAME_SECONDS >= PAUSE_SECONDS || !Number.isFinite(span[wi].l);
+    wi === words.length - 1 ||
+    !!stops?.has(wi) ||
+    (span[wi + 1].f - span[wi].l) * FRAME_SECONDS >= PAUSE_SECONDS ||
+    !Number.isFinite(span[wi].l);
   const out: VowelMargin[] = [];
   words.forEach((w, wi) => {
     if (only && !only.has(wi)) return;
@@ -259,15 +266,27 @@ export function heardPairs(heard: readonly string[], words: readonly string[]): 
  * isti'adha, a repeat), then cannot make a vowel look wrong. Findings are by
  * text word index.
  */
-export function judgeVowels(lp: LogProbs, words: readonly string[], vocab: CtcVocab, threshold = VOWEL_MARGIN): VowelFinding[] {
+export function judgeVowels(
+  lp: LogProbs,
+  words: readonly string[],
+  vocab: CtcVocab,
+  opts: {
+    threshold?: number;
+    /** Text words that end a verse: their ending is never judged. A reciter
+     *  stops there (waqf), and a short stop let the "i" that begins the next
+     *  verse (ihdinā) pass for نَسْتَعِينُ's ending (a margin of 7.3). */
+    verseEnds?: ReadonlySet<number>;
+  } = {},
+): VowelFinding[] {
   const heard = heardWords(lp, vocab);
   const pairs = heardPairs(heard, words);
   const target = heard.map((h, i) => {
     const j = pairs.get(i);
     return j === undefined ? h : words[j];
   });
-  const margins = vowelMargins(lp, target, vocab, new Set(pairs.keys())).map((m) => ({ ...m, word: pairs.get(m.word)! }));
-  return vowelFindings(margins, threshold);
+  const stops = new Set([...pairs].filter(([, j]) => opts.verseEnds?.has(j)).map(([i]) => i));
+  const margins = vowelMargins(lp, target, vocab, new Set(pairs.keys()), stops).map((m) => ({ ...m, word: pairs.get(m.word)! }));
+  return vowelFindings(margins, opts.threshold ?? VOWEL_MARGIN);
 }
 
 /** A margin row, with or without the said word (the Python facit has none). */
