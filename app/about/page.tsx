@@ -93,10 +93,16 @@ const MODELS: Source[] = [
     licence: "Apache-2.0",
     url: "https://huggingface.co/tarteel-ai/whisper-tiny-ar-quran",
   },
+  {
+    name: "wav2vec2-large-xlsr-53-arabic-quran (rabah2026)",
+    what: "A second Quran model that checks the short vowels (fatha, kasra, damma) on a computer, on your device. It writes every vowel it hears without guessing from the text, so a wrong vowel is not smoothed over. Used unmodified through the community 4-bit ONNX export mostafanewir70/quran-recitation-ctc-onnx, pinned to one revision (f90650a). Its Quran text with full vowel marks (quran_text.txt, from the model's repository) is what each word is scored against.",
+    licence: "Apache-2.0",
+    url: "https://huggingface.co/rabah2026/wav2vec2-large-xlsr-53-arabic-quran-v_final",
+  },
 ];
 
 const LIBS: Source[] = [
-  { name: "Transformers.js (Hugging Face)", what: "Runs the Quran model in the browser, in a background worker.", licence: "Apache-2.0", url: "https://github.com/huggingface/transformers.js" },
+  { name: "Transformers.js (Hugging Face)", what: "Runs the Quran models in the browser, in background workers.", licence: "Apache-2.0", url: "https://github.com/huggingface/transformers.js" },
   { name: "ONNX Runtime Web (Microsoft)", what: "Runs the model (on the graphics chip where the browser allows it).", licence: "MIT", url: "https://github.com/microsoft/onnxruntime" },
   { name: "adhan-js (Batoul Apps)", what: "Prayer time calculation.", licence: "MIT", url: "https://github.com/batoulapps/adhan-js" },
   { name: "Amiri typeface (Khaled Hosny)", what: "Arabic in the interface, the basmala glyph, and the fallback while the mushaf typeface loads.", licence: "SIL Open Font License 1.1", url: "https://github.com/aliftype/amiri" },

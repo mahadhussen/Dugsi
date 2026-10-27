@@ -31,6 +31,12 @@ mikrofon ─► AudioWorklet (16 kHz mono) ─► Segmenter (pauser, max 15 s)
                 ▼                              ▼
           MediaRecorder              Follower (ren reducer, lib/follow)
           ("hör dig själv")      ◄── ledtrådar från webbläsarens taltjänst
+                                               │ placerad bit (ljud + textord)
+                                               ▼
+                               Vokal-worker (dator): CTC-modell, logits per 20 ms
+                                               │
+                                               ▼
+                               vowel-judge: vokalmarginaler ─► VowelBook i follower
                                                │
                                                ▼
                                Dom med konfidensgrind ─► historik (alla, även utloggad)
@@ -46,9 +52,26 @@ mikrofon ─► AudioWorklet (16 kHz mono) ─► Segmenter (pauser, max 15 s)
   (rätt > nästan > fel > överhoppad). Mellanrum som modellen inte kan förklara
   blir `unclear`, inte `missing`. Inledning (isti'adha, basmala) och avslutning
   ("sadaqa Allahu l-azim") tolereras.
-- `lib/follow/harakat.ts` — vokalerna: modellen skriver de korta vokaler den
-  hör, och ett ord med rätt bokstäver men fel fatha/damma/kasra döms fel ("wrong
-  vowel"). Aldrig shadda, sukun, ordslut före paus eller vokal före lång vokal.
+- `lib/follow/harakat.ts` — vokalerna där vokalmodellen inte körs (telefon):
+  lyssningsmodellen skriver de korta vokaler den hör, och ett ord med rätt
+  bokstäver men fel fatha/damma/kasra döms fel ("wrong vowel"). Aldrig shadda,
+  sukun, ordslut före paus eller vokal före lång vokal.
+- `lib/follow/ctc.ts` — ren CTC-aritmetik: sannolikheten för en text givet
+  ramarna (samma tal som PyTorchs ctc_loss), bästa vägen (Viterbi), girig
+  avläsning.
+- `lib/follow/vowel-judge.ts` — vokaldomaren (dator): för varje kort vokal,
+  hur mycket bättre ljudet passar ordet med en annan vokal (marginal > 5 = fel
+  vokal). Döms i det hördas sammanhang: målet är de hörda orden, där varje hört
+  ord som är ett textord skrivs som texten har det, så ett ord som inte sades
+  eller extra tal (isti'adha, upprepning) inte kan få en vokal att se fel ut.
+  Samma undantag som harakat.ts. Facit: `test/vowel-judge.test.ts` mot Python.
+- `lib/quran/ctc/*.json` + `lib/quran/ctc-text.ts` — varje Uthmani-ord i
+  vokalmodellens stavning (enkel skrift med alla vokaltecken), parat ord för ord
+  av `scripts/build-ctc-text.ts`; يَٰقَوۡمِ = يَا قَوْمِ hålls ihop.
+- `lib/listen/vowel-pass.ts` + `lib/listen/vowels.ts` + `public/vowel-worker.js`
+  — motorn skickar varje placerad bit till vokalmodellen när lyssningsmodellen
+  är ledig; fynden läggs per bit i `FollowState.vowels`. Finns den boken dömer
+  bara vokalmodellen vokaler.
 - `lib/follow/lexicon.ts` — är det hörda ett ord ur Koranen alls? Stavningsnyckeln
   för varje ord i Uthmani och modern stavning (`lexicon-data.json`, byggd av
   `scripts/build-lexicon.ts`, kontrollerad mot texten i test). "Fel ord" kräver
@@ -74,6 +97,11 @@ ONNX-exporten `Sharjeelbaig/whisper-tiny-ar-quran-onnx` på fast revision.
 Kodaren körs i fp32 (den kvantiserade kraschar, ConvInteger saknas), avkodaren i q8.
 Cirka 67 MB, hämtas en gång och cachas. Den allmänna whisper-tiny tas bort som
 reserv: den hör "المستطيع" för "المستقيم" och skulle döma fel.
+
+Vokalmodell (dator): `rabah2026/wav2vec2-large-xlsr-53-arabic-quran-v_final`
+(Apache-2.0, CTC, skriver alla vokaltecken, ingen språkmodell) via 4-bitars
+ONNX-exporten `mostafanewir70/quran-recitation-ctc-onnx` på fast revision,
+cirka 241 MB. På telefon används den inte än (minnet, se WORKLOG).
 
 ## Lyssna (shejken)
 
@@ -128,6 +156,11 @@ för aya från everyayah i stället.
 - Riktiga transkriptioner från modellen (Alafasy, Husary, syntetiska fel med
   överhoppad aya, fel ord, upprepning) ligger som fixturer, så spåraren prövas mot
   modellens faktiska utdata och inte mot påhittad text.
+- Vokaldomaren mot facit: `test/vowel-judge.test.ts` (CTC-sannolikheten mot
+  PyTorchs ctc_loss, marginaler och fynd mot Python-mätningen på samma
+  modellutdata, sparade i `test/fixtures/ctc/`), `test/vowel-pass.test.ts`
+  (fynden landar på rätt textord och styr markeringarna), `test/ctc-text.test.ts`
+  (alla 77 429 Uthmani-ord har modellens stavning och det är samma ord).
 - `scripts/eval/transcribe.ts` kör segmenter → modell på riktiga ljudfiler i
   Node och skriver fixturer; `scripts/eval/follow.ts` skriver domen för varje
   fixtur. Körs för hand, inte i CI.

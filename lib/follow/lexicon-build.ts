@@ -2,16 +2,9 @@
 // check lib/follow/lexicon-data.json (Node only; the app reads the file).
 import { loadSurah } from "@/lib/quran";
 import { normalizeWord } from "@/lib/arabic";
-import { spellingKey } from "./spelling";
+import { modernSpelling, spellingKey } from "./spelling";
 
-/**
- * The word as modern script writes it: the dagger alif written out
- * (ٱلصِّرَٰطَ → الصراط), the waw that carries it read as alif
- * (ٱلصَّلَوٰةَ → الصلاة), the small yeh written (إِبْرَٰهِـۧمَ → إبراهيم).
- */
-export function modernSpelling(uthmani: string): string {
-  return uthmani.replace(/وٰ/g, "ا").replace(/ىٰ/g, "ى").replace(/ٰ/g, "ا").replace(/ۧ/g, "ي");
-}
+export { modernSpelling };
 
 export async function quranSpellingKeys(): Promise<string[]> {
   const keys = new Set<string>();

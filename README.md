@@ -60,9 +60,12 @@ app says so on screen.
    bright summer nights, offline and server-free. A built-in adhan player lets
    you choose a call-to-prayer recording and listen whenever you like.
 
-7. **Vowels too.** The Quran model writes the short vowels it hears, so a word
-   with the right letters but a wrong fatha, damma or kasra is marked yellow
-   ("wrong vowel: you said مَالِكُ (damma, the text has kasra)").
+7. **Vowels too.** A word with the right letters but a wrong fatha, damma or
+   kasra is marked yellow ("wrong vowel: you said مَالِكُ (damma, the text has
+   kasra)"). On a computer a second Quran model, with no language model to
+   smooth a slip over, weighs every short vowel against the sound
+   (`lib/follow/vowel-judge.ts`); on a phone the vowels the listening model
+   wrote are compared (`lib/follow/harakat.ts`).
 8. **Live following.** While you recite, the green flows along the words you
    are saying; once a piece is judged, words said right stay green, words
    said as another turn yellow and skipped words grey; added
@@ -173,12 +176,20 @@ updated.
 
 - The Quran model is about 93 % word-accurate on recitation, so it can still
   slip — a word marked wrong may be the recogniser, not the reciter (tap
-  "You" to hear yourself). Dugsi judges words, not vowel marks.
+  "You" to hear yourself).
+- Short vowels (fatha, kasra, damma) are judged too. On a computer a second
+  model checks them against the sound. Measured as shipped: it caught 48 of
+  56 deliberate vowel mistakes read by a synthetic voice, and gave no false
+  alarm on 14 masters' Al-Fatiha and Al-Ikhlas (547 words judged) nor on
+  echo, noise and phone versions (555 words). On a phone, for now, the vowels
+  come from what the listening model wrote, which catches about half. The
+  ending of a word you pause on, or of a verse, is never judged (waqf), nor a
+  vowel before a long vowel.
 - Madd-timing is a timestamp **heuristic**, not a phonetic measurement. It flags
   obviously rushed elongations; it does not judge makharij or ghunnah quality.
-- The model downloads once (about 67 MB) and is slower on older phones without
-  a usable graphics chip; the browser's speech service stands in where it
-  cannot run.
+- The model downloads once (about 67 MB; the vowel model on a computer about
+  241 MB more) and is slower on older phones without a usable graphics chip;
+  the browser's speech service stands in where it cannot run.
 - **Always learn tajweed with a qualified teacher.** This is a practice aid.
 
 ---

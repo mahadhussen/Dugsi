@@ -9,11 +9,15 @@
 // When the model cannot run (no worker, failed download, switched off) the
 // browser's own recogniser stands in as before: its final results become the
 // pieces, with the same confidence gate, and the screen says which is used.
+//
+// Vowels: when a second model, the vowel model, is given its words
+// (opts.vowelWords) and is ready, every piece the follower placed is scored
+// by it too, after the listening model, and only it judges vowels.
 
 import type { Word } from "@/lib/quran/types";
 import { Recognizer, isSpeechSupported } from "@/lib/speech/recognizer";
 import { pickBestAlternative } from "@/lib/speech/pickBest";
-import { applyHint, applyPiece, createFollower, fitScore, type FollowState, type PieceInput } from "@/lib/follow/follower";
+import { applyHint, applyPiece, createFollower, fitScore, type CtcVowel, type FollowState, type PieceInput } from "@/lib/follow/follower";
 import type { RefText } from "@/lib/follow/text";
 import { verdictOf, type Verdict } from "@/lib/follow/verdict";
 import { tokenize } from "@/lib/arabic";
@@ -21,6 +25,8 @@ import { asr } from "./asr";
 import { CaptureUnavailable, openMic, type Mic } from "./capture";
 import { isJoinCandidate, preferJoined } from "./policy";
 import { Segmenter, type Segment } from "./segmenter";
+import { vowels } from "./vowels";
+import { pieceVowelWords, vowelsOfPiece } from "./vowel-pass";
 
 const SR = 16000;
 export const HESITATION_MS = 2500;
@@ -43,6 +49,8 @@ export interface EngineSnapshot {
   follow: FollowState;
   mode: JudgeMode;
   model: { status: typeof asr.status; percent: number; device: typeof asr.device };
+  /** The vowel model, when this attempt uses one. */
+  vowelModel: { status: typeof vowels.status; percent: number; device: typeof vowels.device } | null;
   /** Pieces still waiting for the model. */
   waiting: number;
   /** The last words heard, for the line under the mic. */
@@ -71,6 +79,9 @@ export interface EngineOptions {
   words: Word[];
   /** Use the Quran model (the user can switch it off). */
   useModel: boolean;
+  /** The vowel model's spelling of each reference word (lib/quran/ctc-text):
+   *  given, the vowel model judges vowels once it is ready. */
+  vowelWords?: readonly string[];
   /** Stop by itself after this much silence (ms), or null. */
   autoStopMs: number | null;
   onUpdate: (s: EngineSnapshot) => void;
@@ -122,6 +133,13 @@ export class ReciteEngine {
   private browserJudges = false;
   private modelPending = false;
   private stoppedAt = 0;
+  // The vowel model's work: pieces waiting (their audio), and its findings
+  // per piece. Runs only while the listening model has nothing to do.
+  private vowelJobs: { inputId: number; audio: Float32Array }[] = [];
+  private vowelBusy = false;
+  private vowelBook = new Map<number, ReadonlyMap<number, CtcVowel>>();
+  private vowelWaiters: (() => void)[] = [];
+  private vowelUnsub: (() => void) | null = null;
   private lastSegEnd = 0; // seconds, end of the last closed piece
   private segmentsClosed = 0;
 
@@ -142,6 +160,7 @@ export class ReciteEngine {
       follow: this.follow,
       mode: this.mode,
       model: { status: asr.status, percent: asr.percent, device: asr.device },
+      vowelModel: this.opts.vowelWords ? { status: vowels.status, percent: vowels.percent, device: vowels.device } : null,
       waiting: this.queue.filter((j) => j.kind !== "partial").length + (this.busy ? 1 : 0),
       heard: tail.slice(-12).join(" "),
       extras: this.follow.pieces.reduce(
@@ -171,6 +190,16 @@ export class ReciteEngine {
     if (this.opts.useModel) void asr.load().then(() => {
       if (this.session === my) void this.pump();
     });
+    if (this.opts.vowelWords && vowels.supported()) {
+      void vowels.load();
+      this.vowelUnsub = vowels.subscribe(() => {
+        if (this.session !== my) return;
+        if (vowels.status === "ready") this.vowelsOn();
+        this.emit();
+        void this.pumpVowels();
+      });
+      if (vowels.status === "ready") this.vowelsOn();
+    }
     this.unsub = asr.subscribe(() => {
       if (this.session !== my) return;
       if (asr.status === "failed") this.fallBackToBrowser();
@@ -312,7 +341,10 @@ export class ReciteEngine {
     let job = this.queue.find((j) => j.kind === "join") ?? this.queue.find((j) => j.kind === "piece") ?? null;
     if (job) this.queue.splice(this.queue.indexOf(job), 1);
     if (!job) job = this.partialJob();
-    if (!job) return this.wakeWaiters();
+    if (!job) {
+      this.wakeWaiters();
+      return this.pumpVowels();
+    }
     const my = this.session;
     this.busy = true;
     const res = await asr.decode(job.audio, job.kind !== "partial");
@@ -376,6 +408,7 @@ export class ReciteEngine {
       };
       this.before.set(input.id, this.follow);
       this.follow = applyPiece(this.follow, input);
+      this.queueVowels(input.id, job.audio);
       const tokens = tokenize(res.text).length;
       if (prev && isJoinCandidate(prev, input, tokens)) {
         const from = Math.round(prev.t0 * SR);
@@ -403,9 +436,64 @@ export class ReciteEngine {
       if (start && preferJoined(fitScore(start, [job.a, job.b]), fitScore(start, [joined]))) {
         this.before.set(joined.id, start); // a later join can build on this one
         this.follow = applyPiece(this.follow, joined);
+        this.queueVowels(joined.id, job.audio);
         if (this.lastPieceInput?.id === job.b.id) this.lastPieceInput = joined;
       }
     }
+  }
+
+  /** The vowel model is ready: from now on only it judges vowels. */
+  private vowelsOn() {
+    if (this.follow.vowels || this.phase === "done" || this.phase === "idle") return;
+    this.follow = { ...this.follow, vowels: { pieces: new Map(this.vowelBook) } };
+  }
+
+  private queueVowels(inputId: number, audio: Float32Array) {
+    if (!this.opts.vowelWords || vowels.status === "failed" || !vowels.supported()) return;
+    this.vowelJobs.push({ inputId, audio });
+    // While it downloads, keep a bounded backlog (the oldest go unjudged).
+    let total = 0;
+    for (let i = this.vowelJobs.length - 1; i >= 0 && vowels.status !== "ready"; i--) {
+      total += this.vowelJobs[i].audio.length / SR;
+      if (total > QUEUE_LIMIT_SECONDS) {
+        this.vowelJobs.splice(0, i + 1);
+        break;
+      }
+    }
+  }
+
+  private vowelsSettled(): boolean {
+    return !this.follow.vowels || vowels.status !== "ready" || (!this.vowelBusy && this.vowelJobs.length === 0);
+  }
+  private wakeVowelWaiters() {
+    if (!this.vowelsSettled()) return;
+    const w = this.vowelWaiters;
+    this.vowelWaiters = [];
+    w.forEach((f) => f());
+  }
+
+  private async pumpVowels(): Promise<void> {
+    if (this.vowelBusy) return;
+    if (vowels.status !== "ready" || !this.follow.vowels) return this.wakeVowelWaiters();
+    // The listening model first: following the reciter matters more.
+    if (this.busy || this.queue.some((j) => j.kind !== "partial")) return;
+    const job = this.vowelJobs.shift();
+    if (!job) return this.wakeVowelWaiters();
+    const piece = this.follow.pieces.find((p) => p.input.id === job.inputId);
+    const words = piece && this.opts.vowelWords ? pieceVowelWords(piece, this.opts.vowelWords, this.follow.ref.ayah) : null;
+    if (!words) return this.pumpVowels(); // replaced by a join, or not placed
+    const my = this.session;
+    this.vowelBusy = true;
+    const lp = await vowels.logProbs(job.audio);
+    this.vowelBusy = false;
+    if (this.session !== my || this.phase === "done") return;
+    if (lp) {
+      this.vowelBook.set(job.inputId, vowelsOfPiece(lp, words));
+      this.follow = { ...this.follow, vowels: { pieces: new Map(this.vowelBook) } };
+      this.emit();
+    }
+    if (this.phase === "finishing") this.emitProgress?.(this.vowelJobs.length);
+    void this.pumpVowels();
   }
 
   private applyBrowserFinal(t: number, text: string) {
@@ -473,6 +561,19 @@ export class ReciteEngine {
       progressOff();
     }
     if (this.session !== my) return null;
+    // Then the vowel model, on what is left (it waits for the listening model).
+    if (!this.vowelsSettled()) {
+      onProgress?.(this.vowelJobs.length + (this.vowelBusy ? 1 : 0));
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 60_000);
+        this.vowelWaiters.push(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+        void this.pumpVowels();
+      });
+    }
+    if (this.session !== my) return null;
     // Give the browser's final words a moment to land when it is the judge.
     if (this.mode === "browser") await new Promise((r) => setTimeout(r, 400));
     const seconds = (this.stoppedAt - this.started) / 1000;
@@ -488,6 +589,7 @@ export class ReciteEngine {
     });
     this.phase = "done";
     this.unsub?.();
+    this.vowelUnsub?.();
     this.emit();
     return {
       verdict,
@@ -528,6 +630,8 @@ export class ReciteEngine {
     if (this.tick) clearInterval(this.tick);
     this.tick = null;
     this.unsub?.();
+    this.vowelUnsub?.();
     this.queue = [];
+    this.vowelJobs = [];
   }
 }
